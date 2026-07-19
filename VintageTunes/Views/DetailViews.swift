@@ -38,9 +38,16 @@ struct TrackTableView: View {
             Divider().opacity(0.2)
             Table(of: Track.self, selection: $library.selection) {
                 TableColumn("Titolo") { track in
-                    Text(track.displayTitle)
-                        .font(.custom("Avenir Next", size: 13))
-                        .foregroundStyle(VTTheme.textPrimary)
+                    HStack(spacing: 6) {
+                        if library.playback.nowPlaying?.id == track.id {
+                            Image(systemName: library.playback.isPlaying ? "speaker.wave.2.fill" : "speaker.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(VTTheme.amber)
+                        }
+                        Text(track.displayTitle)
+                            .font(.custom("Avenir Next", size: 13))
+                            .foregroundStyle(VTTheme.textPrimary)
+                    }
                 }
                 .width(min: 160, ideal: 220)
 
@@ -71,12 +78,24 @@ struct TrackTableView: View {
             .scrollContentBackground(.hidden)
             .background(Color(red: 0.11, green: 0.12, blue: 0.14))
             .foregroundStyle(VTTheme.textPrimary)
+            .onNativeTableDoubleClick { row in
+                let list = library.filteredTracks
+                guard list.indices.contains(row) else { return }
+                let track = list[row]
+                library.selection = [track.id]
+                library.playTrack(track)
+            }
             .dropDestination(for: URL.self) { urls, _ in
                 library.importDroppedURLs(urls)
                 return true
             }
             .contextMenu(forSelectionType: Track.ID.self) { ids in
                 if !ids.isEmpty {
+                    Button("Riproduci") {
+                        if let id = ids.first, let track = library.tracks.first(where: { $0.id == id }) {
+                            library.playTrack(track)
+                        }
+                    }
                     Button("Mostra in Finder") {
                         library.selection = Set(ids)
                         library.revealSelectedTracksInFinder()
@@ -94,6 +113,18 @@ struct TrackTableView: View {
                         library.deleteSelectedTracks()
                     }
                 }
+            }
+            .onKeyPress(.space) {
+                library.playSelectedOrToggle()
+                return .handled
+            }
+            .onKeyPress(.return) {
+                if let id = library.selection.first,
+                   let track = library.tracks.first(where: { $0.id == id }) {
+                    library.playTrack(track)
+                    return .handled
+                }
+                return .ignored
             }
         }
     }

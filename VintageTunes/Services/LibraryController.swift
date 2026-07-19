@@ -20,8 +20,31 @@ final class LibraryController: ObservableObject {
     @Published var conversionPrompt: ConversionPrompt?
 
     let detector = iPodDetector()
+    let playback = PlaybackController()
     private let sync = SyncService()
     private var detectorCancellable: AnyCancellable?
+    private var statusDismissTask: Task<Void, Never>?
+
+    /// Aggiorna lo stato UI; success/failure spariscono da soli dopo pochi secondi.
+    func setStatus(_ status: SyncStatus) {
+        statusDismissTask?.cancel()
+        syncStatus = status
+        switch status {
+        case .success, .failure:
+            let captured = status
+            statusDismissTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 3_500_000_000)
+                guard !Task.isCancelled else { return }
+                if self.syncStatus == captured {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        self.syncStatus = .idle
+                    }
+                }
+            }
+        case .idle, .working:
+            break
+        }
+    }
 
     var filteredTracks: [Track] {
         let base: [Track]
@@ -73,13 +96,14 @@ final class LibraryController: ObservableObject {
     }
 
     func eject() {
+        playback.stop()
         guard let device = connectedDevice else { return }
         if device.isSimulated {
             connectedDevice = nil
             tracks = []
             playlists = []
             selection.removeAll()
-            syncStatus = .success("Demo disconnessa")
+            setStatus(.success("Demo disconnessa"))
             return
         }
         do {
@@ -87,10 +111,22 @@ final class LibraryController: ObservableObject {
             connectedDevice = nil
             tracks = []
             playlists = []
-            syncStatus = .success("iPod espulso")
+            setStatus(.success("iPod espulso"))
         } catch {
-            syncStatus = .failure(error.localizedDescription)
+            setStatus(.failure(error.localizedDescription))
         }
+    }
+
+    func playTrack(_ track: Track) {
+        playback.play(track)
+    }
+
+    func playSelectedOrToggle() {
+        if let id = selection.first, let track = tracks.first(where: { $0.id == id }) {
+            playback.playOrToggle(track)
+            return
+        }
+        playback.togglePlayPause()
     }
 
     func startDemo(reset: Bool = false) {
@@ -98,9 +134,9 @@ final class LibraryController: ObservableObject {
             do {
                 let device = try SimulatediPod.prepare(reset: reset)
                 await load(device: device)
-                syncStatus = .success(reset ? "Demo azzerata e ricaricata" : "Modalità demo attiva")
+                setStatus(.success(reset ? "Demo azzerata e ricaricata" : "Modalità demo attiva"))
             } catch {
-                syncStatus = .failure("Impossibile creare la demo: \(error.localizedDescription)")
+                setStatus(.failure("Impossibile creare la demo: \(error.localizedDescription)"))
             }
         }
     }
@@ -129,7 +165,7 @@ final class LibraryController: ObservableObject {
         }.filter { FileManager.default.fileExists(atPath: $0.path) }
 
         guard !urls.isEmpty else {
-            syncStatus = .failure("File non trovato sul dispositivo")
+            setStatus(.failure("File non trovato sul dispositivo"))
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
@@ -157,14 +193,13 @@ final class LibraryController: ObservableObject {
             if selectedPlaylistID == nil {
                 selectedPlaylistID = playlists.first(where: { !$0.isMaster })?.id
             }
-            syncStatus = .success("Caricate \(result.tracks.count) tracce")
+            setStatus(.success("Caricate \(result.tracks.count) tracce"))
         } catch {
-            syncStatus = .failure(error.localizedDescription)
+            setStatus(.failure(error.localizedDescription))
         }
     }
 
     func importDroppedURLs(_ urls: [URL]) {
-        // Evita di lavorare dentro la callback IPC del drag (kDragIPCCompleted / reentrant).
         DispatchQueue.main.async {
             self.prepareImport(urls)
         }
@@ -186,7 +221,7 @@ final class LibraryController: ObservableObject {
         guard let prompt = conversionPrompt else { return }
         conversionPrompt = nil
         if prompt.readyURLs.isEmpty {
-            syncStatus = .failure("Trasferimento annullato: nessun file compatibile")
+            setStatus(.failure("Trasferimento annullato: nessun file compatibile"))
             return
         }
         Task {
@@ -197,7 +232,7 @@ final class LibraryController: ObservableObject {
     private func prepareImport(_ urls: [URL]) {
         Task {
             guard connectedDevice != nil else {
-                syncStatus = .failure("Collega un iPod (o avvia la demo) per sincronizzare")
+                setStatus(.failure("Collega un iPod (o avvia la demo) per sincronizzare"))
                 return
             }
 
@@ -215,17 +250,17 @@ final class LibraryController: ObservableObject {
                     readyURLs: ready,
                     rejectedNames: rejected.map(\.lastPathComponent)
                 )
-                syncStatus = .idle
+                setStatus(.idle)
                 return
             }
 
             if ready.isEmpty {
-                syncStatus = .failure(
+                setStatus(.failure(
                     AudioMetadataReader.rejectionMessage(
                         for: urls,
                         firmware: connectedDevice?.firmwareMode ?? .stock
                     ) ?? "Nessun file audio supportato"
-                )
+                ))
                 return
             }
 
@@ -247,26 +282,44 @@ final class LibraryController: ObservableObject {
         defer { accessed.forEach { $0.stopAccessingSecurityScopedResource() } }
 
         guard let device = connectedDevice else {
-            syncStatus = .failure("Collega un iPod (o avvia la demo) per sincronizzare")
+            setStatus(.failure("Collega un iPod (o avvia la demo) per sincronizzare"))
             return
         }
 
         var items: [ImportCandidate] = []
         var tempFiles: [URL] = []
+        var skippedBeforeImport = 0
 
         for url in ready {
-            syncStatus = .working("Leggo \(url.lastPathComponent)…")
-            items.append(await AudioMetadataReader.read(url: url))
+            setStatus(.working("Leggo \(url.lastPathComponent)…"))
+            var meta = await AudioMetadataReader.read(url: url)
+            meta.contentHash = try? FileHasher.sha256(of: url)
+            if tracks.contains(where: { $0.contentHash == meta.contentHash && meta.contentHash != nil })
+                || tracks.contains(where: { $0.identityKey == meta.identityKey }) {
+                skippedBeforeImport += 1
+                continue
+            }
+            items.append(meta)
         }
 
         if convert {
             for (index, url) in toConvert.enumerated() {
-                syncStatus = .working("Leggo tag \(index + 1)/\(toConvert.count): \(url.lastPathComponent)")
-                // Leggi i tag DAL FILE ORIGINALE (FLAC ecc.) prima della conversione:
-                // afconvert non copia artista/album nel M4A.
-                let sourceMeta = await AudioMetadataReader.read(url: url)
+                setStatus(.working("Leggo tag \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
+                var sourceMeta = await AudioMetadataReader.read(url: url)
+                do {
+                    sourceMeta.contentHash = try FileHasher.sha256(of: url)
+                } catch {
+                    setStatus(.failure("Hash fallito: \(error.localizedDescription)"))
+                    return
+                }
 
-                syncStatus = .working("Conversione \(index + 1)/\(toConvert.count): \(url.lastPathComponent)")
+                if tracks.contains(where: { $0.contentHash == sourceMeta.contentHash })
+                    || tracks.contains(where: { $0.identityKey == sourceMeta.identityKey }) {
+                    skippedBeforeImport += 1
+                    continue
+                }
+
+                setStatus(.working("Conversione \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
                 do {
                     let niceNameParts = [sourceMeta.artist, sourceMeta.title].filter { !$0.isEmpty }
                     let niceName = niceNameParts.isEmpty
@@ -276,44 +329,38 @@ final class LibraryController: ObservableObject {
                         url,
                         preferredName: niceName
                     ) { message in
-                        Task { @MainActor in self.syncStatus = .working(message) }
+                        Task { @MainActor in self.setStatus(.working(message)) }
                     }
-                    // Se la durata mancava sul FLAC, prova dal M4A
                     var merged = AudioMetadataReader.remapped(sourceMeta, to: m4a)
                     if merged.durationMs == 0 {
                         let m4aMeta = await AudioMetadataReader.read(url: m4a)
                         if m4aMeta.durationMs > 0 {
-                            merged = ImportCandidate(
-                                url: m4a,
-                                title: merged.title,
-                                artist: merged.artist,
-                                album: merged.album,
-                                genre: merged.genre,
-                                durationMs: m4aMeta.durationMs,
-                                sizeBytes: m4aMeta.sizeBytes,
-                                trackNumber: merged.trackNumber,
-                                year: merged.year,
-                                bitrate: merged.bitrate == 0 ? 256 : merged.bitrate,
-                                sampleRate: m4aMeta.sampleRate > 0 ? m4aMeta.sampleRate : merged.sampleRate
-                            )
+                            merged.durationMs = m4aMeta.durationMs
+                            merged.sizeBytes = m4aMeta.sizeBytes
+                            if m4aMeta.sampleRate > 0 { merged.sampleRate = m4aMeta.sampleRate }
                         }
                     }
                     items.append(merged)
                     tempFiles.append(m4a)
                 } catch {
-                    syncStatus = .failure("Conversione fallita: \(error.localizedDescription)")
+                    setStatus(.failure("Conversione fallita: \(error.localizedDescription)"))
                     tempFiles.forEach { try? FileManager.default.removeItem(at: $0) }
                     return
                 }
             }
         }
 
-        guard !items.isEmpty else {
-            syncStatus = .failure("Nessun file da trasferire")
+        if items.isEmpty {
+            removeLibraryDuplicates(silentIfNone: true)
+            if skippedBeforeImport > 0 {
+                setStatus(.success("Nessuna nuova traccia · \(skippedBeforeImport) già presenti"))
+            } else {
+                setStatus(.failure("Nessun file da trasferire"))
+            }
             return
         }
 
-        syncStatus = .working("Preparazione import…")
+        setStatus(.working("Preparazione import…"))
         do {
             let result = try await sync.importFiles(
                 items,
@@ -324,24 +371,51 @@ final class LibraryController: ObservableObject {
                 targetPlaylistID: selectedSection == .playlists ? selectedPlaylistID : nil
             ) { progress in
                 Task { @MainActor in
-                    self.syncStatus = .working(progress.message)
+                    self.setStatus(.working(progress.message))
                 }
             }
             tracks = result.tracks
             playlists = result.playlists
             dbVersion = result.dbVersion
             let converted = tempFiles.count
-            if converted > 0 {
-                syncStatus = .success("Aggiunte \(items.count) canzoni (\(converted) convertite in M4A)")
-            } else {
-                syncStatus = .success("Aggiunte \(items.count) canzoni")
-            }
+            let skipped = result.skippedDuplicates + skippedBeforeImport
+            var parts: [String] = []
+            if result.imported > 0 { parts.append("Aggiunte \(result.imported)") }
+            if skipped > 0 { parts.append("\(skipped) già presenti (saltate)") }
+            if converted > 0 { parts.append("\(converted) convertite in M4A") }
+            setStatus(.success(parts.isEmpty ? "Nessuna nuova traccia da aggiungere" : parts.joined(separator: " · ")))
             selectedSection = .songs
         } catch {
-            syncStatus = .failure(error.localizedDescription)
+            setStatus(.failure(error.localizedDescription))
         }
 
         tempFiles.forEach { try? FileManager.default.removeItem(at: $0) }
+    }
+
+    func removeLibraryDuplicates(silentIfNone: Bool = false) {
+        guard let device = connectedDevice else { return }
+        do {
+            var hashIndex = TrackHashIndex.load(from: device)
+            let removed = try sync.removeDuplicateTracks(
+                tracks: &tracks,
+                playlists: &playlists,
+                dbVersion: dbVersion,
+                device: device,
+                hashIndex: &hashIndex,
+                persistNow: true
+            )
+            if removed > 0 {
+                if let playingID = playback.nowPlaying?.id,
+                   !tracks.contains(where: { $0.id == playingID }) {
+                    playback.stop()
+                }
+                setStatus(.success("Rimossi \(removed) duplicati"))
+            } else if !silentIfNone {
+                setStatus(.success("Nessun duplicato trovato"))
+            }
+        } catch {
+            setStatus(.failure(error.localizedDescription))
+        }
     }
 
     func createPlaylist(named name: String) {
@@ -376,7 +450,7 @@ final class LibraryController: ObservableObject {
             playlists[idx].trackIDs.append(id)
         }
         persistPlaylists(device: device)
-        syncStatus = .success("Aggiunte \(ids.count) tracce alla playlist")
+        setStatus(.success("Aggiunte \(ids.count) tracce alla playlist"))
     }
 
     func removeSelectionFromCurrentPlaylist() {
@@ -389,6 +463,9 @@ final class LibraryController: ObservableObject {
 
     func deleteSelectedTracks() {
         guard let device = connectedDevice, !selection.isEmpty else { return }
+        if let playingID = playback.nowPlaying?.id, selection.contains(playingID) {
+            playback.stop()
+        }
         do {
             try sync.deleteTracks(
                 ids: selection,
@@ -398,25 +475,24 @@ final class LibraryController: ObservableObject {
                 device: device
             )
             selection.removeAll()
-            syncStatus = .success("Tracce rimosse dall'iPod")
+            setStatus(.success("Tracce rimosse dall'iPod"))
         } catch {
-            syncStatus = .failure(error.localizedDescription)
+            setStatus(.failure(error.localizedDescription))
         }
     }
 
     private func persistPlaylists(device: iPodDevice) {
         do {
             try sync.savePlaylists(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
-            syncStatus = .success("Playlist salvate")
+            setStatus(.success("Playlist salvate"))
         } catch {
-            syncStatus = .failure(error.localizedDescription)
+            setStatus(.failure(error.localizedDescription))
         }
     }
 
     private func handleDevices(_ devices: [iPodDevice]) {
         if let current = connectedDevice {
             if current.isSimulated {
-                // Resta in demo finché non arriva un iPod reale.
                 if let real = devices.first(where: { !$0.isSimulated }) {
                     Task { await load(device: real) }
                 }
@@ -429,7 +505,7 @@ final class LibraryController: ObservableObject {
                 connectedDevice = nil
                 tracks = []
                 playlists = []
-                syncStatus = .idle
+                setStatus(.idle)
             }
         }
 

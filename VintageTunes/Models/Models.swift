@@ -44,12 +44,25 @@ struct Track: Identifiable, Hashable {
     var bitrate: UInt32
     var sampleRate: UInt32
     var mediaType: UInt32
+    var contentHash: String? = nil
 
     var resolvedPath: URL?
 
     var displayArtist: String { artist.isEmpty ? "Artista sconosciuto" : artist }
     var displayTitle: String { title.isEmpty ? "Senza titolo" : title }
     var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : album }
+
+    /// Chiave logica per riconoscere la stessa canzone anche dopo conversione FLAC→M4A.
+    var identityKey: String {
+        Self.makeIdentityKey(artist: artist, title: title, durationMs: durationMs)
+    }
+
+    static func makeIdentityKey(artist: String, title: String, durationMs: UInt32) -> String {
+        let a = artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let seconds = durationMs / 1000
+        return "\(a)|\(t)|\(seconds)"
+    }
 
     var durationLabel: String {
         let total = Int(durationMs / 1000)
@@ -81,6 +94,12 @@ struct ImportCandidate: Identifiable, Hashable {
     var year: UInt32
     var bitrate: UInt32
     var sampleRate: UInt32
+    /// SHA del file *origine* (es. FLAC), non del M4A convertito.
+    var contentHash: String? = nil
+
+    var identityKey: String {
+        Track.makeIdentityKey(artist: artist, title: title, durationMs: durationMs)
+    }
 }
 
 enum LibrarySection: String, CaseIterable, Identifiable {

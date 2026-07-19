@@ -130,9 +130,8 @@ enum AudioMetadataReader {
 
     /// Keep tags from `sourceMeta`, point to a new file (e.g. converted M4A).
     static func remapped(_ sourceMeta: ImportCandidate, to newURL: URL) -> ImportCandidate {
-        var copy = sourceMeta
         let size = (try? newURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(UInt32.init) ?? sourceMeta.sizeBytes
-        copy = ImportCandidate(
+        return ImportCandidate(
             url: newURL,
             title: sourceMeta.title,
             artist: sourceMeta.artist,
@@ -143,9 +142,9 @@ enum AudioMetadataReader {
             trackNumber: sourceMeta.trackNumber,
             year: sourceMeta.year,
             bitrate: sourceMeta.bitrate == 0 ? 256 : sourceMeta.bitrate,
-            sampleRate: sourceMeta.sampleRate
+            sampleRate: sourceMeta.sampleRate,
+            contentHash: sourceMeta.contentHash
         )
-        return copy
     }
 
     static func isSupportedAudio(_ url: URL) -> Bool {

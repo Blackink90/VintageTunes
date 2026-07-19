@@ -39,12 +39,16 @@ struct RootView: View {
         } message: {
             Text(library.conversionPrompt?.message ?? "")
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            PlayerBar(playback: library.playback)
+        }
         .overlay(alignment: .bottom) {
             if case .idle = library.syncStatus {
                 EmptyView()
             } else {
                 StatusBanner(status: library.syncStatus)
-                    .padding(16)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, library.playback.nowPlaying == nil ? 16 : 76)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }

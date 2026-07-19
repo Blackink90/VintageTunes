@@ -26,15 +26,22 @@ final class SyncService {
     private let writer = iTunesDBWriter()
 
     func loadLibrary(for device: iPodDevice) throws -> (tracks: [Track], playlists: [Playlist], dbVersion: UInt32) {
+        let hashIndex = TrackHashIndex.load(from: device)
         switch device.firmwareMode {
         case .rockbox:
-            return try loadRockbox(device)
+            var result = try loadRockbox(device)
+            for i in result.tracks.indices {
+                result.tracks[i].contentHash = hashIndex.byLocation[result.tracks[i].location]
+            }
+            return result
         case .stock:
             if device.hasDatabase {
-                let parsed = try parser.parse(at: device.databaseURL, volumeRoot: device.volumeURL)
+                var parsed = try parser.parse(at: device.databaseURL, volumeRoot: device.volumeURL)
+                for i in parsed.tracks.indices {
+                    parsed.tracks[i].contentHash = hashIndex.byLocation[parsed.tracks[i].location]
+                }
                 return (parsed.tracks, parsed.playlists, parsed.dbVersion)
             }
-            // Empty stock iPod — start blank
             return ([], [Playlist(id: 1, name: "Libreria", isMaster: true, trackIDs: [])], 0x14)
         }
     }
@@ -47,13 +54,30 @@ final class SyncService {
         dbVersion: UInt32,
         targetPlaylistID: UInt64?,
         progress: @escaping (SyncProgress) -> Void
-    ) async throws -> (tracks: [Track], playlists: [Playlist], dbVersion: UInt32) {
+    ) async throws -> (tracks: [Track], playlists: [Playlist], dbVersion: UInt32, imported: Int, skippedDuplicates: Int) {
         var tracks = existingTracks
         var playlists = existingPlaylists
         var nextID = (tracks.map(\.id).max() ?? 1000) + 1
+        var imported = 0
+        var skippedDuplicates = 0
 
-        // Ripara durate a 0 da letture precedenti, prima di riscrivere il DB
         await backfillMissingMetadata(&tracks)
+
+        var hashIndex = TrackHashIndex.load(from: device)
+        await ensureHashes(for: &tracks, index: &hashIndex, progress: progress)
+
+        // Pulisci duplicati già presenti (es. import ripetuti prima del fix)
+        let removedDupes = try removeDuplicateTracks(
+            tracks: &tracks,
+            playlists: &playlists,
+            dbVersion: dbVersion,
+            device: device,
+            hashIndex: &hashIndex,
+            persistNow: false
+        )
+        if removedDupes > 0 {
+            progress(SyncProgress(fraction: 0, message: "Rimossi \(removedDupes) duplicati esistenti…"))
+        }
 
         if playlists.isEmpty {
             playlists.append(Playlist(id: 1, name: "Libreria", isMaster: true, trackIDs: []))
@@ -68,10 +92,34 @@ final class SyncService {
         ensureMusicFolders(on: device)
 
         for (index, meta) in audioItems.enumerated() {
-            progress(SyncProgress(
-                fraction: Double(index) / Double(audioItems.count),
-                message: "Importo \(meta.url.lastPathComponent)…"
-            ))
+            let step = Double(index) / Double(max(audioItems.count, 1))
+            progress(SyncProgress(fraction: step, message: "Controllo \(meta.url.lastPathComponent)…"))
+
+            // Preferisci hash del file ORIGINE (impostato prima della conversione).
+            // Hashare il M4A convertito fallisce: ogni afconvert produce byte diversi.
+            let fileHash: String
+            if let known = meta.contentHash, !known.isEmpty {
+                fileHash = known
+            } else {
+                do {
+                    fileHash = try FileHasher.sha256(of: meta.url)
+                } catch {
+                    throw SyncError.copyFailed("Hash fallito: \(error.localizedDescription)")
+                }
+            }
+
+            let identity = meta.identityKey
+            let isDuplicate =
+                hashIndex.contains(hash: fileHash)
+                || tracks.contains(where: { $0.contentHash == fileHash })
+                || tracks.contains(where: { $0.identityKey == identity && !identity.hasPrefix("|") && !$0.title.isEmpty })
+
+            if isDuplicate {
+                skippedDuplicates += 1
+                continue
+            }
+
+            progress(SyncProgress(fraction: step, message: "Importo \(meta.url.lastPathComponent)…"))
 
             let trackID = nextID
             nextID += 1
@@ -83,6 +131,8 @@ final class SyncService {
             case .rockbox:
                 location = try copyRockbox(file: meta.url, meta: meta, device: device)
             }
+
+            hashIndex.set(location: location, hash: fileHash)
 
             let track = Track(
                 id: trackID,
@@ -98,9 +148,11 @@ final class SyncService {
                 bitrate: meta.bitrate,
                 sampleRate: meta.sampleRate,
                 mediaType: 1,
+                contentHash: fileHash,
                 resolvedPath: resolveLocation(location, device: device)
             )
             tracks.append(track)
+            imported += 1
 
             if let masterIndex = playlists.firstIndex(where: \.isMaster) {
                 playlists[masterIndex].trackIDs.append(trackID)
@@ -113,8 +165,33 @@ final class SyncService {
 
         progress(SyncProgress(fraction: 0.95, message: "Aggiorno database…"))
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        try hashIndex.save(to: device)
         progress(SyncProgress(fraction: 1, message: "Sincronizzazione completata"))
-        return (tracks, playlists, dbVersion == 0 ? 0x14 : dbVersion)
+        return (tracks, playlists, dbVersion == 0 ? 0x14 : dbVersion, imported, skippedDuplicates)
+    }
+
+    private func ensureHashes(
+        for tracks: inout [Track],
+        index: inout TrackHashIndex,
+        progress: @escaping (SyncProgress) -> Void
+    ) async {
+        for i in tracks.indices {
+            if let existing = tracks[i].contentHash, !existing.isEmpty {
+                index.set(location: tracks[i].location, hash: existing)
+                continue
+            }
+            if let known = index.byLocation[tracks[i].location] {
+                tracks[i].contentHash = known
+                continue
+            }
+            guard let path = tracks[i].resolvedPath,
+                  FileManager.default.fileExists(atPath: path.path) else { continue }
+            progress(SyncProgress(fraction: 0, message: "Indicizzo \(tracks[i].displayTitle)…"))
+            if let hash = try? FileHasher.sha256(of: path) {
+                tracks[i].contentHash = hash
+                index.set(location: tracks[i].location, hash: hash)
+            }
+        }
     }
 
     func backfillMissingMetadata(_ tracks: inout [Track]) async {
@@ -167,6 +244,62 @@ final class SyncService {
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
     }
 
+    /// Rimuove tracce duplicate per hash o per artista+titolo+durata. Tiene la prima occorrenza.
+    @discardableResult
+    func removeDuplicateTracks(
+        tracks: inout [Track],
+        playlists: inout [Playlist],
+        dbVersion: UInt32,
+        device: iPodDevice,
+        hashIndex: inout TrackHashIndex,
+        persistNow: Bool
+    ) throws -> Int {
+        var seenHashes = Set<String>()
+        var seenIdentities = Set<String>()
+        var removeIDs = Set<UInt32>()
+
+        for track in tracks {
+            let identity = track.identityKey
+            let hasUsefulIdentity = !track.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+            if let hash = track.contentHash, !hash.isEmpty {
+                if seenHashes.contains(hash) {
+                    removeIDs.insert(track.id)
+                    continue
+                }
+                seenHashes.insert(hash)
+            }
+
+            if hasUsefulIdentity {
+                if seenIdentities.contains(identity) {
+                    removeIDs.insert(track.id)
+                    continue
+                }
+                seenIdentities.insert(identity)
+            }
+        }
+
+        guard !removeIDs.isEmpty else { return 0 }
+
+        let removed = tracks.filter { removeIDs.contains($0.id) }
+        tracks.removeAll { removeIDs.contains($0.id) }
+        for i in playlists.indices {
+            playlists[i].trackIDs.removeAll { removeIDs.contains($0) }
+        }
+        for track in removed {
+            hashIndex.remove(location: track.location)
+            if let path = track.resolvedPath ?? resolveLocation(track.location, device: device) {
+                try? FileManager.default.removeItem(at: path)
+            }
+        }
+
+        if persistNow {
+            try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+            try hashIndex.save(to: device)
+        }
+        return removed.count
+    }
+
     func deleteTracks(
         ids: Set<UInt32>,
         tracks: inout [Track],
@@ -180,13 +313,16 @@ final class SyncService {
             playlists[i].trackIDs.removeAll { ids.contains($0) }
         }
 
+        var hashIndex = TrackHashIndex.load(from: device)
         for track in removed {
+            hashIndex.remove(location: track.location)
             if let path = track.resolvedPath ?? resolveLocation(track.location, device: device) {
                 try? FileManager.default.removeItem(at: path)
             }
         }
 
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        try hashIndex.save(to: device)
     }
 
     // MARK: - Persistence

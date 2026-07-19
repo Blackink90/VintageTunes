@@ -21,6 +21,12 @@
 		4DE282442581481B96AB7E56 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E88F1D6AF6094D72A788C48C /* Assets.xcassets */; };
 		20EF9959F75C42F8BFE88471 /* SimulatediPod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79B5C8BDC8B5449E84303A42 /* SimulatediPod.swift */; };
 		17C9FA098F504BBDAAC63E7E /* AudioConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54569615C3AF45428041F984 /* AudioConverter.swift */; };
+		E1CAA650E31140D3A9B9B240 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 1D8F13BCA73E4948B40C1471 /* AppIcon.icns */; };
+		C5FAA0BD0A744ED486D207FE /* FileHasher.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5774330AADB42CBB19081B3 /* FileHasher.swift */; };
+		D2CA0C86291142D3A67F3926 /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15A024797056498CB53C1C97 /* PlaybackController.swift */; };
+		0AE17B55FB324B6CA0A4079F /* TrackHashIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DDEE9BAFF4F1D936BE110 /* TrackHashIndex.swift */; };
+		51C566E420EC40608F2D2C16 /* PlayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6795D5F52EF943BA8FA4C4BE /* PlayerBar.swift */; };
+		3D6B0AD9E95E482790507622 /* TableDoubleClickInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = E143C0F07C5B40FF97F87E96 /* TableDoubleClickInstaller.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +48,12 @@
 		C70E97DC99824E348B9E6421 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		79B5C8BDC8B5449E84303A42 /* SimulatediPod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatediPod.swift; sourceTree = "<group>"; };
 		54569615C3AF45428041F984 /* AudioConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioConverter.swift; sourceTree = "<group>"; };
+		1D8F13BCA73E4948B40C1471 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		E5774330AADB42CBB19081B3 /* FileHasher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileHasher.swift; sourceTree = "<group>"; };
+		15A024797056498CB53C1C97 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
+		E15DDEE9BAFF4F1D936BE110 /* TrackHashIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackHashIndex.swift; sourceTree = "<group>"; };
+		6795D5F52EF943BA8FA4C4BE /* PlayerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBar.swift; sourceTree = "<group>"; };
+		E143C0F07C5B40FF97F87E96 /* TableDoubleClickInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableDoubleClickInstaller.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -103,6 +115,9 @@
 				C94B15BEF71D4A6C9A7E42DD /* iTunesDBWriter.swift */,
 				79B5C8BDC8B5449E84303A42 /* SimulatediPod.swift */,
 				54569615C3AF45428041F984 /* AudioConverter.swift */,
+				E5774330AADB42CBB19081B3 /* FileHasher.swift */,
+				15A024797056498CB53C1C97 /* PlaybackController.swift */,
+				E15DDEE9BAFF4F1D936BE110 /* TrackHashIndex.swift */,
 );
 			path = Services;
 			sourceTree = "<group>";
@@ -113,7 +128,9 @@
 				A8872A84386B4004885C519A /* DetailViews.swift */,
 				637D2FFDE2704656AAC1BAF1 /* RootView.swift */,
 				9A8B2E42EDEE42359A6C9354 /* SidebarView.swift */,
-			);
+				6795D5F52EF943BA8FA4C4BE /* PlayerBar.swift */,
+				E143C0F07C5B40FF97F87E96 /* TableDoubleClickInstaller.swift */,
+);
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -129,7 +146,8 @@
 			isa = PBXGroup;
 			children = (
 				E88F1D6AF6094D72A788C48C /* Assets.xcassets */,
-			);
+				1D8F13BCA73E4948B40C1471 /* AppIcon.icns */,
+);
 			path = Resources;
 			sourceTree = "<group>";
 		};
@@ -143,7 +161,8 @@
 				5C4FF9CA52C549D09B93FE9C /* Sources */,
 				B7CA6F19701449B9948F0FE8 /* Frameworks */,
 				B74FEF37ED69426B933B1DE2 /* Resources */,
-			);
+							220E22AF7649401DA4DA2928 /* Copy AppIcon.icns */,
+);
 			buildRules = (
 			);
 			dependencies = (
@@ -203,6 +222,30 @@
 		};
 /* End PBXFrameworksBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		220E22AF7649401DA4DA2928 /* Copy AppIcon.icns */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${SRCROOT}/VintageTunes/Resources/AppIcon.icns",
+			);
+			name = "Copy AppIcon.icns";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources/AppIcon.icns",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "cp \"${SRCROOT}/VintageTunes/Resources/AppIcon.icns\" \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources/AppIcon.icns\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		5C4FF9CA52C549D09B93FE9C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -222,6 +265,11 @@
 				AFF25FCDE79C412CA6BDDAF2 /* SidebarView.swift in Sources */,
 				20EF9959F75C42F8BFE88471 /* SimulatediPod.swift in Sources */,
 				17C9FA098F504BBDAAC63E7E /* AudioConverter.swift in Sources */,
+				C5FAA0BD0A744ED486D207FE /* FileHasher.swift in Sources */,
+				D2CA0C86291142D3A67F3926 /* PlaybackController.swift in Sources */,
+				0AE17B55FB324B6CA0A4079F /* TrackHashIndex.swift in Sources */,
+				51C566E420EC40608F2D2C16 /* PlayerBar.swift in Sources */,
+				3D6B0AD9E95E482790507622 /* TableDoubleClickInstaller.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -269,7 +317,7 @@
 				CODE_SIGN_ENTITLEMENTS = VintageTunes/VintageTunes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VintageTunes/Info.plist;
@@ -278,7 +326,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vintagetunes.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -294,7 +342,7 @@
 				CODE_SIGN_ENTITLEMENTS = VintageTunes/VintageTunes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VintageTunes/Info.plist;
@@ -303,7 +351,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vintagetunes.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

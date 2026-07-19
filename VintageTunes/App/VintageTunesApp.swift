@@ -27,6 +27,24 @@ struct VintageTunesApp: App {
 
                 Divider()
 
+                Button(library.playback.isPlaying ? "Pausa" : "Riproduci") {
+                    library.playSelectedOrToggle()
+                }
+                .keyboardShortcut(.space, modifiers: [])
+
+                Button("Stop") {
+                    library.playback.stop()
+                }
+                .keyboardShortcut(".", modifiers: [.command])
+                .disabled(library.playback.nowPlaying == nil)
+
+                Button("Rimuovi duplicati") {
+                    library.removeLibraryDuplicates()
+                }
+                .disabled(library.connectedDevice == nil)
+
+                Divider()
+
                 Button("Avvia modalità demo") {
                     library.startDemo()
                 }
