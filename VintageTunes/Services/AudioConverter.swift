@@ -38,9 +38,13 @@ enum AudioConverter {
 
     /// Converte in M4A AAC 256 kbps via `afconvert`.
     /// Salva anche una copia con nome leggibile in `~/Library/Application Support/VintageTunes/Converted/`.
+    /// Se `artworkData` è nil, prova a leggere la cover dal file sorgente o da iTunes Search.
     static func convertToM4A(
         _ source: URL,
         preferredName: String? = nil,
+        artist: String = "",
+        album: String = "",
+        artworkData: Data? = nil,
         progress: ((String) -> Void)? = nil
     ) async throws -> URL {
         let afconvert = URL(fileURLWithPath: "/usr/bin/afconvert")
@@ -86,6 +90,18 @@ enum AudioConverter {
                     ? "Conversione fallita per \(source.lastPathComponent)"
                     : errText
             )
+        }
+
+        // Cover: sorgente → API → embed nel M4A (afconvert non conserva i tag)
+        let art: Data?
+        if let artworkData {
+            art = artworkData
+        } else {
+            art = await CoverArtService.resolveArtworkData(artist: artist, album: album, fileURL: source)
+        }
+        if let art {
+            progress?("Aggiungo cover a \(baseName).m4a…")
+            try? await CoverArtService.embedArtwork(into: archive, imageData: art)
         }
 
         // Copia di lavoro in temp (l'archivio in Converted resta consultabile)

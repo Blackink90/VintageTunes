@@ -1,11 +1,80 @@
 import SwiftUI
 
+struct LibraryStatsBar: View {
+    @EnvironmentObject private var library: LibraryController
+
+    var body: some View {
+        if library.connectedDevice != nil {
+            HStack(spacing: 0) {
+                stat(library.statsTracks.count == 1 ? "1 canzone" : "\(library.statsTracks.count) canzoni")
+                separator
+                stat(durationLabel)
+                separator
+                stat(sizeLabel)
+                Spacer(minLength: 8)
+                if !library.selection.isEmpty {
+                    Text("selezione")
+                        .font(.custom("Avenir Next", size: 10).weight(.semibold))
+                        .foregroundStyle(VTTheme.amber.opacity(0.9))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(VTTheme.amberSoft, in: Capsule())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                Rectangle()
+                    .fill(Color(red: 0.10, green: 0.11, blue: 0.13))
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(height: 1)
+                    }
+            )
+        }
+    }
+
+    private var durationLabel: String {
+        let sum = library.statsTracks.reduce(UInt64(0)) { $0 + UInt64($1.durationMs) }
+        return LibraryStats.formatTotalMinutes(durationMsSum: sum)
+    }
+
+    private var sizeLabel: String {
+        let bytes = library.statsTracks.reduce(Int64(0)) { $0 + Int64($1.sizeBytes) }
+        return LibraryStats.formatBytes(bytes)
+    }
+
+    private func stat(_ text: String) -> some View {
+        Text(text)
+            .font(.custom("Avenir Next", size: 12).weight(.medium))
+            .foregroundStyle(Color.white.opacity(0.78))
+    }
+
+    private var separator: some View {
+        Text("·")
+            .font(.custom("Avenir Next", size: 12).weight(.bold))
+            .foregroundStyle(Color.white.opacity(0.28))
+            .padding(.horizontal, 10)
+    }
+}
+
 struct PlayerBar: View {
     @ObservedObject var playback: PlaybackController
+    @ObservedObject private var artwork = ArtworkCache.shared
 
     var body: some View {
         if let track = playback.nowPlaying {
             HStack(spacing: 14) {
+                CoverArtView(
+                    artist: track.displayArtist,
+                    album: track.displayAlbum,
+                    fileURL: track.resolvedPath,
+                    cornerRadius: 6
+                )
+                .frame(width: 44, height: 44)
+                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+
                 Button {
                     playback.togglePlayPause()
                 } label: {
@@ -68,6 +137,20 @@ struct PlayerBar: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onAppear {
+                artwork.request(
+                    artist: track.displayArtist,
+                    album: track.displayAlbum,
+                    fileURL: track.resolvedPath
+                )
+            }
+            .onChange(of: track.id) { _, _ in
+                artwork.request(
+                    artist: track.displayArtist,
+                    album: track.displayAlbum,
+                    fileURL: track.resolvedPath
+                )
+            }
         }
     }
 }

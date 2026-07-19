@@ -70,6 +70,40 @@ struct Track: Identifiable, Hashable {
         let s = total % 60
         return String(format: "%d:%02d", m, s)
     }
+
+    var albumKey: String { "\(displayAlbum)|||\(displayArtist)" }
+}
+
+struct AlbumRef: Identifiable, Hashable {
+    let name: String
+    let artist: String
+    let trackCount: Int
+
+    var id: String { "\(name)|||\(artist)" }
+}
+
+enum LibraryStats {
+    /// Dimensione in stile filesystem (1024), come tipicamente mostrato per i volumi.
+    static func formatBytes(_ bytes: Int64) -> String {
+        let mb = Double(bytes) / (1024.0 * 1024.0)
+        if mb >= 1024 {
+            return String(format: "%.1f GB", mb / 1024.0)
+        }
+        if mb >= 10 {
+            return String(format: "%.0f MB", mb)
+        }
+        return String(format: "%.1f MB", mb)
+    }
+
+    static func formatTotalMinutes(durationMsSum: UInt64) -> String {
+        let totalMinutes = Int(durationMsSum / 60_000)
+        if totalMinutes >= 60 {
+            let h = totalMinutes / 60
+            let m = totalMinutes % 60
+            return m == 0 ? "\(h) h" : "\(h) h \(m) min"
+        }
+        return "\(totalMinutes) min"
+    }
 }
 
 struct Playlist: Identifiable, Hashable {
@@ -79,6 +113,11 @@ struct Playlist: Identifiable, Hashable {
     var trackIDs: [UInt32]
 
     var songCount: Int { trackIDs.count }
+
+    func resolvedSongCount(using tracks: [Track]) -> Int {
+        let known = Set(tracks.map(\.id))
+        return trackIDs.filter { known.contains($0) }.count
+    }
 }
 
 struct ImportCandidate: Identifiable, Hashable {

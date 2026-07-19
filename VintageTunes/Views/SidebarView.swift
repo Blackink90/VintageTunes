@@ -7,10 +7,29 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            BrandMark()
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+            VStack(alignment: .leading, spacing: 10) {
+                BrandMark()
+                HStack(spacing: 8) {
+                    sidebarActionButton(
+                        systemImage: "arrow.clockwise",
+                        help: "Ricarica",
+                        disabled: false
+                    ) {
+                        library.refresh()
+                    }
+                    sidebarActionButton(
+                        systemImage: "eject",
+                        help: "Espelli",
+                        disabled: library.connectedDevice == nil
+                    ) {
+                        library.eject()
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
 
             if let device = library.connectedDevice {
                 DeviceCard(device: device)
@@ -26,7 +45,7 @@ struct SidebarView: View {
                             systemImage: section.systemImage,
                             selected: library.selectedSection == section
                         ) {
-                            library.selectedSection = section
+                            library.selectSection(section)
                         }
                     }
                 } header: {
@@ -37,13 +56,14 @@ struct SidebarView: View {
 
                 Section {
                     ForEach(library.playlists.filter { !$0.isMaster }) { playlist in
+                        let count = playlist.resolvedSongCount(using: library.tracks)
                         sidebarRow(
                             title: playlist.name,
                             systemImage: "music.note.list",
-                            badge: "\(playlist.songCount)",
+                            badge: count > 0 ? "\(count)" : nil,
                             selected: library.selectedSection == .playlists && library.selectedPlaylistID == playlist.id
                         ) {
-                            library.selectedSection = .playlists
+                            library.selectSection(.playlists)
                             library.selectedPlaylistID = playlist.id
                         }
                         .contextMenu {
@@ -72,29 +92,6 @@ struct SidebarView: View {
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
             .listRowSeparator(.hidden)
-
-            HStack(spacing: 14) {
-                Button {
-                    library.refresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .foregroundStyle(Color.white.opacity(0.85))
-                }
-                .help("Ricarica")
-
-                Button {
-                    library.eject()
-                } label: {
-                    Image(systemName: "eject")
-                        .foregroundStyle(Color.white.opacity(0.85))
-                }
-                .help("Espelli")
-                .disabled(library.connectedDevice == nil)
-
-                Spacer()
-            }
-            .buttonStyle(.borderless)
-            .padding(12)
         }
         .background(VTTheme.panel)
         .environment(\.colorScheme, .dark)
@@ -110,6 +107,24 @@ struct SidebarView: View {
         } message: {
             Text("La playlist viene scritta direttamente sull'iPod.")
         }
+    }
+
+    private func sidebarActionButton(
+        systemImage: String,
+        help: String,
+        disabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(disabled ? 0.35 : 0.85))
+                .frame(width: 28, height: 28)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .help(help)
     }
 
     private func sidebarRow(

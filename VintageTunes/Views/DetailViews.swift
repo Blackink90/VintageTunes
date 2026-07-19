@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct DetailContainer: View {
     @EnvironmentObject private var library: LibraryController
@@ -9,15 +10,9 @@ struct DetailContainer: View {
             case .songs:
                 TrackTableView(title: "Canzoni")
             case .artists:
-                GroupedListView(
-                    title: "Artisti",
-                    rows: library.artists.map { .init(id: $0.name, title: $0.name, subtitle: "\($0.count) brani") }
-                )
+                ArtistsBrowserView()
             case .albums:
-                GroupedListView(
-                    title: "Album",
-                    rows: library.albums.map { .init(id: "\($0.name)-\($0.artist)", title: $0.name, subtitle: $0.artist) }
-                )
+                AlbumsBrowserView()
             case .playlists:
                 PlaylistDetailView()
             case .dropZone:
@@ -31,12 +26,24 @@ struct DetailContainer: View {
 struct TrackTableView: View {
     @EnvironmentObject private var library: LibraryController
     let title: String
+    var showsBackButton: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.2)
             Table(of: Track.self, selection: $library.selection) {
+                TableColumn("") { track in
+                    CoverArtView(
+                        artist: track.displayArtist,
+                        album: track.displayAlbum,
+                        fileURL: track.resolvedPath,
+                        cornerRadius: 4
+                    )
+                    .frame(width: 28, height: 28)
+                }
+                .width(36)
+
                 TableColumn("Titolo") { track in
                     HStack(spacing: 6) {
                         if library.playback.nowPlaying?.id == track.id {
@@ -131,6 +138,17 @@ struct TrackTableView: View {
 
     private var header: some View {
         HStack {
+            if showsBackButton {
+                Button {
+                    library.browseBack()
+                } label: {
+                    Label("Indietro", systemImage: "chevron.left")
+                        .font(.custom("Avenir Next", size: 13).weight(.semibold))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(VTTheme.amber)
+            }
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.custom("New York", size: 24).weight(.semibold))
@@ -148,35 +166,304 @@ struct TrackTableView: View {
     }
 }
 
-struct GroupedRow: Identifiable {
-    let id: String
-    let title: String
-    let subtitle: String
+struct ArtistsBrowserView: View {
+    @EnvironmentObject private var library: LibraryController
+
+    var body: some View {
+        if let album = library.browseAlbum {
+            TrackTableView(title: album.name, showsBackButton: true)
+        } else if let artist = library.browseArtist {
+            AlbumGridView(
+                title: artist,
+                subtitle: "\(library.albums(forArtist: artist).count) album",
+                albums: library.albums(forArtist: artist),
+                showsBackButton: true,
+                showsArtistOnTile: false
+            )
+        } else {
+            ArtistListView()
+        }
+    }
 }
 
-struct GroupedListView: View {
-    let title: String
-    let rows: [GroupedRow]
+struct AlbumsBrowserView: View {
+    @EnvironmentObject private var library: LibraryController
+
+    var body: some View {
+        if let album = library.browseAlbum {
+            TrackTableView(title: album.name, showsBackButton: true)
+        } else {
+            AlbumGridView(
+                title: "Album",
+                subtitle: "\(library.albums.count) album",
+                albums: library.albums,
+                showsBackButton: false,
+                showsArtistOnTile: true
+            )
+        }
+    }
+}
+
+struct ArtistListView: View {
+    @EnvironmentObject private var library: LibraryController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.custom("New York", size: 24).weight(.semibold))
-                .padding(16)
-            List(rows) { row in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.title)
-                            .font(.custom("Avenir Next", size: 14).weight(.medium))
-                        Text(row.subtitle)
-                            .font(.custom("Avenir Next", size: 12))
-                            .foregroundStyle(VTTheme.textSecondary)
-                    }
-                    Spacer()
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Artisti")
+                        .font(.custom("New York", size: 24).weight(.semibold))
+                        .foregroundStyle(VTTheme.textPrimary)
+                    Text("\(library.artists.count) artisti")
+                        .font(.custom("Avenir Next", size: 12))
+                        .foregroundStyle(VTTheme.textSecondary)
                 }
-                .padding(.vertical, 4)
+                Spacer()
+                TextField("Cerca", text: $library.searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+            }
+            .padding(16)
+
+            Divider().opacity(0.2)
+
+            List(filteredArtists, id: \.name) { artist in
+                Button {
+                    library.openArtist(artist.name)
+                } label: {
+                    HStack(spacing: 12) {
+                        ArtistAvatar(
+                            name: artist.name,
+                            track: library.representativeTrack(forArtist: artist.name)
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(artist.name)
+                                .font(.custom("Avenir Next", size: 14).weight(.medium))
+                                .foregroundStyle(VTTheme.textPrimary)
+                            Text("\(artist.count) brani")
+                                .font(.custom("Avenir Next", size: 12))
+                                .foregroundStyle(VTTheme.textSecondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(VTTheme.textSecondary.opacity(0.5))
+                    }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+        }
+    }
+
+    private var filteredArtists: [(name: String, count: Int)] {
+        let q = library.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return library.artists }
+        return library.artists.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+}
+
+struct AlbumGridView: View {
+    @EnvironmentObject private var library: LibraryController
+    let title: String
+    let subtitle: String
+    let albums: [AlbumRef]
+    var showsBackButton: Bool
+    var showsArtistOnTile: Bool
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 16)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                if showsBackButton {
+                    Button {
+                        library.browseBack()
+                    } label: {
+                        Label("Indietro", systemImage: "chevron.left")
+                            .font(.custom("Avenir Next", size: 13).weight(.semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(VTTheme.amber)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.custom("New York", size: 24).weight(.semibold))
+                        .foregroundStyle(VTTheme.textPrimary)
+                    Text(subtitle)
+                        .font(.custom("Avenir Next", size: 12))
+                        .foregroundStyle(VTTheme.textSecondary)
+                }
+                Spacer()
+                TextField("Cerca", text: $library.searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+            }
+            .padding(16)
+
+            Divider().opacity(0.2)
+
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 18) {
+                    ForEach(filteredAlbums) { album in
+                        Button {
+                            library.openAlbum(album)
+                        } label: {
+                            AlbumTile(
+                                album: album,
+                                showsArtist: showsArtistOnTile,
+                                track: library.representativeTrack(for: album)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(20)
             }
         }
+    }
+
+    private var filteredAlbums: [AlbumRef] {
+        let q = library.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return albums }
+        return albums.filter {
+            $0.name.localizedCaseInsensitiveContains(q)
+                || $0.artist.localizedCaseInsensitiveContains(q)
+        }
+    }
+}
+
+struct AlbumTile: View {
+    @ObservedObject private var artwork = ArtworkCache.shared
+    let album: AlbumRef
+    let showsArtist: Bool
+    let track: Track?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            CoverArtView(
+                artist: album.artist,
+                album: album.name,
+                fileURL: track?.resolvedPath,
+                cornerRadius: 8
+            )
+            .frame(width: 120, height: 120)
+            .shadow(color: .black.opacity(0.35), radius: 6, y: 3)
+
+            VStack(spacing: 2) {
+                Text(album.name)
+                    .font(.custom("Avenir Next", size: 12).weight(.semibold))
+                    .foregroundStyle(VTTheme.textPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                if showsArtist {
+                    Text(album.artist)
+                        .font(.custom("Avenir Next", size: 11))
+                        .foregroundStyle(VTTheme.textSecondary)
+                        .lineLimit(1)
+                }
+                Text("\(album.trackCount) brani")
+                    .font(.custom("Avenir Next", size: 10))
+                    .foregroundStyle(VTTheme.textSecondary.opacity(0.75))
+            }
+            .frame(width: 120)
+        }
+        .onAppear {
+            artwork.request(artist: album.artist, album: album.name, fileURL: track?.resolvedPath)
+        }
+    }
+}
+
+struct ArtistAvatar: View {
+    let name: String
+    let track: Track?
+
+    var body: some View {
+        CoverArtView(
+            artist: track?.displayArtist ?? name,
+            album: track?.displayAlbum ?? "",
+            fileURL: track?.resolvedPath,
+            cornerRadius: 20,
+            placeholderSystemImage: "person.fill",
+            isCircle: true
+        )
+        .frame(width: 40, height: 40)
+    }
+}
+
+struct CoverArtView: View {
+    @ObservedObject private var artwork = ArtworkCache.shared
+    let artist: String
+    let album: String
+    let fileURL: URL?
+    var cornerRadius: CGFloat = 6
+    var placeholderSystemImage: String = "music.note"
+    var isCircle: Bool = false
+
+    var body: some View {
+        Group {
+            if isCircle {
+                content.clipShape(Circle())
+            } else {
+                content.clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            }
+        }
+        .onAppear {
+            requestArtwork()
+        }
+    }
+
+    private var content: some View {
+        ZStack {
+            Group {
+                if isCircle {
+                    Circle().fill(placeholderFill)
+                } else {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(placeholderFill)
+                }
+            }
+
+            if let image = resolvedImage, image.size.width > 0 {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: placeholderSystemImage)
+                    .font(.system(size: isCircle ? 14 : 22, weight: .light))
+                    .foregroundStyle(Color.white.opacity(0.35))
+            }
+        }
+    }
+
+    private var placeholderFill: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.22, green: 0.23, blue: 0.26),
+                Color(red: 0.12, green: 0.13, blue: 0.15)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var resolvedImage: NSImage? {
+        if !album.isEmpty, let img = artwork.image(artist: artist, album: album) {
+            return img
+        }
+        return nil
+    }
+
+    private func requestArtwork() {
+        guard !album.isEmpty else { return }
+        artwork.request(artist: artist, album: album, fileURL: fileURL)
     }
 }
 

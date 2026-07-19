@@ -27,6 +27,7 @@
 		0AE17B55FB324B6CA0A4079F /* TrackHashIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15DDEE9BAFF4F1D936BE110 /* TrackHashIndex.swift */; };
 		51C566E420EC40608F2D2C16 /* PlayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6795D5F52EF943BA8FA4C4BE /* PlayerBar.swift */; };
 		3D6B0AD9E95E482790507622 /* TableDoubleClickInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = E143C0F07C5B40FF97F87E96 /* TableDoubleClickInstaller.swift */; };
+		A1B2C3D4E5F6478901234567 /* ArtworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F647890123456789 /* ArtworkCache.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +55,7 @@
 		E15DDEE9BAFF4F1D936BE110 /* TrackHashIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackHashIndex.swift; sourceTree = "<group>"; };
 		6795D5F52EF943BA8FA4C4BE /* PlayerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBar.swift; sourceTree = "<group>"; };
 		E143C0F07C5B40FF97F87E96 /* TableDoubleClickInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableDoubleClickInstaller.swift; sourceTree = "<group>"; };
+		B2C3D4E5F647890123456789 /* ArtworkCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkCache.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -118,6 +120,7 @@
 				E5774330AADB42CBB19081B3 /* FileHasher.swift */,
 				15A024797056498CB53C1C97 /* PlaybackController.swift */,
 				E15DDEE9BAFF4F1D936BE110 /* TrackHashIndex.swift */,
+				B2C3D4E5F647890123456789 /* ArtworkCache.swift */,
 );
 			path = Services;
 			sourceTree = "<group>";
@@ -270,6 +273,7 @@
 				0AE17B55FB324B6CA0A4079F /* TrackHashIndex.swift in Sources */,
 				51C566E420EC40608F2D2C16 /* PlayerBar.swift in Sources */,
 				3D6B0AD9E95E482790507622 /* TableDoubleClickInstaller.swift in Sources */,
+				A1B2C3D4E5F6478901234567 /* ArtworkCache.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};

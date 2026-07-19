@@ -40,7 +40,10 @@ struct RootView: View {
             Text(library.conversionPrompt?.message ?? "")
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            PlayerBar(playback: library.playback)
+            VStack(spacing: 0) {
+                LibraryStatsBar()
+                PlayerBar(playback: library.playback)
+            }
         }
         .overlay(alignment: .bottom) {
             if case .idle = library.syncStatus {
@@ -48,11 +51,17 @@ struct RootView: View {
             } else {
                 StatusBanner(status: library.syncStatus)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, library.playback.nowPlaying == nil ? 16 : 76)
+                    .padding(.bottom, bottomBannerPadding)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: library.syncStatus)
+    }
+
+    private var bottomBannerPadding: CGFloat {
+        let stats: CGFloat = library.connectedDevice == nil ? 0 : 36
+        let player: CGFloat = library.playback.nowPlaying == nil ? 0 : 76
+        return 16 + stats + player
     }
 }
 

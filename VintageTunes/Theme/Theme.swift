@@ -64,10 +64,15 @@ struct BrandMark: View {
                 Text("VintageTunes")
                     .font(.custom("New York", size: 22).weight(.semibold))
                     .foregroundStyle(VTTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("iPod Companion")
                     .font(.custom("Avenir Next", size: 11).weight(.medium))
                     .tracking(1.2)
                     .foregroundStyle(VTTheme.amber)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
         }
         .accessibilityElement(children: .combine)
