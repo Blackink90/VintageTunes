@@ -1,0 +1,338 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E21FEA2EA3B143D086954880 /* VintageTunesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9AA514EFA064872923541E1 /* VintageTunesApp.swift */; };
+		67373D7B74AD4F13871F4C6A /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E61460C169A4F7DAC89D59B /* Models.swift */; };
+		91B1E14A166F41DC9731FC9C /* AudioMetadataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B6025F587D437AB8D5623D /* AudioMetadataReader.swift */; };
+		3A1BDD25B5AB476595C3C582 /* LibraryController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 016B62283CC741AAB43A676C /* LibraryController.swift */; };
+		DE16D782F7C74AA8B1891C52 /* SyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 643BB07C9E264C00ADA13DC3 /* SyncService.swift */; };
+		31F9A138A76F4649A0119840 /* iPodDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADA5341C4A24BB7A0E57717 /* iPodDetector.swift */; };
+		6826484E2F984B1EB9F5DA64 /* iTunesDBParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5BDB964E8E4145B6A6B915 /* iTunesDBParser.swift */; };
+		A991DD85358542ABBBC7DB6D /* iTunesDBWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C94B15BEF71D4A6C9A7E42DD /* iTunesDBWriter.swift */; };
+		319EF17C96734BF88736C442 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52E0657BAF10422DAAF724B1 /* Theme.swift */; };
+		A08A275CC6384F42B40BBABD /* DetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8872A84386B4004885C519A /* DetailViews.swift */; };
+		0420B42B9B2B46E28429ABCF /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637D2FFDE2704656AAC1BAF1 /* RootView.swift */; };
+		AFF25FCDE79C412CA6BDDAF2 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A8B2E42EDEE42359A6C9354 /* SidebarView.swift */; };
+		4DE282442581481B96AB7E56 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E88F1D6AF6094D72A788C48C /* Assets.xcassets */; };
+		20EF9959F75C42F8BFE88471 /* SimulatediPod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79B5C8BDC8B5449E84303A42 /* SimulatediPod.swift */; };
+		17C9FA098F504BBDAAC63E7E /* AudioConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54569615C3AF45428041F984 /* AudioConverter.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1D2829D834564D08AE82CFDD /* VintageTunes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VintageTunes.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F9AA514EFA064872923541E1 /* VintageTunesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VintageTunesApp.swift; sourceTree = "<group>"; };
+		3E61460C169A4F7DAC89D59B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		43B6025F587D437AB8D5623D /* AudioMetadataReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMetadataReader.swift; sourceTree = "<group>"; };
+		016B62283CC741AAB43A676C /* LibraryController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryController.swift; sourceTree = "<group>"; };
+		643BB07C9E264C00ADA13DC3 /* SyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncService.swift; sourceTree = "<group>"; };
+		8ADA5341C4A24BB7A0E57717 /* iPodDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPodDetector.swift; sourceTree = "<group>"; };
+		CE5BDB964E8E4145B6A6B915 /* iTunesDBParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iTunesDBParser.swift; sourceTree = "<group>"; };
+		C94B15BEF71D4A6C9A7E42DD /* iTunesDBWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iTunesDBWriter.swift; sourceTree = "<group>"; };
+		52E0657BAF10422DAAF724B1 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		A8872A84386B4004885C519A /* DetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailViews.swift; sourceTree = "<group>"; };
+		637D2FFDE2704656AAC1BAF1 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		9A8B2E42EDEE42359A6C9354 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		E88F1D6AF6094D72A788C48C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		112D196B999842F88BDE8040 /* VintageTunes.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VintageTunes.entitlements; sourceTree = "<group>"; };
+		C70E97DC99824E348B9E6421 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		79B5C8BDC8B5449E84303A42 /* SimulatediPod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatediPod.swift; sourceTree = "<group>"; };
+		54569615C3AF45428041F984 /* AudioConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioConverter.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		6A8FB4508FE34470BB23DB43 = {
+			isa = PBXGroup;
+			children = (
+				9F096E82258A4E689AC8D852 /* VintageTunes */,
+				6191AF954DA74028873BDF6E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		6191AF954DA74028873BDF6E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1D2829D834564D08AE82CFDD /* VintageTunes.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		9F096E82258A4E689AC8D852 /* VintageTunes */ = {
+			isa = PBXGroup;
+			children = (
+				6A90CD526FC34410948983C5 /* App */,
+				84884D39EF2E451AA6777C6B /* Models */,
+				672CB109913E41C4924B7AC3 /* Services */,
+				86B5BB7EE8664F15B2BB0E1B /* Views */,
+				617ABEB1CF57458D82CD1FDD /* Theme */,
+				5ABBA9960C854AE8A8987FAA /* Resources */,
+				C70E97DC99824E348B9E6421 /* Info.plist */,
+				112D196B999842F88BDE8040 /* VintageTunes.entitlements */,
+			);
+			path = VintageTunes;
+			sourceTree = "<group>";
+		};
+		6A90CD526FC34410948983C5 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				F9AA514EFA064872923541E1 /* VintageTunesApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		84884D39EF2E451AA6777C6B /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				3E61460C169A4F7DAC89D59B /* Models.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		672CB109913E41C4924B7AC3 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				43B6025F587D437AB8D5623D /* AudioMetadataReader.swift */,
+				016B62283CC741AAB43A676C /* LibraryController.swift */,
+				643BB07C9E264C00ADA13DC3 /* SyncService.swift */,
+				8ADA5341C4A24BB7A0E57717 /* iPodDetector.swift */,
+				CE5BDB964E8E4145B6A6B915 /* iTunesDBParser.swift */,
+				C94B15BEF71D4A6C9A7E42DD /* iTunesDBWriter.swift */,
+				79B5C8BDC8B5449E84303A42 /* SimulatediPod.swift */,
+				54569615C3AF45428041F984 /* AudioConverter.swift */,
+);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		86B5BB7EE8664F15B2BB0E1B /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A8872A84386B4004885C519A /* DetailViews.swift */,
+				637D2FFDE2704656AAC1BAF1 /* RootView.swift */,
+				9A8B2E42EDEE42359A6C9354 /* SidebarView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		617ABEB1CF57458D82CD1FDD /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				52E0657BAF10422DAAF724B1 /* Theme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		5ABBA9960C854AE8A8987FAA /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				E88F1D6AF6094D72A788C48C /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C33438279874475FAC430B6B /* VintageTunes */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B4CB35F404F242A0B70F194A /* Build configuration list for PBXNativeTarget "VintageTunes" */;
+			buildPhases = (
+				5C4FF9CA52C549D09B93FE9C /* Sources */,
+				B7CA6F19701449B9948F0FE8 /* Frameworks */,
+				B74FEF37ED69426B933B1DE2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VintageTunes;
+			productName = VintageTunes;
+			productReference = 1D2829D834564D08AE82CFDD /* VintageTunes.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		66A09BCFA59B4675BB650393 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2620;
+				LastUpgradeCheck = 2620;
+			};
+			buildConfigurationList = 7403C422AC83404C84A37A3C /* Build configuration list for PBXProject "VintageTunes" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = it;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				it,
+				Base,
+			);
+			mainGroup = 6A8FB4508FE34470BB23DB43;
+			productRefGroup = 6191AF954DA74028873BDF6E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C33438279874475FAC430B6B /* VintageTunes */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B74FEF37ED69426B933B1DE2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4DE282442581481B96AB7E56 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B7CA6F19701449B9948F0FE8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5C4FF9CA52C549D09B93FE9C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E21FEA2EA3B143D086954880 /* VintageTunesApp.swift in Sources */,
+				67373D7B74AD4F13871F4C6A /* Models.swift in Sources */,
+				91B1E14A166F41DC9731FC9C /* AudioMetadataReader.swift in Sources */,
+				3A1BDD25B5AB476595C3C582 /* LibraryController.swift in Sources */,
+				DE16D782F7C74AA8B1891C52 /* SyncService.swift in Sources */,
+				31F9A138A76F4649A0119840 /* iPodDetector.swift in Sources */,
+				6826484E2F984B1EB9F5DA64 /* iTunesDBParser.swift in Sources */,
+				A991DD85358542ABBBC7DB6D /* iTunesDBWriter.swift in Sources */,
+				319EF17C96734BF88736C442 /* Theme.swift in Sources */,
+				A08A275CC6384F42B40BBABD /* DetailViews.swift in Sources */,
+				0420B42B9B2B46E28429ABCF /* RootView.swift in Sources */,
+				AFF25FCDE79C412CA6BDDAF2 /* SidebarView.swift in Sources */,
+				20EF9959F75C42F8BFE88471 /* SimulatediPod.swift in Sources */,
+				17C9FA098F504BBDAAC63E7E /* AudioConverter.swift in Sources */,
+);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+
+
+/* Begin XCBuildConfiguration section */
+		A92B8625AE6548E293BC4413 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		59CED5C40FA84BEE8269DBD7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		00D71618FA2549B5911332A2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = VintageTunes/VintageTunes.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VintageTunes/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vintagetunes.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BECB85C6C7034837AE3DB1E7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = VintageTunes/VintageTunes.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VintageTunes/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vintagetunes.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7403C422AC83404C84A37A3C /* Build configuration list for PBXProject "VintageTunes" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A92B8625AE6548E293BC4413 /* Debug */,
+				59CED5C40FA84BEE8269DBD7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B4CB35F404F242A0B70F194A /* Build configuration list for PBXNativeTarget "VintageTunes" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00D71618FA2549B5911332A2 /* Debug */,
+				BECB85C6C7034837AE3DB1E7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 66A09BCFA59B4675BB650393 /* Project object */;
+}
