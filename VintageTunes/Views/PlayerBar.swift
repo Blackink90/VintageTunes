@@ -190,6 +190,7 @@ struct PlaybackScrubber: View {
     var width: CGFloat
     var height: CGFloat = 6
     var style: ScrubberStyle = .playerBar
+    var scrubbingActive: Binding<Bool>? = nil
 
     @State private var dragProgress: Double?
 
@@ -202,25 +203,20 @@ struct PlaybackScrubber: View {
             trackBackground
             trackFill
                 .frame(width: max(style == .playerBar ? 4 : 2, width * progress))
-            if style == .stockiPod {
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 7, height: 7)
-                    .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
-                    .offset(x: max(0, width * progress - 3.5))
-            }
         }
         .frame(width: width, height: height)
         .contentShape(Rectangle())
         .highPriorityGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
+                    scrubbingActive?.wrappedValue = true
                     guard width > 0, playback.duration > 0 else { return }
                     let p = min(1, max(0, value.location.x / width))
                     dragProgress = p
                     playback.seek(toProgress: p)
                 }
                 .onEnded { value in
+                    defer { scrubbingActive?.wrappedValue = false }
                     guard width > 0, playback.duration > 0 else {
                         dragProgress = nil
                         return
@@ -239,7 +235,9 @@ struct PlaybackScrubber: View {
         case .playerBar:
             Capsule().fill(Color.white.opacity(0.12))
         case .stockiPod:
-            Capsule().fill(Color(red: 0.45, green: 0.50, blue: 0.56))
+            // Barra rettangolare stile Classic (niente capsule)
+            Rectangle()
+                .fill(Color(red: 0.45, green: 0.48, blue: 0.52))
         case .rockbox:
             Rectangle().fill(Color.white.opacity(0.12))
         }
@@ -251,15 +249,16 @@ struct PlaybackScrubber: View {
         case .playerBar:
             Capsule().fill(VTTheme.amber)
         case .stockiPod:
-            Capsule()
+            Rectangle()
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.35, green: 0.55, blue: 0.95),
-                            Color(red: 0.25, green: 0.40, blue: 0.85)
+                            Color(red: 0.55, green: 0.72, blue: 0.98),
+                            Color(red: 0.28, green: 0.48, blue: 0.92),
+                            Color(red: 0.35, green: 0.55, blue: 0.95)
                         ],
-                        startPoint: .leading,
-                        endPoint: .trailing
+                        startPoint: .top,
+                        endPoint: .bottom
                     )
                 )
         case .rockbox:

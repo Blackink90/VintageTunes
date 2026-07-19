@@ -26,6 +26,21 @@ final class PlaybackController: ObservableObject {
     var currentTimeLabel: String { format(currentTime) }
     var durationLabel: String { format(duration) }
 
+    /// Tempo rimanente stile iPod, es. "-3:41".
+    var remainingTimeLabel: String {
+        guard duration > 0 else { return "-0:00" }
+        let left = max(0, duration - currentTime)
+        return "-\(format(left))"
+    }
+
+    /// Posizione 1-based nella coda, se nota.
+    var queuePosition: (index: Int, total: Int)? {
+        guard let current = nowPlaying,
+              let idx = queue.firstIndex(where: { $0.id == current.id }),
+              !queue.isEmpty else { return nil }
+        return (idx + 1, queue.count)
+    }
+
     /// 0…1 → posizione nel brano.
     func seek(toProgress progress: Double) {
         guard duration > 0 else { return }

@@ -5,6 +5,7 @@ struct iPodNowPlayingOverlay: View {
     @EnvironmentObject private var library: LibraryController
     @State private var offset: CGSize = .zero
     @State private var dragOrigin: CGSize = .zero
+    @State private var isScrubbing = false
 
     private var mode: FirmwareMode {
         library.connectedDevice?.firmwareMode ?? .stock
@@ -15,6 +16,7 @@ struct iPodNowPlayingOverlay: View {
             playback: library.playback,
             mode: mode,
             deviceName: library.connectedDevice?.name ?? "iPod",
+            scrubbingActive: $isScrubbing,
             onMenu: { library.showiPodPreview = false },
             onSelect: { library.playback.togglePlayPause() },
             onPlayPause: { library.playback.togglePlayPause() },
@@ -26,15 +28,24 @@ struct iPodNowPlayingOverlay: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 6)
                 .onChanged { value in
+                    guard !isScrubbing else { return }
                     offset = CGSize(
                         width: dragOrigin.width + value.translation.width,
                         height: dragOrigin.height + value.translation.height
                     )
                 }
                 .onEnded { _ in
-                    dragOrigin = offset
+                    if !isScrubbing {
+                        dragOrigin = offset
+                    }
                 }
         )
+        .onChange(of: isScrubbing) { _, scrubbing in
+            // A fine scrub: sincronizza l’origine così il prossimo drag non “salta”.
+            if !scrubbing {
+                dragOrigin = offset
+            }
+        }
         .transition(.scale(scale: 0.92).combined(with: .opacity))
         .help("Trascina per spostare l'iPod")
     }
@@ -46,6 +57,7 @@ private struct iPodBaseOverlay: View {
     @ObservedObject var playback: PlaybackController
     let mode: FirmwareMode
     let deviceName: String
+    @Binding var scrubbingActive: Bool
     var onMenu: () -> Void
     var onSelect: () -> Void
     var onPlayPause: () -> Void
@@ -77,14 +89,20 @@ private struct iPodBaseOverlay: View {
 
                     Group {
                         if mode == .rockbox {
-                            RockboxNowPlayingScreen(playback: playback, deviceName: deviceName)
+                            RockboxNowPlayingScreen(
+                                playback: playback,
+                                deviceName: deviceName,
+                                scrubbingActive: $scrubbingActive
+                            )
                         } else {
-                            StockNowPlayingScreen(playback: playback)
+                            StockNowPlayingScreen(
+                                playback: playback,
+                                scrubbingActive: $scrubbingActive
+                            )
                         }
                     }
                     .frame(width: screen.width, height: screen.height)
                     .position(x: screen.midX, y: screen.midY)
-                    // Serve per lo scrubber sullo schermo LCD.
 
                     // Click wheel hit zones
                     wheelButton(size: selectR * 2, action: onSelect)
@@ -190,103 +208,184 @@ private struct WheelArcShape: Shape {
     }
 }
 
-// MARK: - Stock Apple Now Playing
+// MARK: - Stock Apple Now Playing (layout Classic / Video)
 
 private struct StockNowPlayingScreen: View {
     @ObservedObject var playback: PlaybackController
+    @Binding var scrubbingActive: Bool
     @ObservedObject private var artwork = ArtworkCache.shared
+
+    private let ink = Color.black.opacity(0.92)
+    private let lcdTop = Color(red: 0.93, green: 0.94, blue: 0.95)
+    private let lcdBottom = Color(red: 0.82, green: 0.84, blue: 0.86)
 
     var body: some View {
         ZStack {
+            LinearGradient(colors: [lcdTop, lcdBottom], startPoint: .top, endPoint: .bottom)
+            // Trama LCD orizzontale leggera
+            GeometryReader { geo in
+                Path { path in
+                    stride(from: 0.0, through: geo.size.height, by: 2).forEach { y in
+                        path.move(to: CGPoint(x: 0, y: y))
+                        path.addLine(to: CGPoint(x: geo.size.width, y: y))
+                    }
+                }
+                .stroke(Color.black.opacity(0.035), lineWidth: 1)
+            }
+            .allowsHitTesting(false)
+
+            if let track = playback.nowPlaying {
+                VStack(spacing: 0) {
+                    header
+
+                    HStack(alignment: .top, spacing: 6) {
+                        cover(for: track)
+                            .aspectRatio(1, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .overlay(
+                                Rectangle()
+                                    .stroke(Color.black.opacity(0.35), lineWidth: 0.6)
+                            )
+                            .shadow(color: .black.opacity(0.2), radius: 1.5, y: 1)
+                            .padding(.top, 9)
+                            .allowsHitTesting(false)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Spacer(minLength: 0)
+                                Image(systemName: "shuffle")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(ink.opacity(0.85))
+                            }
+                            .padding(.top, 2)
+                            .padding(.bottom, 1)
+
+                            Text(track.displayTitle)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(ink)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.75)
+
+                            Text(track.displayArtist)
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundStyle(ink)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+
+                            Text(track.displayAlbum)
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundStyle(ink)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.75)
+
+                            if let pos = playback.queuePosition {
+                                Text("\(pos.index) of \(pos.total)")
+                                    .font(.system(size: 10, weight: .regular))
+                                    .foregroundStyle(ink)
+                                    .padding(.top, 3)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .allowsHitTesting(false)
+                    }
+                    .padding(.horizontal, 5)
+                    .padding(.top, 2)
+
+                    Spacer(minLength: 4)
+
+                    progressBlock
+                        .padding(.horizontal, 4)
+                        .padding(.bottom, 10)
+                }
+                .onAppear { requestArt(for: track) }
+                .onChange(of: track.id) { _, _ in requestArt(for: track) }
+            } else {
+                Text("No Song")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ink.opacity(0.6))
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 5) {
+            Text("Now Playing")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(ink)
+            Spacer()
+            Image(systemName: playback.isPlaying ? "play.fill" : "pause.fill")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Color(red: 0.22, green: 0.42, blue: 0.88))
+            iPodBatteryGlyph(level: 0.82)
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 3)
+        .background(
             LinearGradient(
                 colors: [
-                    Color(red: 0.82, green: 0.86, blue: 0.90),
-                    Color(red: 0.70, green: 0.76, blue: 0.82)
+                    Color(red: 0.72, green: 0.74, blue: 0.77),
+                    Color(red: 0.58, green: 0.60, blue: 0.64),
+                    Color(red: 0.66, green: 0.68, blue: 0.71)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-
-            if let track = playback.nowPlaying {
-                VStack(spacing: 0) {
-                    HStack(spacing: 4) {
-                        Image(systemName: playback.isPlaying ? "play.fill" : "pause.fill")
-                            .font(.system(size: 8, weight: .bold))
-                        Text("Now Playing")
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
-                        Spacer()
-                        BatteryGlyph(level: 0.85)
-                    }
-                    .foregroundStyle(Color(red: 0.15, green: 0.18, blue: 0.22))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.35))
-
-                    HStack(alignment: .top, spacing: 8) {
-                        cover(for: track)
-                            .frame(width: 72, height: 72)
-                            .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                    .stroke(Color.black.opacity(0.2), lineWidth: 0.5)
-                            )
-                            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            marquee(track.displayTitle, weight: .bold, size: 11)
-                            marquee(track.displayArtist, weight: .medium, size: 10)
-                            marquee(track.displayAlbum, weight: .regular, size: 9)
-                                .opacity(0.75)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.top, 8)
-
-                    Spacer(minLength: 4)
-
-                    VStack(spacing: 3) {
-                        GeometryReader { geo in
-                            PlaybackScrubber(
-                                playback: playback,
-                                width: geo.size.width,
-                                height: 7,
-                                style: .stockiPod
-                            )
-                        }
-                        .frame(height: 10)
-
-                        HStack {
-                            Text(playback.currentTimeLabel)
-                            Spacer()
-                            Text(playback.durationLabel)
-                        }
-                        .font(.system(size: 8, weight: .medium, design: .rounded).monospacedDigit())
-                        .foregroundStyle(Color(red: 0.20, green: 0.24, blue: 0.28))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 8)
-                }
-                .onAppear {
-                    artwork.request(
-                        artist: track.displayArtist,
-                        album: track.displayAlbum,
-                        fileURL: track.resolvedPath
-                    )
-                }
-                .onChange(of: track.id) { _, _ in
-                    artwork.request(
-                        artist: track.displayArtist,
-                        album: track.displayAlbum,
-                        fileURL: track.resolvedPath
-                    )
-                }
-            } else {
-                Text("No Song")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.25, green: 0.28, blue: 0.32))
-            }
+        )
+        .overlay(alignment: .bottom) {
+            // Ombra sotto la barra status
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.35),
+                    Color.black.opacity(0.08),
+                    Color.clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 3)
+            .offset(y: 3)
+            .allowsHitTesting(false)
         }
+        .allowsHitTesting(false)
+    }
+
+    private var progressBlock: some View {
+        HStack(spacing: 4) {
+            Text(playback.currentTimeLabel)
+                .font(.system(size: 10, weight: .bold).monospacedDigit())
+                .foregroundStyle(ink)
+                .frame(minWidth: 28, alignment: .leading)
+                .allowsHitTesting(false)
+
+            GeometryReader { geo in
+                PlaybackScrubber(
+                    playback: playback,
+                    width: geo.size.width,
+                    height: 13,
+                    style: .stockiPod,
+                    scrubbingActive: $scrubbingActive
+                )
+                .frame(maxHeight: .infinity, alignment: .center)
+            }
+            .frame(height: 14)
+
+            Text(playback.remainingTimeLabel)
+                .font(.system(size: 10, weight: .bold).monospacedDigit())
+                .foregroundStyle(ink)
+                .frame(minWidth: 32, alignment: .trailing)
+                .allowsHitTesting(false)
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private func requestArt(for track: Track) {
+        artwork.request(
+            artist: track.displayArtist,
+            album: track.displayAlbum,
+            fileURL: track.resolvedPath
+        )
     }
 
     private func cover(for track: Track) -> some View {
@@ -297,20 +396,14 @@ private struct StockNowPlayingScreen: View {
                     .scaledToFill()
             } else {
                 ZStack {
-                    Color(red: 0.55, green: 0.60, blue: 0.66)
+                    Color(red: 0.72, green: 0.74, blue: 0.78)
                     Image(systemName: "music.note")
-                        .foregroundStyle(.white.opacity(0.7))
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundStyle(Color.black.opacity(0.35))
                 }
             }
         }
-    }
-
-    private func marquee(_ text: String, weight: Font.Weight, size: CGFloat) -> some View {
-        Text(text)
-            .font(.system(size: size, weight: weight, design: .rounded))
-            .foregroundStyle(Color(red: 0.12, green: 0.14, blue: 0.18))
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
+        .clipped()
     }
 }
 
@@ -320,6 +413,7 @@ private struct RockboxNowPlayingScreen: View {
     @ObservedObject var playback: PlaybackController
     @ObservedObject private var artwork = ArtworkCache.shared
     let deviceName: String
+    @Binding var scrubbingActive: Bool
 
     var body: some View {
         ZStack {
@@ -379,7 +473,8 @@ private struct RockboxNowPlayingScreen: View {
                                 playback: playback,
                                 width: geo.size.width,
                                 height: 5,
-                                style: .rockbox
+                                style: .rockbox,
+                                scrubbingActive: $scrubbingActive
                             )
                         }
                         .frame(height: 8)
@@ -438,23 +533,40 @@ private struct RockboxNowPlayingScreen: View {
     }
 }
 
-private struct BatteryGlyph: View {
+private struct iPodBatteryGlyph: View {
     let level: CGFloat
 
     var body: some View {
         HStack(spacing: 1) {
-            RoundedRectangle(cornerRadius: 1, style: .continuous)
-                .stroke(Color(red: 0.15, green: 0.18, blue: 0.22), lineWidth: 0.8)
-                .frame(width: 14, height: 7)
-                .overlay(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 0.5, style: .continuous)
-                        .fill(Color(red: 0.15, green: 0.18, blue: 0.22))
-                        .frame(width: max(2, 11 * level), height: 4)
-                        .padding(.leading, 1.5)
-                }
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    .stroke(Color.black.opacity(0.85), lineWidth: 0.9)
+                    .frame(width: 15, height: 7)
+                RoundedRectangle(cornerRadius: 0.6, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.45, green: 0.85, blue: 0.35),
+                                Color(red: 0.25, green: 0.70, blue: 0.22)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: max(2, 12 * min(1, max(0, level))), height: 4.5)
+                    .padding(.leading, 1.4)
+            }
             RoundedRectangle(cornerRadius: 0.5, style: .continuous)
-                .fill(Color(red: 0.15, green: 0.18, blue: 0.22))
-                .frame(width: 1.5, height: 3)
+                .fill(Color.black.opacity(0.85))
+                .frame(width: 1.6, height: 3.2)
         }
+    }
+}
+
+private struct BatteryGlyph: View {
+    let level: CGFloat
+
+    var body: some View {
+        iPodBatteryGlyph(level: level)
     }
 }
