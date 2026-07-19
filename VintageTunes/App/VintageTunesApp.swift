@@ -45,6 +45,14 @@ struct VintageTunesApp: App {
 
                 Divider()
 
+                Button("Importa cartella…") {
+                    library.chooseFolderToImport()
+                }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+                .disabled(library.connectedDevice == nil)
+
+                Divider()
+
                 Button("Avvia modalità demo") {
                     library.startDemo()
                 }

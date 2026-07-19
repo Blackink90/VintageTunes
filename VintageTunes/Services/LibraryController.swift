@@ -305,15 +305,18 @@ final class LibraryController: ObservableObject {
     }
 
     func beginEditingSelectedTrack() {
-        guard selection.count == 1, let id = selection.first,
-              let track = tracks.first(where: { $0.id == id }) else { return }
-        trackEditDraft = TrackEditDraft(track: track)
+        beginEditingTracks(ids: Array(selection))
     }
 
     func beginEditingTrack(id: UInt32) {
-        guard let track = tracks.first(where: { $0.id == id }) else { return }
-        selection = [id]
-        trackEditDraft = TrackEditDraft(track: track)
+        beginEditingTracks(ids: [id])
+    }
+
+    func beginEditingTracks(ids: [UInt32]) {
+        let selected = ids.compactMap { id in tracks.first(where: { $0.id == id }) }
+        guard !selected.isEmpty else { return }
+        selection = Set(selected.map(\.id))
+        trackEditDraft = TrackEditDraft(tracks: selected)
     }
 
     func cancelTrackEdit() {
@@ -323,7 +326,7 @@ final class LibraryController: ObservableObject {
     func saveTrackEdit() {
         guard var draft = trackEditDraft,
               let device = connectedDevice,
-              let idx = tracks.firstIndex(where: { $0.id == draft.trackID }) else {
+              !draft.trackIDs.isEmpty else {
             trackEditDraft = nil
             return
         }
@@ -332,26 +335,55 @@ final class LibraryController: ObservableObject {
         draft.artist = draft.artist.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.album = draft.album.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.genre = draft.genre.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let trackNumber = UInt32(draft.trackNumber.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-        let year = UInt32(draft.year.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-
-        tracks[idx].title = draft.title
-        tracks[idx].artist = draft.artist
-        tracks[idx].album = draft.album
-        tracks[idx].genre = draft.genre
-        tracks[idx].trackNumber = trackNumber
-        tracks[idx].year = year
+        let trackNumberText = draft.trackNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        let yearText = draft.year.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var overrides = TrackTagStore.load(from: device)
-        overrides[tracks[idx].location] = TrackTagOverride(
-            title: draft.title,
-            artist: draft.artist,
-            album: draft.album,
-            genre: draft.genre,
-            trackNumber: trackNumber,
-            year: year
-        )
+        var updated = 0
+
+        for id in draft.trackIDs {
+            guard let idx = tracks.firstIndex(where: { $0.id == id }) else { continue }
+
+            if !draft.isMulti {
+                tracks[idx].title = draft.title
+                tracks[idx].artist = draft.artist
+                tracks[idx].album = draft.album
+                tracks[idx].genre = draft.genre
+                tracks[idx].trackNumber = UInt32(trackNumberText) ?? 0
+                tracks[idx].year = UInt32(yearText) ?? 0
+            } else {
+                // Multi: campo vuoto = non modificare quel dato sul brano
+                if !draft.artist.isEmpty { tracks[idx].artist = draft.artist }
+                if !draft.album.isEmpty { tracks[idx].album = draft.album }
+                if !draft.genre.isEmpty { tracks[idx].genre = draft.genre }
+                if !trackNumberText.isEmpty {
+                    tracks[idx].trackNumber = UInt32(trackNumberText) ?? 0
+                }
+                if !yearText.isEmpty {
+                    tracks[idx].year = UInt32(yearText) ?? 0
+                }
+            }
+
+            overrides[tracks[idx].location] = TrackTagOverride(
+                title: tracks[idx].title,
+                artist: tracks[idx].artist,
+                album: tracks[idx].album,
+                genre: tracks[idx].genre,
+                trackNumber: tracks[idx].trackNumber,
+                year: tracks[idx].year
+            )
+            artwork.request(
+                artist: tracks[idx].displayArtist,
+                album: tracks[idx].displayAlbum,
+                fileURL: tracks[idx].resolvedPath
+            )
+            updated += 1
+        }
+
+        guard updated > 0 else {
+            trackEditDraft = nil
+            return
+        }
 
         do {
             try TrackTagStore.save(overrides, to: device)
@@ -361,13 +393,12 @@ final class LibraryController: ObservableObject {
                 dbVersion: dbVersion,
                 device: device
             )
-            artwork.request(
-                artist: tracks[idx].displayArtist,
-                album: tracks[idx].displayAlbum,
-                fileURL: tracks[idx].resolvedPath
-            )
             trackEditDraft = nil
-            setStatus(.success("Informazioni brano aggiornate"))
+            setStatus(.success(
+                updated == 1
+                    ? "Informazioni brano aggiornate"
+                    : "Informazioni aggiornate su \(updated) brani"
+            ))
         } catch {
             setStatus(.failure(error.localizedDescription))
         }
@@ -479,10 +510,26 @@ final class LibraryController: ObservableObject {
         }
     }
 
+    private var importSecurityRoots: [URL] = []
+
     func importDroppedURLs(_ urls: [URL]) {
-        DispatchQueue.main.async {
-            self.prepareImport(urls)
+        Task { @MainActor in
+            await prepareImport(urls)
         }
+    }
+
+    func chooseFolderToImport() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        panel.prompt = "Importa"
+        panel.message = "Scegli una o più cartelle da scansionare per file audio"
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Music")
+
+        guard panel.runModal() == .OK else { return }
+        importDroppedURLs(panel.urls)
     }
 
     func confirmConversion() {
@@ -494,6 +541,7 @@ final class LibraryController: ObservableObject {
                 toConvert: prompt.convertibleURLs,
                 convert: true
             )
+            releaseImportSecurityRoots()
         }
     }
 
@@ -502,50 +550,65 @@ final class LibraryController: ObservableObject {
         conversionPrompt = nil
         if prompt.readyURLs.isEmpty {
             setStatus(.failure("Trasferimento annullato: nessun file compatibile"))
+            releaseImportSecurityRoots()
             return
         }
         Task {
             await runImport(ready: prompt.readyURLs, toConvert: [], convert: false)
+            releaseImportSecurityRoots()
         }
     }
 
-    private func prepareImport(_ urls: [URL]) {
-        Task {
-            guard connectedDevice != nil else {
-                setStatus(.failure("Collega un iPod (o avvia la demo) per sincronizzare"))
-                return
+    private func beginImportSecurityAccess(for urls: [URL]) {
+        releaseImportSecurityRoots()
+        for url in urls {
+            if url.startAccessingSecurityScopedResource() {
+                importSecurityRoots.append(url)
             }
-
-            let ready = urls.filter(AudioMetadataReader.isSupportedAudio)
-            let convertible = urls.filter {
-                AudioConverter.needsConversion($0) && !AudioMetadataReader.isSupportedAudio($0)
-            }
-            let rejected = urls.filter { url in
-                !ready.contains(where: { $0 == url }) && !convertible.contains(where: { $0 == url })
-            }
-
-            if !convertible.isEmpty {
-                conversionPrompt = ConversionPrompt(
-                    convertibleURLs: convertible,
-                    readyURLs: ready,
-                    rejectedNames: rejected.map(\.lastPathComponent)
-                )
-                setStatus(.idle)
-                return
-            }
-
-            if ready.isEmpty {
-                setStatus(.failure(
-                    AudioMetadataReader.rejectionMessage(
-                        for: urls,
-                        firmware: connectedDevice?.firmwareMode ?? .stock
-                    ) ?? "Nessun file audio supportato"
-                ))
-                return
-            }
-
-            await runImport(ready: ready, toConvert: [], convert: false)
         }
+    }
+
+    private func releaseImportSecurityRoots() {
+        importSecurityRoots.forEach { $0.stopAccessingSecurityScopedResource() }
+        importSecurityRoots.removeAll()
+    }
+
+    private func prepareImport(_ urls: [URL]) async {
+        guard connectedDevice != nil else {
+            setStatus(.failure("Collega un iPod (o avvia la demo) per sincronizzare"))
+            return
+        }
+
+        beginImportSecurityAccess(for: urls)
+        setStatus(.working("Cerco file audio…"))
+
+        let files = AudioFileCollector.collectAudioFiles(from: urls)
+        let ready = files.filter(AudioMetadataReader.isSupportedAudio)
+        let convertible = files.filter {
+            AudioConverter.needsConversion($0) && !AudioMetadataReader.isSupportedAudio($0)
+        }
+
+        if files.isEmpty {
+            setStatus(.failure("Nessun file audio trovato nella selezione (mp3, m4a, flac, wav, …)"))
+            releaseImportSecurityRoots()
+            return
+        }
+
+        setStatus(.working("Trovati \(files.count) file audio…"))
+
+        if !convertible.isEmpty {
+            conversionPrompt = ConversionPrompt(
+                convertibleURLs: convertible,
+                readyURLs: ready,
+                rejectedNames: []
+            )
+            setStatus(.idle)
+            // Security roots restano aperti fino a conferma/rifiuto conversione
+            return
+        }
+
+        await runImport(ready: ready, toConvert: [], convert: false)
+        releaseImportSecurityRoots()
     }
 
     private func runImport(

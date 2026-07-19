@@ -30,6 +30,7 @@
 		A1B2C3D4E5F6478901234567 /* ArtworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F647890123456789 /* ArtworkCache.swift */; };
 		E5F6478901234567890ABCD1 /* TrackTagStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6478901234567890ABCD123 /* TrackTagStore.swift */; };
 		A7B8C9D0E1F234567890ABCD /* MetadataLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C9D0E1F234567890ABCDEF /* MetadataLookup.swift */; };
+		C9D0E1F234567890ABCDEF01 /* AudioFileCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E1F234567890ABCDEF0123 /* AudioFileCollector.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +61,7 @@
 		B2C3D4E5F647890123456789 /* ArtworkCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkCache.swift; sourceTree = "<group>"; };
 		F6478901234567890ABCD123 /* TrackTagStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackTagStore.swift; sourceTree = "<group>"; };
 		B8C9D0E1F234567890ABCDEF /* MetadataLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataLookup.swift; sourceTree = "<group>"; };
+		D0E1F234567890ABCDEF0123 /* AudioFileCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFileCollector.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -127,6 +129,7 @@
 				B2C3D4E5F647890123456789 /* ArtworkCache.swift */,
 				F6478901234567890ABCD123 /* TrackTagStore.swift */,
 				B8C9D0E1F234567890ABCDEF /* MetadataLookup.swift */,
+				D0E1F234567890ABCDEF0123 /* AudioFileCollector.swift */,
 );
 			path = Services;
 			sourceTree = "<group>";
@@ -282,6 +285,7 @@
 				A1B2C3D4E5F6478901234567 /* ArtworkCache.swift in Sources */,
 				E5F6478901234567890ABCD1 /* TrackTagStore.swift in Sources */,
 				A7B8C9D0E1F234567890ABCD /* MetadataLookup.swift in Sources */,
+				C9D0E1F234567890ABCDEF01 /* AudioFileCollector.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};

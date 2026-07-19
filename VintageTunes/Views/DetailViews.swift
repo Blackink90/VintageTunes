@@ -119,11 +119,8 @@ struct TrackTableView: View {
                         }
                     }
                     Button("Modifica informazioni…") {
-                        if let id = ids.first {
-                            library.beginEditingTrack(id: id)
-                        }
+                        library.beginEditingTracks(ids: Array(ids))
                     }
-                    .disabled(ids.count != 1)
                     Button("Mostra in Finder") {
                         library.selection = Set(ids)
                         library.revealSelectedTracksInFinder()
@@ -713,7 +710,7 @@ struct DropImportView: View {
             Text("Aggiungi musica")
                 .font(.custom("New York", size: 28).weight(.semibold))
 
-            Text("Trascina mp3 / m4a / aac / wav / aiff su questa area\noppure sulla lista canzoni. FLAC non è supportato sul firmware stock.")
+            Text("Trascina file o cartelle qui (o sulla lista canzoni).\nVerranno cercati tutti i file audio, anche nelle sottocartelle.")
                 .font(.custom("Avenir Next", size: 14))
                 .foregroundStyle(VTTheme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -732,13 +729,13 @@ struct DropImportView: View {
                     .frame(maxWidth: 560, minHeight: 260)
 
                 VStack(spacing: 14) {
-                    Image(systemName: "square.and.arrow.down.on.square")
+                    Image(systemName: "folder.badge.plus")
                         .font(.system(size: 42, weight: .light))
                         .foregroundStyle(VTTheme.amber)
                         .symbolEffect(.pulse, options: .repeating, isActive: isTargeted)
-                    Text(isTargeted ? "Rilascia per sincronizzare" : "Drop zone")
+                    Text(isTargeted ? "Rilascia per sincronizzare" : "File o cartelle")
                         .font(.custom("Avenir Next", size: 16).weight(.semibold))
-                    Text("Sincronizzazione diretta · senza Music.app")
+                    Text("mp3 · m4a · wav · aiff · flac (conversione) · …")
                         .font(.custom("Avenir Next", size: 12))
                         .foregroundStyle(VTTheme.textSecondary)
                 }
@@ -749,6 +746,18 @@ struct DropImportView: View {
             } isTargeted: { targeted in
                 isTargeted = targeted
             }
+
+            Button {
+                library.chooseFolderToImport()
+            } label: {
+                Label("Scegli cartella…", systemImage: "folder")
+                    .font(.custom("Avenir Next", size: 14).weight(.semibold))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(VTTheme.amber)
+            .disabled(library.connectedDevice == nil)
 
             if library.selectedSection == .playlists || library.selectedPlaylistID != nil {
                 Text("Le nuove tracce possono essere aggiunte anche alla playlist selezionata.")
@@ -813,10 +822,13 @@ struct TrackEditSheet: View {
         case title, artist, album, genre, trackNumber, year
     }
 
+    private var draft: TrackEditDraft? { library.trackEditDraft }
+    private var isMulti: Bool { draft?.isMulti == true }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Modifica informazioni")
+                Text(headerTitle)
                     .font(.custom("New York", size: 20).weight(.semibold))
                 Spacer()
             }
@@ -824,20 +836,57 @@ struct TrackEditSheet: View {
 
             Divider().opacity(0.2)
 
-            if library.trackEditDraft != nil {
+            if let draft {
                 Form {
-                    TextField("Titolo", text: draftBinding(\.title))
-                        .focused($focusedField, equals: .title)
-                    TextField("Artista", text: draftBinding(\.artist))
-                        .focused($focusedField, equals: .artist)
-                    TextField("Album", text: draftBinding(\.album))
-                        .focused($focusedField, equals: .album)
-                    TextField("Genere", text: draftBinding(\.genre))
-                        .focused($focusedField, equals: .genre)
-                    TextField("Numero traccia", text: draftBinding(\.trackNumber))
-                        .focused($focusedField, equals: .trackNumber)
-                    TextField("Anno", text: draftBinding(\.year))
-                        .focused($focusedField, equals: .year)
+                    if !draft.isMulti {
+                        TextField("Titolo", text: draftBinding(\.title))
+                            .focused($focusedField, equals: .title)
+                    } else {
+                        Text("Il titolo non viene modificato in selezione multipla.")
+                            .font(.custom("Avenir Next", size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    TextField(
+                        "Artista",
+                        text: draftBinding(\.artist),
+                        prompt: prompt(mixed: draft.mixedArtist, current: draft.artist)
+                    )
+                    .focused($focusedField, equals: .artist)
+
+                    TextField(
+                        "Album",
+                        text: draftBinding(\.album),
+                        prompt: prompt(mixed: draft.mixedAlbum, current: draft.album)
+                    )
+                    .focused($focusedField, equals: .album)
+
+                    TextField(
+                        "Genere",
+                        text: draftBinding(\.genre),
+                        prompt: prompt(mixed: draft.mixedGenre, current: draft.genre)
+                    )
+                    .focused($focusedField, equals: .genre)
+
+                    TextField(
+                        "Numero traccia",
+                        text: draftBinding(\.trackNumber),
+                        prompt: prompt(mixed: draft.mixedTrackNumber, current: draft.trackNumber)
+                    )
+                    .focused($focusedField, equals: .trackNumber)
+
+                    TextField(
+                        "Anno",
+                        text: draftBinding(\.year),
+                        prompt: prompt(mixed: draft.mixedYear, current: draft.year)
+                    )
+                    .focused($focusedField, equals: .year)
+
+                    if draft.isMulti {
+                        Text("I campi vuoti non vengono modificati. Compila solo ciò che vuoi applicare a tutti i brani.")
+                            .font(.custom("Avenir Next", size: 11))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .formStyle(.grouped)
                 .padding(.horizontal, 8)
@@ -859,8 +908,23 @@ struct TrackEditSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 440, height: 420)
-        .onAppear { focusedField = .title }
+        .frame(width: 440, height: isMulti ? 440 : 420)
+        .onAppear {
+            focusedField = isMulti ? .artist : .title
+        }
+    }
+
+    private var headerTitle: String {
+        guard let draft else { return "Modifica informazioni" }
+        if draft.isMulti {
+            return "Modifica \(draft.trackIDs.count) brani"
+        }
+        return "Modifica informazioni"
+    }
+
+    private func prompt(mixed: Bool, current: String) -> Text? {
+        guard isMulti, mixed, current.isEmpty else { return nil }
+        return Text("Valori diversi")
     }
 
     private func draftBinding(_ keyPath: WritableKeyPath<TrackEditDraft, String>) -> Binding<String> {
