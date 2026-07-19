@@ -109,14 +109,15 @@ struct PlayerBar: View {
                         .lineLimit(1)
 
                     GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color.white.opacity(0.12))
-                            Capsule()
-                                .fill(VTTheme.amber)
-                                .frame(width: max(4, geo.size.width * playback.progress))
-                        }
+                        PlaybackScrubber(
+                            playback: playback,
+                            width: geo.size.width,
+                            height: 6,
+                            style: .playerBar
+                        )
                     }
-                    .frame(height: 4)
+                    .frame(height: 10)
+                    .padding(.top, 2)
                 }
 
                 Text("\(playback.currentTimeLabel) / \(playback.durationLabel)")
@@ -172,6 +173,97 @@ struct PlayerBar: View {
                     library.showiPodPreview = false
                 }
             }
+        }
+    }
+}
+
+// MARK: - Scrubber condiviso (player bar + iPod)
+
+enum ScrubberStyle {
+    case playerBar
+    case stockiPod
+    case rockbox
+}
+
+struct PlaybackScrubber: View {
+    @ObservedObject var playback: PlaybackController
+    var width: CGFloat
+    var height: CGFloat = 6
+    var style: ScrubberStyle = .playerBar
+
+    @State private var dragProgress: Double?
+
+    private var progress: Double {
+        dragProgress ?? playback.progress
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            trackBackground
+            trackFill
+                .frame(width: max(style == .playerBar ? 4 : 2, width * progress))
+            if style == .stockiPod {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 7, height: 7)
+                    .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
+                    .offset(x: max(0, width * progress - 3.5))
+            }
+        }
+        .frame(width: width, height: height)
+        .contentShape(Rectangle())
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    guard width > 0, playback.duration > 0 else { return }
+                    let p = min(1, max(0, value.location.x / width))
+                    dragProgress = p
+                    playback.seek(toProgress: p)
+                }
+                .onEnded { value in
+                    guard width > 0, playback.duration > 0 else {
+                        dragProgress = nil
+                        return
+                    }
+                    let p = min(1, max(0, value.location.x / width))
+                    playback.seek(toProgress: p)
+                    dragProgress = nil
+                }
+        )
+        .help("Trascina per spostarti nel brano")
+    }
+
+    @ViewBuilder
+    private var trackBackground: some View {
+        switch style {
+        case .playerBar:
+            Capsule().fill(Color.white.opacity(0.12))
+        case .stockiPod:
+            Capsule().fill(Color(red: 0.45, green: 0.50, blue: 0.56))
+        case .rockbox:
+            Rectangle().fill(Color.white.opacity(0.12))
+        }
+    }
+
+    @ViewBuilder
+    private var trackFill: some View {
+        switch style {
+        case .playerBar:
+            Capsule().fill(VTTheme.amber)
+        case .stockiPod:
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.35, green: 0.55, blue: 0.95),
+                            Color(red: 0.25, green: 0.40, blue: 0.85)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+        case .rockbox:
+            Rectangle().fill(Color(red: 0.25, green: 0.65, blue: 0.95))
         }
     }
 }

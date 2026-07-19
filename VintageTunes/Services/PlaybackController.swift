@@ -26,6 +26,20 @@ final class PlaybackController: ObservableObject {
     var currentTimeLabel: String { format(currentTime) }
     var durationLabel: String { format(duration) }
 
+    /// 0…1 → posizione nel brano.
+    func seek(toProgress progress: Double) {
+        guard duration > 0 else { return }
+        seek(to: duration * min(1, max(0, progress)))
+    }
+
+    func seek(to time: TimeInterval) {
+        guard let player, duration > 0 else { return }
+        let clamped = min(max(0, time), duration)
+        currentTime = clamped
+        let cm = CMTime(seconds: clamped, preferredTimescale: 600)
+        player.seek(to: cm, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
     func play(_ track: Track, queue newQueue: [Track]? = nil) {
         if let newQueue {
             queue = newQueue
@@ -155,8 +169,7 @@ final class PlaybackController: ObservableObject {
     }
 
     private func seekToStart() {
-        player?.seek(to: .zero)
-        currentTime = 0
+        seek(to: 0)
     }
 
     private func stopInternal(clearTrack: Bool, clearQueue: Bool) {

@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// Overlay flottante: solo l’iPod, senza sheet/bordo.
+/// Overlay flottante: solo l’iPod, senza sheet/bordo. Trascinabile dal corpo.
 struct iPodNowPlayingOverlay: View {
     @EnvironmentObject private var library: LibraryController
+    @State private var offset: CGSize = .zero
+    @State private var dragOrigin: CGSize = .zero
 
     private var mode: FirmwareMode {
         library.connectedDevice?.firmwareMode ?? .stock
@@ -20,7 +22,21 @@ struct iPodNowPlayingOverlay: View {
             onNext: { library.playback.playNext() }
         )
         .frame(width: 300, height: 504)
+        .offset(offset)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 6)
+                .onChanged { value in
+                    offset = CGSize(
+                        width: dragOrigin.width + value.translation.width,
+                        height: dragOrigin.height + value.translation.height
+                    )
+                }
+                .onEnded { _ in
+                    dragOrigin = offset
+                }
+        )
         .transition(.scale(scale: 0.92).combined(with: .opacity))
+        .help("Trascina per spostare l'iPod")
     }
 }
 
@@ -68,7 +84,7 @@ private struct iPodBaseOverlay: View {
                     }
                     .frame(width: screen.width, height: screen.height)
                     .position(x: screen.midX, y: screen.midY)
-                    .allowsHitTesting(false)
+                    // Serve per lo scrubber sullo schermo LCD.
 
                     // Click wheel hit zones
                     wheelButton(size: selectR * 2, action: onSelect)
@@ -231,29 +247,14 @@ private struct StockNowPlayingScreen: View {
 
                     VStack(spacing: 3) {
                         GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule()
-                                    .fill(Color(red: 0.45, green: 0.50, blue: 0.56))
-                                Capsule()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                Color(red: 0.35, green: 0.55, blue: 0.95),
-                                                Color(red: 0.25, green: 0.40, blue: 0.85)
-                                            ],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .frame(width: max(3, geo.size.width * playback.progress))
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 7, height: 7)
-                                    .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
-                                    .offset(x: max(0, geo.size.width * playback.progress - 3.5))
-                            }
+                            PlaybackScrubber(
+                                playback: playback,
+                                width: geo.size.width,
+                                height: 7,
+                                style: .stockiPod
+                            )
                         }
-                        .frame(height: 7)
+                        .frame(height: 10)
 
                         HStack {
                             Text(playback.currentTimeLabel)
@@ -374,15 +375,14 @@ private struct RockboxNowPlayingScreen: View {
 
                     VStack(spacing: 4) {
                         GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Rectangle()
-                                    .fill(Color.white.opacity(0.12))
-                                Rectangle()
-                                    .fill(Color(red: 0.25, green: 0.65, blue: 0.95))
-                                    .frame(width: max(2, geo.size.width * playback.progress))
-                            }
+                            PlaybackScrubber(
+                                playback: playback,
+                                width: geo.size.width,
+                                height: 5,
+                                style: .rockbox
+                            )
                         }
-                        .frame(height: 5)
+                        .frame(height: 8)
 
                         HStack {
                             Text(playback.currentTimeLabel)
