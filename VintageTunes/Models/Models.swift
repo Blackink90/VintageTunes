@@ -120,6 +120,10 @@ enum LibraryStats {
         }
         return "\(totalMinutes) min"
     }
+
+    static func trackCountLabel(_ count: Int) -> String {
+        count == 1 ? "1 brano" : "\(count) brani"
+    }
 }
 
 struct Playlist: Identifiable, Hashable {

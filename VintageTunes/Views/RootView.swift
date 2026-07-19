@@ -181,7 +181,7 @@ struct EmptyDeviceView: View {
                 }
 
                 Text("Collega il tuo iPod")
-                    .font(.custom("New York", size: 28).weight(.semibold))
+                    .font(VTTheme.displayFont(size: 28))
                     .foregroundStyle(VTTheme.textPrimary)
 
                 Text("VintageTunes riconosce automaticamente iPod Classic / Video\ncon firmware stock o Rockbox.")

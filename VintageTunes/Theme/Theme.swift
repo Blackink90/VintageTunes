@@ -12,6 +12,11 @@ enum VTTheme {
     static let textSecondary = Color(red: 0.70, green: 0.72, blue: 0.76)
     static let lcdGreen = Color(red: 0.55, green: 0.92, blue: 0.62)
 
+    /// Serif di sistema (New York su Apple) con weight reale — evita i warning di `.custom("New York").weight(...)`.
+    static func displayFont(size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+        .system(size: size, weight: weight, design: .serif)
+    }
+
     static var background: some View {
         LinearGradient(
             colors: [
@@ -62,7 +67,7 @@ struct BrandMark: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("VintageTunes")
-                    .font(.custom("New York", size: 22).weight(.semibold))
+                    .font(VTTheme.displayFont(size: 22))
                     .foregroundStyle(VTTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)

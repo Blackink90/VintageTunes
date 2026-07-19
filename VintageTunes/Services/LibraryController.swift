@@ -304,6 +304,26 @@ final class LibraryController: ObservableObject {
         playback.play(track)
     }
 
+    func refreshArtwork(for ids: [UInt32]) {
+        let selected = ids.compactMap { id in tracks.first(where: { $0.id == id }) }
+        guard !selected.isEmpty else { return }
+        var seen = Set<String>()
+        for track in selected {
+            let key = artwork.key(artist: track.displayArtist, album: track.displayAlbum)
+            guard seen.insert(key).inserted else { continue }
+            artwork.refresh(
+                artist: track.displayArtist,
+                album: track.displayAlbum,
+                fileURL: track.resolvedPath
+            )
+        }
+        setStatus(.success(
+            selected.count == 1
+                ? "Ricarico copertina…"
+                : "Ricarico copertine per \(seen.count) album…"
+        ))
+    }
+
     func beginEditingSelectedTrack() {
         beginEditingTracks(ids: Array(selection))
     }
@@ -340,9 +360,13 @@ final class LibraryController: ObservableObject {
 
         var overrides = TrackTagStore.load(from: device)
         var updated = 0
+        var artworkRefresh: [(artist: String, album: String, fileURL: URL?)] = []
 
         for id in draft.trackIDs {
             guard let idx = tracks.firstIndex(where: { $0.id == id }) else { continue }
+
+            let previousArtist = tracks[idx].displayArtist
+            let previousAlbum = tracks[idx].displayAlbum
 
             if !draft.isMulti {
                 tracks[idx].title = draft.title
@@ -372,11 +396,14 @@ final class LibraryController: ObservableObject {
                 trackNumber: tracks[idx].trackNumber,
                 year: tracks[idx].year
             )
-            artwork.request(
-                artist: tracks[idx].displayArtist,
-                album: tracks[idx].displayAlbum,
-                fileURL: tracks[idx].resolvedPath
-            )
+
+            let newArtist = tracks[idx].displayArtist
+            let newAlbum = tracks[idx].displayAlbum
+            if previousArtist != newArtist || previousAlbum != newAlbum {
+                // Non riusare l’embedded del file: può essere dell’album precedente e avvelenare la cache.
+                artwork.invalidate(artist: previousArtist, album: previousAlbum)
+                artworkRefresh.append((newArtist, newAlbum, tracks[idx].resolvedPath))
+            }
             updated += 1
         }
 
@@ -394,6 +421,14 @@ final class LibraryController: ObservableObject {
                 device: device
             )
             trackEditDraft = nil
+
+            var seenKeys = Set<String>()
+            for item in artworkRefresh {
+                let key = artwork.key(artist: item.artist, album: item.album)
+                guard seenKeys.insert(key).inserted else { continue }
+                artwork.refresh(artist: item.artist, album: item.album, fileURL: item.fileURL)
+            }
+
             setStatus(.success(
                 updated == 1
                     ? "Informazioni brano aggiornate"
@@ -688,10 +723,15 @@ final class LibraryController: ObservableObject {
                         }
                     }
                     let artData: Data?
-                    if let disk = CoverArtService.loadFromDisk(artist: merged.artist, album: merged.album) {
-                        artData = disk
+                    if let embedded = await CoverArtService.loadEmbeddedData(from: m4a) {
+                        artData = embedded
+                    } else if let remote = await CoverArtService.fetchFromiTunes(
+                        artist: merged.artist,
+                        album: merged.album
+                    ) {
+                        artData = remote
                     } else {
-                        artData = await CoverArtService.loadEmbeddedData(from: m4a)
+                        artData = CoverArtService.loadFromDisk(artist: merged.artist, album: merged.album)
                     }
                     if let artData {
                         let artistName = merged.artist.isEmpty ? "Artista sconosciuto" : merged.artist

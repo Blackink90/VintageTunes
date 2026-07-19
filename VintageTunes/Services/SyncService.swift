@@ -322,6 +322,10 @@ final class SyncService {
         if persistNow {
             try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
             try hashIndex.save(to: device)
+            var tags = TrackTagStore.load(from: device)
+            let removedLocs = Set(removed.map(\.location))
+            tags = tags.filter { !removedLocs.contains($0.key) }
+            try TrackTagStore.save(tags, to: device)
         }
         return removed.count
     }
@@ -340,8 +344,10 @@ final class SyncService {
         }
 
         var hashIndex = TrackHashIndex.load(from: device)
+        var tagOverrides = TrackTagStore.load(from: device)
         for track in removed {
             hashIndex.remove(location: track.location)
+            tagOverrides.removeValue(forKey: track.location)
             if let path = track.resolvedPath ?? resolveLocation(track.location, device: device) {
                 try? FileManager.default.removeItem(at: path)
             }
@@ -349,6 +355,7 @@ final class SyncService {
 
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
         try hashIndex.save(to: device)
+        try TrackTagStore.save(tagOverrides, to: device)
     }
 
     // MARK: - Persistence

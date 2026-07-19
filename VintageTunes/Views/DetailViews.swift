@@ -101,6 +101,13 @@ struct TrackTableView: View {
             .background(Color(red: 0.11, green: 0.12, blue: 0.14))
             .foregroundStyle(VTTheme.textPrimary)
             .onNativeTableDoubleClick { row in
+                // Preferisci la selezione (ID): l’indice riga della NSTableView può non allinearsi a filteredTracks.
+                if let id = library.selection.first,
+                   let track = library.filteredTracks.first(where: { $0.id == id })
+                    ?? library.tracks.first(where: { $0.id == id }) {
+                    library.playTrack(track)
+                    return
+                }
                 let list = library.filteredTracks
                 guard list.indices.contains(row) else { return }
                 let track = list[row]
@@ -120,6 +127,9 @@ struct TrackTableView: View {
                     }
                     Button("Modifica informazioni…") {
                         library.beginEditingTracks(ids: Array(ids))
+                    }
+                    Button("Ricarica copertina") {
+                        library.refreshArtwork(for: Array(ids))
                     }
                     Button("Mostra in Finder") {
                         library.selection = Set(ids)
@@ -169,9 +179,9 @@ struct TrackTableView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.custom("New York", size: 24).weight(.semibold))
+                    .font(VTTheme.displayFont(size: 24))
                     .foregroundStyle(VTTheme.textPrimary)
-                Text("\(library.filteredTracks.count) brani")
+                Text(LibraryStats.trackCountLabel(library.filteredTracks.count))
                     .font(.custom("Avenir Next", size: 12))
                     .foregroundStyle(VTTheme.textSecondary)
             }
@@ -266,7 +276,7 @@ struct ArtistListView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.custom("New York", size: 24).weight(.semibold))
+                        .font(VTTheme.displayFont(size: 24))
                         .foregroundStyle(VTTheme.textPrimary)
                     Text(subtitle ?? "\(rows.count) artisti")
                         .font(.custom("Avenir Next", size: 12))
@@ -294,7 +304,7 @@ struct ArtistListView: View {
                             Text(artist.name)
                                 .font(.custom("Avenir Next", size: 14).weight(.medium))
                                 .foregroundStyle(VTTheme.textPrimary)
-                            Text("\(artist.count) brani")
+                            Text(LibraryStats.trackCountLabel(artist.count))
                                 .font(.custom("Avenir Next", size: 12))
                                 .foregroundStyle(VTTheme.textSecondary)
                         }
@@ -337,7 +347,7 @@ struct GenreGridView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Generi")
-                        .font(.custom("New York", size: 24).weight(.semibold))
+                        .font(VTTheme.displayFont(size: 24))
                         .foregroundStyle(VTTheme.textPrimary)
                     Text("\(filteredGenres.count) generi")
                         .font(.custom("Avenir Next", size: 12))
@@ -434,7 +444,7 @@ struct GenreTile: View {
                     .foregroundStyle(VTTheme.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                Text("\(genre.artistCount) artisti · \(genre.trackCount) brani")
+                Text("\(genre.artistCount) artisti · \(LibraryStats.trackCountLabel(genre.trackCount))")
                     .font(.custom("Avenir Next", size: 10))
                     .foregroundStyle(VTTheme.textSecondary.opacity(0.75))
                     .lineLimit(1)
@@ -494,7 +504,7 @@ struct AlbumGridView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.custom("New York", size: 24).weight(.semibold))
+                        .font(VTTheme.displayFont(size: 24))
                         .foregroundStyle(VTTheme.textPrimary)
                     Text(subtitle)
                         .font(.custom("Avenir Next", size: 12))
@@ -568,7 +578,7 @@ struct AlbumTile: View {
                         .foregroundStyle(VTTheme.textSecondary)
                         .lineLimit(1)
                 }
-                Text("\(album.trackCount) brani")
+                Text(LibraryStats.trackCountLabel(album.trackCount))
                     .font(.custom("Avenir Next", size: 10))
                     .foregroundStyle(VTTheme.textSecondary.opacity(0.75))
             }
@@ -690,7 +700,7 @@ struct PlaylistDetailView: View {
                     .font(.system(size: 36))
                     .foregroundStyle(VTTheme.amber)
                 Text("Crea o seleziona una playlist")
-                    .font(.custom("New York", size: 22).weight(.semibold))
+                    .font(VTTheme.displayFont(size: 22))
                 Text("Usa il + nella sidebar. Poi trascina le canzoni o aggiungile dal menu contestuale.")
                     .foregroundStyle(VTTheme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -708,7 +718,7 @@ struct DropImportView: View {
     var body: some View {
         VStack(spacing: 20) {
             Text("Aggiungi musica")
-                .font(.custom("New York", size: 28).weight(.semibold))
+                .font(VTTheme.displayFont(size: 28))
 
             Text("Trascina file o cartelle qui (o sulla lista canzoni).\nVerranno cercati tutti i file audio, anche nelle sottocartelle.")
                 .font(.custom("Avenir Next", size: 14))
@@ -829,7 +839,7 @@ struct TrackEditSheet: View {
         VStack(spacing: 0) {
             HStack {
                 Text(headerTitle)
-                    .font(.custom("New York", size: 20).weight(.semibold))
+                    .font(VTTheme.displayFont(size: 20))
                 Spacer()
             }
             .padding(20)
@@ -841,10 +851,6 @@ struct TrackEditSheet: View {
                     if !draft.isMulti {
                         TextField("Titolo", text: draftBinding(\.title))
                             .focused($focusedField, equals: .title)
-                    } else {
-                        Text("Il titolo non viene modificato in selezione multipla.")
-                            .font(.custom("Avenir Next", size: 12))
-                            .foregroundStyle(.secondary)
                     }
 
                     TextField(
@@ -881,14 +887,9 @@ struct TrackEditSheet: View {
                         prompt: prompt(mixed: draft.mixedYear, current: draft.year)
                     )
                     .focused($focusedField, equals: .year)
-
-                    if draft.isMulti {
-                        Text("I campi vuoti non vengono modificati. Compila solo ciò che vuoi applicare a tutti i brani.")
-                            .font(.custom("Avenir Next", size: 11))
-                            .foregroundStyle(.secondary)
-                    }
                 }
                 .formStyle(.grouped)
+                .scrollDisabled(true)
                 .padding(.horizontal, 8)
             }
 
@@ -908,7 +909,7 @@ struct TrackEditSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 440, height: isMulti ? 440 : 420)
+        .frame(width: 440, height: isMulti ? 360 : 400)
         .onAppear {
             focusedField = isMulti ? .artist : .title
         }

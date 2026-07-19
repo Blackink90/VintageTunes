@@ -12,7 +12,7 @@ final class ArtworkCache: ObservableObject {
     private var failed = Set<String>()
 
     func key(artist: String, album: String) -> String {
-        "\(artist.lowercased())|||\(album.lowercased())"
+        CoverArtService.cacheKey(artist: artist, album: album)
     }
 
     func image(artist: String, album: String) -> NSImage? {
@@ -38,6 +38,33 @@ final class ArtworkCache: ObservableObject {
         }
     }
 
+    /// Ricarica dalla rete (ignora embedded/cache disco), utile se la cover è stata avvelenata.
+    func refresh(artist: String, album: String, fileURL: URL? = nil) {
+        let k = key(artist: artist, album: album)
+        images.removeValue(forKey: k)
+        failed.remove(k)
+        inFlight.remove(k)
+        CoverArtService.removeFromDisk(artist: artist, album: album)
+        inFlight.insert(k)
+        Task {
+            let data = await CoverArtService.resolveArtworkData(
+                artist: artist,
+                album: album,
+                fileURL: fileURL,
+                policy: .preferRemote
+            )
+            inFlight.remove(k)
+            if let data, let image = NSImage(data: data) {
+                images[k] = image.resized(maxPixel: 256)
+                if let fileURL {
+                    try? await CoverArtService.embedArtwork(into: fileURL, imageData: data)
+                }
+            } else {
+                failed.insert(k)
+            }
+        }
+    }
+
     /// Forza il salvataggio in cache UI di una cover già nota (es. dopo import).
     func store(artist: String, album: String, data: Data) {
         let k = key(artist: artist, album: album)
@@ -48,6 +75,14 @@ final class ArtworkCache: ObservableObject {
         }
     }
 
+    func invalidate(artist: String, album: String) {
+        let k = key(artist: artist, album: album)
+        images.removeValue(forKey: k)
+        failed.remove(k)
+        inFlight.remove(k)
+        CoverArtService.removeFromDisk(artist: artist, album: album)
+    }
+
     func clear() {
         images.removeAll()
         inFlight.removeAll()
@@ -55,7 +90,14 @@ final class ArtworkCache: ObservableObject {
     }
 }
 
-/// Risolve cover: file audio → cache disco → iTunes Search API.
+enum ArtworkResolvePolicy {
+    /// Embedded → iTunes → cache disco (default sicuro: la rete batte una cache eventualmente avvelenata).
+    case standard
+    /// Solo iTunes (poi salva su disco); per “Ricarica copertina”.
+    case preferRemote
+}
+
+/// Risolve cover: file audio → iTunes Search API → cache disco.
 enum CoverArtService {
     private static var diskCacheURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -66,25 +108,44 @@ enum CoverArtService {
     }
 
     static func cacheKey(artist: String, album: String) -> String {
-        let raw = "\(artist.lowercased())|||\(album.lowercased())"
+        let a = primaryArtistName(artist).lowercased()
+        let al = album.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let raw = "\(a)|||\(al)"
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
         return raw.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" }.map(String.init).joined()
     }
 
     /// JPEG/PNG data della cover, se trovata.
-    static func resolveArtworkData(artist: String, album: String, fileURL: URL?) async -> Data? {
-        if let fileURL, let embedded = await loadEmbeddedData(from: fileURL) {
-            saveToDisk(data: embedded, artist: artist, album: album)
-            return embedded
+    static func resolveArtworkData(
+        artist: String,
+        album: String,
+        fileURL: URL?,
+        policy: ArtworkResolvePolicy = .standard
+    ) async -> Data? {
+        switch policy {
+        case .preferRemote:
+            if let remote = await fetchFromiTunes(artist: artist, album: album) {
+                saveToDisk(data: remote, artist: artist, album: album)
+                return remote
+            }
+            if let fileURL, let embedded = await loadEmbeddedData(from: fileURL) {
+                saveToDisk(data: embedded, artist: artist, album: album)
+                return embedded
+            }
+            return loadFromDisk(artist: artist, album: album)
+
+        case .standard:
+            if let fileURL, let embedded = await loadEmbeddedData(from: fileURL) {
+                saveToDisk(data: embedded, artist: artist, album: album)
+                return embedded
+            }
+            // Rete prima della cache disco: evita di ripropinare cover sbagliate dopo un delete/reimport.
+            if let remote = await fetchFromiTunes(artist: artist, album: album) {
+                saveToDisk(data: remote, artist: artist, album: album)
+                return remote
+            }
+            return loadFromDisk(artist: artist, album: album)
         }
-        if let disk = loadFromDisk(artist: artist, album: album) {
-            return disk
-        }
-        if let remote = await fetchFromiTunes(artist: artist, album: album) {
-            saveToDisk(data: remote, artist: artist, album: album)
-            return remote
-        }
-        return nil
     }
 
     static func loadEmbeddedData(from url: URL) async -> Data? {
@@ -116,8 +177,13 @@ enum CoverArtService {
         try? jpeg.write(to: url, options: .atomic)
     }
 
+    static func removeFromDisk(artist: String, album: String) {
+        let url = diskCacheURL.appendingPathComponent("\(cacheKey(artist: artist, album: album)).jpg")
+        try? FileManager.default.removeItem(at: url)
+    }
+
     /// Cerca su iTunes Search API (nessuna API key).
-    /// Prova più query: artista “pulito”+album, solo album, ecc.
+    /// Prova artista+album; solo album solo se manca l’artista.
     static func fetchFromiTunes(artist: String, album: String) async -> Data? {
         let cleanedArtist = primaryArtistName(artist)
         let cleanedAlbum = album.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -126,15 +192,12 @@ enum CoverArtService {
         var terms: [String] = []
         if !cleanedArtist.isEmpty, !cleanedAlbum.isEmpty {
             terms.append("\(cleanedArtist) \(cleanedAlbum)")
-        }
-        if !cleanedAlbum.isEmpty {
+        } else if !cleanedAlbum.isEmpty {
             terms.append(cleanedAlbum)
-        }
-        if !cleanedArtist.isEmpty, cleanedAlbum.lowercased().contains(cleanedArtist.lowercased()) == false {
-            // es. album "Best Of X" senza ripetere artista già nel titolo
+        } else if !cleanedArtist.isEmpty {
             terms.append(cleanedArtist)
         }
-        // Dedup mantenendo ordine
+
         var seen = Set<String>()
         terms = terms.filter { seen.insert($0.lowercased()).inserted }
 
@@ -214,7 +277,7 @@ enum CoverArtService {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // 1) Match stretto album + artista
+        // Match album + artista (obbligatorio se entrambi noti). Niente fallback “primo risultato”.
         if let hit = results.first(where: { row in
             let ra = norm(row["artistName"] as? String ?? "")
             let rl = norm(row["collectionName"] as? String ?? "")
@@ -231,11 +294,10 @@ enum CoverArtService {
             return hit
         }
 
-        // 2) Solo album (titoli compilation / artisti sporchi nei tag)
-        if !albumL.isEmpty,
+        // Solo se manca l’artista: match esatto sul titolo album
+        if artistL.isEmpty, !albumL.isEmpty,
            let hit = results.first(where: { row in
-               let rl = norm(row["collectionName"] as? String ?? "")
-               return rl == albumL || rl.contains(albumL) || albumL.contains(rl)
+               norm(row["collectionName"] as? String ?? "") == albumL
            }) {
             return hit
         }

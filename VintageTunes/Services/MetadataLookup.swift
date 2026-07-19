@@ -188,10 +188,10 @@ enum MetadataLookup {
             let row = results.first { r in
                 let ra = (r["artistName"] as? String ?? "").lowercased()
                 let rl = (r["collectionName"] as? String ?? "").lowercased()
-                let albumOK = albumL.isEmpty || rl.contains(albumL) || albumL.contains(rl)
+                let albumOK = albumL.isEmpty || rl == albumL || rl.contains(albumL) || albumL.contains(rl)
                 let artistOK = artistL.isEmpty || ra.contains(artistL) || artistL.contains(ra)
                 return albumOK && artistOK
-            } ?? results.first
+            }
 
             guard let row else { return nil }
             return OnlineTrackMeta(
@@ -239,7 +239,8 @@ enum MetadataLookup {
             return loose
         }
 
-        return results.first
+        // Niente fallback al primo risultato: evita di assegnare metadati/cover di un altro artista.
+        return nil
     }
 
     private static func meta(from row: [String: Any]) -> OnlineTrackMeta {
