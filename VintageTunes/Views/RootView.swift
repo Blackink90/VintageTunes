@@ -63,6 +63,24 @@ struct RootView: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: library.syncStatus)
+        .overlay {
+            if library.showiPodPreview, library.playback.nowPlaying != nil {
+                ZStack {
+                    // Backdrop invisibile: tap fuori chiude, senza alone nero
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            library.showiPodPreview = false
+                        }
+
+                    iPodNowPlayingOverlay()
+                        .environmentObject(library)
+                }
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
+        }
+        .animation(.spring(response: 0.38, dampingFraction: 0.86), value: library.showiPodPreview)
     }
 
     private var bottomBannerPadding: CGFloat {

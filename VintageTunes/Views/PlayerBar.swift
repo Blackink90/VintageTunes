@@ -60,6 +60,7 @@ struct LibraryStatsBar: View {
 }
 
 struct PlayerBar: View {
+    @EnvironmentObject private var library: LibraryController
     @ObservedObject var playback: PlaybackController
     @ObservedObject private var artwork = ArtworkCache.shared
 
@@ -122,6 +123,21 @@ struct PlayerBar: View {
                     .font(.custom("Avenir Next", size: 11).monospacedDigit())
                     .foregroundStyle(Color.white.opacity(0.55))
                     .frame(minWidth: 84, alignment: .trailing)
+
+                Button {
+                    library.showiPodPreview = true
+                } label: {
+                    Image(systemName: "ipod")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(VTTheme.amber)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            Circle()
+                                .fill(VTTheme.amberSoft)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Apri iPod Now Playing")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -150,6 +166,11 @@ struct PlayerBar: View {
                     album: track.displayAlbum,
                     fileURL: track.resolvedPath
                 )
+            }
+            .onChange(of: playback.nowPlaying?.id) { _, id in
+                if id == nil {
+                    library.showiPodPreview = false
+                }
             }
         }
     }

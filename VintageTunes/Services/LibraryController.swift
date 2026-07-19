@@ -22,6 +22,7 @@ final class LibraryController: ObservableObject {
     @Published var pendingImports: [ImportCandidate] = []
     @Published var conversionPrompt: ConversionPrompt?
     @Published var trackEditDraft: TrackEditDraft?
+    @Published var showiPodPreview = false
 
     let detector = iPodDetector()
     let playback = PlaybackController()
@@ -301,7 +302,7 @@ final class LibraryController: ObservableObject {
     }
 
     func playTrack(_ track: Track) {
-        playback.play(track)
+        playback.play(track, queue: filteredTracks)
     }
 
     func refreshArtwork(for ids: [UInt32]) {
@@ -441,7 +442,7 @@ final class LibraryController: ObservableObject {
 
     func playSelectedOrToggle() {
         if let id = selection.first, let track = tracks.first(where: { $0.id == id }) {
-            playback.playOrToggle(track)
+            playback.playOrToggle(track, queue: filteredTracks)
             return
         }
         playback.togglePlayPause()

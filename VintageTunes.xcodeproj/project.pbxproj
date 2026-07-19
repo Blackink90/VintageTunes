@@ -31,6 +31,7 @@
 		E5F6478901234567890ABCD1 /* TrackTagStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6478901234567890ABCD123 /* TrackTagStore.swift */; };
 		A7B8C9D0E1F234567890ABCD /* MetadataLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C9D0E1F234567890ABCDEF /* MetadataLookup.swift */; };
 		C9D0E1F234567890ABCDEF01 /* AudioFileCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E1F234567890ABCDEF0123 /* AudioFileCollector.swift */; };
+		E1F2A3B4C5D678901234ABCD /* iPodNowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A3B4C5D678901234ABCDEF /* iPodNowPlayingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +63,7 @@
 		F6478901234567890ABCD123 /* TrackTagStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackTagStore.swift; sourceTree = "<group>"; };
 		B8C9D0E1F234567890ABCDEF /* MetadataLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataLookup.swift; sourceTree = "<group>"; };
 		D0E1F234567890ABCDEF0123 /* AudioFileCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFileCollector.swift; sourceTree = "<group>"; };
+		F2A3B4C5D678901234ABCDEF /* iPodNowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPodNowPlayingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -141,6 +143,7 @@
 				637D2FFDE2704656AAC1BAF1 /* RootView.swift */,
 				9A8B2E42EDEE42359A6C9354 /* SidebarView.swift */,
 				6795D5F52EF943BA8FA4C4BE /* PlayerBar.swift */,
+				F2A3B4C5D678901234ABCDEF /* iPodNowPlayingView.swift */,
 				E143C0F07C5B40FF97F87E96 /* TableDoubleClickInstaller.swift */,
 );
 			path = Views;
@@ -286,6 +289,7 @@
 				E5F6478901234567890ABCD1 /* TrackTagStore.swift in Sources */,
 				A7B8C9D0E1F234567890ABCD /* MetadataLookup.swift in Sources */,
 				C9D0E1F234567890ABCDEF01 /* AudioFileCollector.swift in Sources */,
+				E1F2A3B4C5D678901234ABCD /* iPodNowPlayingView.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};

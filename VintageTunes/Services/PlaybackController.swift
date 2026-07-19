@@ -10,6 +10,9 @@ final class PlaybackController: ObservableObject {
     @Published private(set) var duration: TimeInterval = 0
     @Published var errorMessage: String?
 
+    /// Coda della lista da cui è partita la riproduzione (per ◀◀ / ▶▶).
+    private(set) var queue: [Track] = []
+
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
@@ -23,14 +26,22 @@ final class PlaybackController: ObservableObject {
     var currentTimeLabel: String { format(currentTime) }
     var durationLabel: String { format(duration) }
 
-    func play(_ track: Track) {
+    func play(_ track: Track, queue newQueue: [Track]? = nil) {
+        if let newQueue {
+            queue = newQueue
+        } else if queue.isEmpty {
+            queue = [track]
+        } else if !queue.contains(where: { $0.id == track.id }) {
+            queue.append(track)
+        }
+
         guard let url = track.resolvedPath,
               FileManager.default.fileExists(atPath: url.path) else {
             errorMessage = "File audio non trovato"
             return
         }
 
-        stopInternal(clearTrack: false)
+        stopInternal(clearTrack: false, clearQueue: false)
         errorMessage = nil
         nowPlaying = track
 
@@ -68,8 +79,11 @@ final class PlaybackController: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.isPlaying = false
-                self?.currentTime = self?.duration ?? 0
+                guard let self else { return }
+                if !self.playNext() {
+                    self.isPlaying = false
+                    self.currentTime = self.duration
+                }
             }
         }
 
@@ -79,6 +93,38 @@ final class PlaybackController: ObservableObject {
 
         newPlayer.play()
         isPlaying = true
+    }
+
+    @discardableResult
+    func playNext() -> Bool {
+        guard let current = nowPlaying,
+              let idx = queue.firstIndex(where: { $0.id == current.id }),
+              idx + 1 < queue.count else {
+            return false
+        }
+        play(queue[idx + 1])
+        return true
+    }
+
+    @discardableResult
+    func playPrevious() -> Bool {
+        // Comportamento iPod: oltre ~3s riparte il brano corrente.
+        if currentTime > 3, let current = nowPlaying {
+            seekToStart()
+            if !isPlaying {
+                player?.play()
+                isPlaying = true
+            }
+            return true
+        }
+        guard let current = nowPlaying,
+              let idx = queue.firstIndex(where: { $0.id == current.id }),
+              idx > 0 else {
+            seekToStart()
+            return false
+        }
+        play(queue[idx - 1])
+        return true
     }
 
     func togglePlayPause() {
@@ -97,18 +143,23 @@ final class PlaybackController: ObservableObject {
     }
 
     func stop() {
-        stopInternal(clearTrack: true)
+        stopInternal(clearTrack: true, clearQueue: true)
     }
 
-    func playOrToggle(_ track: Track) {
+    func playOrToggle(_ track: Track, queue newQueue: [Track]? = nil) {
         if nowPlaying?.id == track.id {
             togglePlayPause()
         } else {
-            play(track)
+            play(track, queue: newQueue)
         }
     }
 
-    private func stopInternal(clearTrack: Bool) {
+    private func seekToStart() {
+        player?.seek(to: .zero)
+        currentTime = 0
+    }
+
+    private func stopInternal(clearTrack: Bool, clearQueue: Bool) {
         if let observer = timeObserver, let player {
             player.removeTimeObserver(observer)
         }
@@ -126,6 +177,9 @@ final class PlaybackController: ObservableObject {
         duration = 0
         if clearTrack {
             nowPlaying = nil
+        }
+        if clearQueue {
+            queue = []
         }
     }
 
