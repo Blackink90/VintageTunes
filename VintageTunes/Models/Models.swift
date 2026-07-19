@@ -54,6 +54,12 @@ struct Track: Identifiable, Hashable {
     var displayGenre: String { genre.isEmpty ? "—" : genre }
     var displayYear: String { year == 0 ? "—" : "\(year)" }
 
+    /// Chiave genere per raggruppamento (solo generi non vuoti).
+    var genreKey: String? {
+        let g = genre.trimmingCharacters(in: .whitespacesAndNewlines)
+        return g.isEmpty ? nil : g
+    }
+
     /// Chiave logica per riconoscere la stessa canzone anche dopo conversione FLAC→M4A.
     var identityKey: String {
         Self.makeIdentityKey(artist: artist, title: title, durationMs: durationMs)
@@ -82,6 +88,14 @@ struct AlbumRef: Identifiable, Hashable {
     let trackCount: Int
 
     var id: String { "\(name)|||\(artist)" }
+}
+
+struct GenreRef: Identifiable, Hashable {
+    let name: String
+    let trackCount: Int
+    let artistCount: Int
+
+    var id: String { name }
 }
 
 enum LibraryStats {
@@ -147,6 +161,7 @@ enum LibrarySection: String, CaseIterable, Identifiable {
     case songs = "Canzoni"
     case artists = "Artisti"
     case albums = "Album"
+    case genres = "Generi"
     case playlists = "Playlist"
     case dropZone = "Aggiungi"
 
@@ -157,6 +172,7 @@ enum LibrarySection: String, CaseIterable, Identifiable {
         case .songs: return "music.note.list"
         case .artists: return "person.2"
         case .albums: return "square.stack"
+        case .genres: return "guitars"
         case .playlists: return "list.bullet.rectangle"
         case .dropZone: return "plus.circle"
         }

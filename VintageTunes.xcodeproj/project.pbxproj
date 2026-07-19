@@ -29,6 +29,7 @@
 		3D6B0AD9E95E482790507622 /* TableDoubleClickInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = E143C0F07C5B40FF97F87E96 /* TableDoubleClickInstaller.swift */; };
 		A1B2C3D4E5F6478901234567 /* ArtworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F647890123456789 /* ArtworkCache.swift */; };
 		E5F6478901234567890ABCD1 /* TrackTagStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6478901234567890ABCD123 /* TrackTagStore.swift */; };
+		A7B8C9D0E1F234567890ABCD /* MetadataLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C9D0E1F234567890ABCDEF /* MetadataLookup.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +59,7 @@
 		E143C0F07C5B40FF97F87E96 /* TableDoubleClickInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableDoubleClickInstaller.swift; sourceTree = "<group>"; };
 		B2C3D4E5F647890123456789 /* ArtworkCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkCache.swift; sourceTree = "<group>"; };
 		F6478901234567890ABCD123 /* TrackTagStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackTagStore.swift; sourceTree = "<group>"; };
+		B8C9D0E1F234567890ABCDEF /* MetadataLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataLookup.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -124,6 +126,7 @@
 				E15DDEE9BAFF4F1D936BE110 /* TrackHashIndex.swift */,
 				B2C3D4E5F647890123456789 /* ArtworkCache.swift */,
 				F6478901234567890ABCD123 /* TrackTagStore.swift */,
+				B8C9D0E1F234567890ABCDEF /* MetadataLookup.swift */,
 );
 			path = Services;
 			sourceTree = "<group>";
@@ -278,6 +281,7 @@
 				3D6B0AD9E95E482790507622 /* TableDoubleClickInstaller.swift in Sources */,
 				A1B2C3D4E5F6478901234567 /* ArtworkCache.swift in Sources */,
 				E5F6478901234567890ABCD1 /* TrackTagStore.swift in Sources */,
+				A7B8C9D0E1F234567890ABCD /* MetadataLookup.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -195,9 +195,19 @@ final class SyncService {
     }
 
     func backfillMissingMetadata(_ tracks: inout [Track]) async {
+        await backfillFromFiles(&tracks)
+        await enrichMissingFromOnline(&tracks)
+    }
+
+    /// Completa solo da tag presenti nel file audio.
+    func backfillFromFiles(_ tracks: inout [Track]) async {
         for i in tracks.indices {
             let needsDuration = tracks[i].durationMs == 0
-            let needsTags = tracks[i].artist.isEmpty || tracks[i].album.isEmpty
+            let needsTags = tracks[i].artist.isEmpty
+                || tracks[i].album.isEmpty
+                || tracks[i].genre.isEmpty
+                || tracks[i].year == 0
+                || tracks[i].title.isEmpty
             guard needsDuration || needsTags else { continue }
             guard let path = tracks[i].resolvedPath,
                   FileManager.default.fileExists(atPath: path.path) else { continue }
@@ -212,6 +222,15 @@ final class SyncService {
             if tracks[i].album.isEmpty, !meta.album.isEmpty {
                 tracks[i].album = meta.album
             }
+            if tracks[i].genre.isEmpty, !meta.genre.isEmpty {
+                tracks[i].genre = meta.genre
+            }
+            if tracks[i].year == 0, meta.year > 0 {
+                tracks[i].year = meta.year
+            }
+            if tracks[i].trackNumber == 0, meta.trackNumber > 0 {
+                tracks[i].trackNumber = meta.trackNumber
+            }
             if tracks[i].title.isEmpty || tracks[i].title == path.deletingPathExtension().lastPathComponent {
                 if !meta.title.isEmpty { tracks[i].title = meta.title }
             }
@@ -221,6 +240,13 @@ final class SyncService {
             if tracks[i].bitrate == 0, meta.bitrate > 0 {
                 tracks[i].bitrate = meta.bitrate
             }
+        }
+    }
+
+    /// Scarica da iTunes solo i campi ancora vuoti.
+    func enrichMissingFromOnline(_ tracks: inout [Track]) async {
+        for i in tracks.indices {
+            _ = await MetadataLookup.fillMissing(on: &tracks[i])
         }
     }
 

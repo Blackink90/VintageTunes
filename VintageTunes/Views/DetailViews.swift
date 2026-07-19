@@ -13,6 +13,8 @@ struct DetailContainer: View {
                 ArtistsBrowserView()
             case .albums:
                 AlbumsBrowserView()
+            case .genres:
+                GenresBrowserView()
             case .playlists:
                 PlaylistDetailView()
             case .dropZone:
@@ -83,7 +85,7 @@ struct TrackTableView: View {
                 }
                 .width(56)
 
-                TableColumn("Tempo") { track in
+                TableColumn("Durata") { track in
                     Text(track.durationLabel)
                         .monospacedDigit()
                         .foregroundStyle(VTTheme.textSecondary)
@@ -223,17 +225,53 @@ struct AlbumsBrowserView: View {
     }
 }
 
+struct GenresBrowserView: View {
+    @EnvironmentObject private var library: LibraryController
+
+    var body: some View {
+        if library.browseGenre != nil, let artist = library.browseArtist {
+            TrackTableView(title: artist, showsBackButton: true)
+        } else if let genre = library.browseGenre {
+            ArtistListView(
+                title: genre,
+                subtitle: "\(library.artists(forGenre: genre).count) artisti",
+                artists: library.artists(forGenre: genre),
+                showsBackButton: true,
+                genreFilter: genre
+            )
+        } else {
+            GenreGridView()
+        }
+    }
+}
+
 struct ArtistListView: View {
     @EnvironmentObject private var library: LibraryController
+    var title: String = "Artisti"
+    var subtitle: String? = nil
+    var artists: [(name: String, count: Int)]? = nil
+    var showsBackButton: Bool = false
+    var genreFilter: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
+                if showsBackButton {
+                    Button {
+                        library.browseBack()
+                    } label: {
+                        Label("Indietro", systemImage: "chevron.left")
+                            .font(.custom("Avenir Next", size: 13).weight(.semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(VTTheme.amber)
+                }
+
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Artisti")
+                    Text(title)
                         .font(.custom("New York", size: 24).weight(.semibold))
                         .foregroundStyle(VTTheme.textPrimary)
-                    Text("\(library.artists.count) artisti")
+                    Text(subtitle ?? "\(rows.count) artisti")
                         .font(.custom("Avenir Next", size: 12))
                         .foregroundStyle(VTTheme.textSecondary)
                 }
@@ -253,7 +291,7 @@ struct ArtistListView: View {
                     HStack(spacing: 12) {
                         ArtistAvatar(
                             name: artist.name,
-                            track: library.representativeTrack(forArtist: artist.name)
+                            track: library.representativeTrack(forArtist: artist.name, genre: genreFilter)
                         )
                         VStack(alignment: .leading, spacing: 2) {
                             Text(artist.name)
@@ -279,10 +317,155 @@ struct ArtistListView: View {
         }
     }
 
+    private var rows: [(name: String, count: Int)] {
+        artists ?? library.artists
+    }
+
     private var filteredArtists: [(name: String, count: Int)] {
         let q = library.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return library.artists }
-        return library.artists.filter { $0.name.localizedCaseInsensitiveContains(q) }
+        guard !q.isEmpty else { return rows }
+        return rows.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+}
+
+struct GenreGridView: View {
+    @EnvironmentObject private var library: LibraryController
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 16)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Generi")
+                        .font(.custom("New York", size: 24).weight(.semibold))
+                        .foregroundStyle(VTTheme.textPrimary)
+                    Text("\(filteredGenres.count) generi")
+                        .font(.custom("Avenir Next", size: 12))
+                        .foregroundStyle(VTTheme.textSecondary)
+                }
+                Spacer()
+                TextField("Cerca", text: $library.searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+            }
+            .padding(16)
+
+            Divider().opacity(0.2)
+
+            if filteredGenres.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "guitars")
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundStyle(VTTheme.amber)
+                    Text("Nessun genere nei brani")
+                        .font(.custom("Avenir Next", size: 14).weight(.medium))
+                        .foregroundStyle(VTTheme.textSecondary)
+                    Text("I generi compaiono qui quando i tag delle canzoni li contengono.")
+                        .font(.custom("Avenir Next", size: 12))
+                        .foregroundStyle(VTTheme.textSecondary.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 320)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(32)
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 18) {
+                        ForEach(filteredGenres) { genre in
+                            Button {
+                                library.openGenre(genre.name)
+                            } label: {
+                                GenreTile(genre: genre)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+        }
+    }
+
+    private var filteredGenres: [GenreRef] {
+        let q = library.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return library.genres }
+        return library.genres.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+}
+
+struct GenreTile: View {
+    let genre: GenreRef
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: genreGradient,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                // Texture leggera
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+
+                VStack(spacing: 6) {
+                    Image(systemName: "guitars")
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                    Text(genre.name)
+                        .font(.custom("Avenir Next", size: 13).weight(.bold))
+                        .foregroundStyle(Color.white.opacity(0.95))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.75)
+                        .padding(.horizontal, 10)
+                }
+            }
+            .frame(width: 120, height: 120)
+            .shadow(color: .black.opacity(0.35), radius: 6, y: 3)
+
+            VStack(spacing: 2) {
+                Text(genre.name)
+                    .font(.custom("Avenir Next", size: 12).weight(.semibold))
+                    .foregroundStyle(VTTheme.textPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                Text("\(genre.artistCount) artisti · \(genre.trackCount) brani")
+                    .font(.custom("Avenir Next", size: 10))
+                    .foregroundStyle(VTTheme.textSecondary.opacity(0.75))
+                    .lineLimit(1)
+            }
+            .frame(width: 120)
+        }
+    }
+
+    /// Palette stabile derivata dal nome del genere (sempre uguale per lo stesso genere).
+    private var genreGradient: [Color] {
+        let palette: [[Color]] = [
+            [Color(red: 0.45, green: 0.22, blue: 0.18), Color(red: 0.18, green: 0.10, blue: 0.10)],
+            [Color(red: 0.20, green: 0.32, blue: 0.42), Color(red: 0.10, green: 0.14, blue: 0.22)],
+            [Color(red: 0.28, green: 0.36, blue: 0.22), Color(red: 0.12, green: 0.16, blue: 0.10)],
+            [Color(red: 0.38, green: 0.24, blue: 0.40), Color(red: 0.16, green: 0.10, blue: 0.20)],
+            [Color(red: 0.42, green: 0.30, blue: 0.16), Color(red: 0.18, green: 0.12, blue: 0.08)],
+            [Color(red: 0.18, green: 0.34, blue: 0.36), Color(red: 0.08, green: 0.14, blue: 0.18)]
+        ]
+        let idx = abs(stableHash(genre.name)) % palette.count
+        return palette[idx]
+    }
+
+    private func stableHash(_ string: String) -> Int {
+        var hash = 0
+        for char in string.lowercased().unicodeScalars {
+            hash = (hash &* 31) &+ Int(char.value)
+        }
+        return hash
     }
 }
 

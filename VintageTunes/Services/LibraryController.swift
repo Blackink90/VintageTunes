@@ -13,6 +13,7 @@ final class LibraryController: ObservableObject {
     @Published var selectedPlaylistID: UInt64?
     @Published var browseArtist: String?
     @Published var browseAlbum: AlbumRef?
+    @Published var browseGenre: String?
     @Published var searchText = ""
     @Published var selection = Set<Track.ID>()
     @Published var syncStatus: SyncStatus = .idle
@@ -60,6 +61,13 @@ final class LibraryController: ObservableObject {
             base = tracks.filter {
                 $0.displayAlbum == album.name && $0.displayArtist == album.artist
             }
+        } else if let genre = browseGenre {
+            let inGenre = tracks.filter { $0.genreKey?.caseInsensitiveCompare(genre) == .orderedSame }
+            if let artist = browseArtist {
+                base = inGenre.filter { $0.displayArtist == artist }
+            } else {
+                base = inGenre
+            }
         } else if let artist = browseArtist {
             base = tracks.filter { $0.displayArtist == artist }
         } else {
@@ -86,13 +94,35 @@ final class LibraryController: ObservableObject {
     }
 
     var artists: [(name: String, count: Int)] {
-        Dictionary(grouping: tracks, by: \.displayArtist)
+        artists(forGenre: nil)
+    }
+
+    func artists(forGenre genre: String?) -> [(name: String, count: Int)] {
+        let source: [Track]
+        if let genre {
+            source = tracks.filter { $0.genreKey?.caseInsensitiveCompare(genre) == .orderedSame }
+        } else {
+            source = tracks
+        }
+        return Dictionary(grouping: source, by: \.displayArtist)
             .map { (name: $0.key, count: $0.value.count) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     var albums: [AlbumRef] {
         albums(forArtist: nil)
+    }
+
+    var genres: [GenreRef] {
+        Dictionary(grouping: tracks.filter { $0.genreKey != nil }, by: { $0.genreKey! })
+            .map { name, group in
+                GenreRef(
+                    name: name,
+                    trackCount: group.count,
+                    artistCount: Set(group.map(\.displayArtist)).count
+                )
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     func albums(forArtist artist: String?) -> [AlbumRef] {
@@ -124,33 +154,46 @@ final class LibraryController: ObservableObject {
     }
 
     /// Cover “stile Apple” per artista: album più recente (anno), altrimenti primo in ordine alfabetico.
-    func representativeTrack(forArtist name: String) -> Track? {
-        let artistAlbums = albums(forArtist: name)
-        guard !artistAlbums.isEmpty else {
-            return tracks.first { $0.displayArtist == name && $0.resolvedPath != nil }
-                ?? tracks.first { $0.displayArtist == name }
+    func representativeTrack(forArtist name: String, genre: String? = nil) -> Track? {
+        let pool: [Track]
+        if let genre {
+            pool = tracks.filter {
+                $0.displayArtist == name
+                    && $0.genreKey?.caseInsensitiveCompare(genre) == .orderedSame
+            }
+        } else {
+            pool = tracks.filter { $0.displayArtist == name }
         }
+        guard !pool.isEmpty else { return nil }
 
-        let ranked = artistAlbums.sorted { a, b in
-            let ya = maxYear(for: a)
-            let yb = maxYear(for: b)
+        let albumKeys = Dictionary(grouping: pool, by: \.albumKey)
+        let ranked = albumKeys.keys.sorted { a, b in
+            let ya = albumKeys[a]?.map(\.year).max() ?? 0
+            let yb = albumKeys[b]?.map(\.year).max() ?? 0
             if ya != yb { return ya > yb }
-            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+            return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
         }
 
-        for album in ranked {
-            if let track = representativeTrack(for: album) {
+        for key in ranked {
+            if let track = albumKeys[key]?.first(where: { $0.resolvedPath != nil })
+                ?? albumKeys[key]?.first {
                 return track
             }
         }
-        return nil
+        return pool.first
     }
 
-    private func maxYear(for album: AlbumRef) -> UInt32 {
-        tracks
-            .filter { $0.displayAlbum == album.name && $0.displayArtist == album.artist }
-            .map(\.year)
-            .max() ?? 0
+    func representativeTrack(forGenre name: String) -> Track? {
+        let pool = tracks.filter { $0.genreKey?.caseInsensitiveCompare(name) == .orderedSame }
+        guard !pool.isEmpty else { return nil }
+        // Preferisci traccia con file e anno più alto
+        return pool
+            .sorted { a, b in
+                if a.year != b.year { return a.year > b.year }
+                return a.displayAlbum.localizedCaseInsensitiveCompare(b.displayAlbum) == .orderedAscending
+            }
+            .first(where: { $0.resolvedPath != nil })
+            ?? pool.first
     }
 
     func selectSection(_ section: LibrarySection) {
@@ -159,6 +202,14 @@ final class LibraryController: ObservableObject {
         if section != .playlists {
             selectedPlaylistID = nil
         }
+        selection.removeAll()
+        searchText = ""
+    }
+
+    func openGenre(_ name: String) {
+        browseGenre = name
+        browseArtist = nil
+        browseAlbum = nil
         selection.removeAll()
         searchText = ""
     }
@@ -187,6 +238,8 @@ final class LibraryController: ObservableObject {
             }
         } else if browseArtist != nil {
             browseArtist = nil
+        } else if browseGenre != nil {
+            browseGenre = nil
         }
         selection.removeAll()
         searchText = ""
@@ -195,6 +248,7 @@ final class LibraryController: ObservableObject {
     func clearBrowse() {
         browseArtist = nil
         browseAlbum = nil
+        browseGenre = nil
     }
 
     private func prefetchArtwork() {
@@ -375,8 +429,10 @@ final class LibraryController: ObservableObject {
         do {
             var result = try sync.loadLibrary(for: device)
             let before = result.tracks
-            await sync.backfillMissingMetadata(&result.tracks)
+            await sync.backfillFromFiles(&result.tracks)
             TrackTagStore.apply(TrackTagStore.load(from: device), to: &result.tracks)
+            setStatus(.working("Completo metadati mancanti…"))
+            await sync.enrichMissingFromOnline(&result.tracks)
             if result.tracks != before {
                 try? sync.savePlaylists(
                     tracks: result.tracks,
@@ -384,6 +440,20 @@ final class LibraryController: ObservableObject {
                     dbVersion: result.dbVersion,
                     device: device
                 )
+                let beforeByID = Dictionary(uniqueKeysWithValues: before.map { ($0.id, $0) })
+                var overrides = TrackTagStore.load(from: device)
+                for track in result.tracks {
+                    guard let old = beforeByID[track.id], old != track else { continue }
+                    overrides[track.location] = TrackTagOverride(
+                        title: track.title,
+                        artist: track.artist,
+                        album: track.album,
+                        genre: track.genre,
+                        trackNumber: track.trackNumber,
+                        year: track.year
+                    )
+                }
+                try? TrackTagStore.save(overrides, to: device)
             }
             connectedDevice = device
             artwork.clear()
@@ -503,6 +573,7 @@ final class LibraryController: ObservableObject {
         for url in ready {
             setStatus(.working("Leggo \(url.lastPathComponent)…"))
             var meta = await AudioMetadataReader.read(url: url)
+            meta = await MetadataLookup.enrich(meta)
             meta.contentHash = try? FileHasher.sha256(of: url)
             if tracks.contains(where: { $0.contentHash == meta.contentHash && meta.contentHash != nil })
                 || tracks.contains(where: { $0.identityKey == meta.identityKey }) {
@@ -516,6 +587,7 @@ final class LibraryController: ObservableObject {
             for (index, url) in toConvert.enumerated() {
                 setStatus(.working("Leggo tag \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
                 var sourceMeta = await AudioMetadataReader.read(url: url)
+                sourceMeta = await MetadataLookup.enrich(sourceMeta)
                 do {
                     sourceMeta.contentHash = try FileHasher.sha256(of: url)
                 } catch {
