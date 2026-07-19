@@ -116,19 +116,62 @@ enum CoverArtService {
         try? jpeg.write(to: url, options: .atomic)
     }
 
-    /// Cerca su iTunes Search API (nessuna API key). Preferisce match artista+album.
+    /// Cerca su iTunes Search API (nessuna API key).
+    /// Prova più query: artista “pulito”+album, solo album, ecc.
     static func fetchFromiTunes(artist: String, album: String) async -> Data? {
-        let a = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        let al = album.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !a.isEmpty || !al.isEmpty else { return nil }
+        let cleanedArtist = primaryArtistName(artist)
+        let cleanedAlbum = album.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedArtist.isEmpty || !cleanedAlbum.isEmpty else { return nil }
 
-        let term = [a, al].filter { !$0.isEmpty }.joined(separator: " ")
+        var terms: [String] = []
+        if !cleanedArtist.isEmpty, !cleanedAlbum.isEmpty {
+            terms.append("\(cleanedArtist) \(cleanedAlbum)")
+        }
+        if !cleanedAlbum.isEmpty {
+            terms.append(cleanedAlbum)
+        }
+        if !cleanedArtist.isEmpty, cleanedAlbum.lowercased().contains(cleanedArtist.lowercased()) == false {
+            // es. album "Best Of X" senza ripetere artista già nel titolo
+            terms.append(cleanedArtist)
+        }
+        // Dedup mantenendo ordine
+        var seen = Set<String>()
+        terms = terms.filter { seen.insert($0.lowercased()).inserted }
+
+        for term in terms {
+            if let data = await searchiTunesAlbum(term: term, artist: cleanedArtist, album: cleanedAlbum) {
+                return data
+            }
+        }
+        return nil
+    }
+
+    /// Prende il primo artista (prima di virgole / feat. / &).
+    static func primaryArtistName(_ raw: String) -> String {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let separators = [",", ";", " feat.", " feat ", " ft.", " ft ", " featuring ", " vs.", " vs ", " x ", " / ", " & "]
+        let lower = value.lowercased()
+        var cut = value.count
+        for sep in separators {
+            if let range = lower.range(of: sep) {
+                let idx = lower.distance(from: lower.startIndex, to: range.lowerBound)
+                cut = min(cut, idx)
+            }
+        }
+        if cut < value.count {
+            let end = value.index(value.startIndex, offsetBy: cut)
+            value = String(value[..<end])
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func searchiTunesAlbum(term: String, artist: String, album: String) async -> Data? {
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
             URLQueryItem(name: "term", value: term),
             URLQueryItem(name: "media", value: "music"),
             URLQueryItem(name: "entity", value: "album"),
-            URLQueryItem(name: "limit", value: "8")
+            URLQueryItem(name: "limit", value: "12")
         ]
         guard let url = components?.url else { return nil }
 
@@ -141,7 +184,9 @@ enum CoverArtService {
                   let results = json["results"] as? [[String: Any]],
                   !results.isEmpty else { return nil }
 
-            let pick = bestMatch(results: results, artist: a, album: al) ?? results[0]
+            guard let pick = bestMatch(results: results, artist: artist, album: album) else {
+                return nil
+            }
             guard var artURLString = pick["artworkUrl100"] as? String else { return nil }
             artURLString = artURLString
                 .replacingOccurrences(of: "100x100bb", with: "600x600bb")
@@ -161,13 +206,41 @@ enum CoverArtService {
     private static func bestMatch(results: [[String: Any]], artist: String, album: String) -> [String: Any]? {
         let artistL = artist.lowercased()
         let albumL = album.lowercased()
-        return results.first { row in
-            let ra = (row["artistName"] as? String ?? "").lowercased()
-            let rl = (row["collectionName"] as? String ?? "").lowercased()
-            let artistOK = artistL.isEmpty || ra.contains(artistL) || artistL.contains(ra)
-            let albumOK = albumL.isEmpty || rl.contains(albumL) || albumL.contains(rl)
-            return artistOK && albumOK
+            .replacingOccurrences(of: "’", with: "'")
+
+        func norm(_ s: String) -> String {
+            s.lowercased()
+                .replacingOccurrences(of: "’", with: "'")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
+
+        // 1) Match stretto album + artista
+        if let hit = results.first(where: { row in
+            let ra = norm(row["artistName"] as? String ?? "")
+            let rl = norm(row["collectionName"] as? String ?? "")
+            let albumOK = albumL.isEmpty
+                || rl == albumL
+                || rl.contains(albumL)
+                || albumL.contains(rl)
+            let artistOK = artistL.isEmpty
+                || ra == artistL
+                || ra.contains(artistL)
+                || artistL.contains(ra)
+            return albumOK && artistOK
+        }) {
+            return hit
+        }
+
+        // 2) Solo album (titoli compilation / artisti sporchi nei tag)
+        if !albumL.isEmpty,
+           let hit = results.first(where: { row in
+               let rl = norm(row["collectionName"] as? String ?? "")
+               return rl == albumL || rl.contains(albumL) || albumL.contains(rl)
+           }) {
+            return hit
+        }
+
+        return nil
     }
 
     private static func jpegData(from data: Data) -> Data? {

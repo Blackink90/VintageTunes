@@ -70,6 +70,19 @@ struct TrackTableView: View {
                 }
                 .width(min: 120, ideal: 160)
 
+                TableColumn("Genere") { track in
+                    Text(track.displayGenre)
+                        .foregroundStyle(VTTheme.textSecondary)
+                }
+                .width(min: 90, ideal: 120)
+
+                TableColumn("Anno") { track in
+                    Text(track.displayYear)
+                        .monospacedDigit()
+                        .foregroundStyle(VTTheme.textSecondary)
+                }
+                .width(56)
+
                 TableColumn("Tempo") { track in
                     Text(track.durationLabel)
                         .monospacedDigit()
@@ -103,6 +116,12 @@ struct TrackTableView: View {
                             library.playTrack(track)
                         }
                     }
+                    Button("Modifica informazioni…") {
+                        if let id = ids.first {
+                            library.beginEditingTrack(id: id)
+                        }
+                    }
+                    .disabled(ids.count != 1)
                     Button("Mostra in Finder") {
                         library.selection = Set(ids)
                         library.revealSelectedTracksInFinder()
@@ -600,5 +619,74 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 480, height: 360)
+    }
+}
+
+struct TrackEditSheet: View {
+    @EnvironmentObject private var library: LibraryController
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case title, artist, album, genre, trackNumber, year
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Modifica informazioni")
+                    .font(.custom("New York", size: 20).weight(.semibold))
+                Spacer()
+            }
+            .padding(20)
+
+            Divider().opacity(0.2)
+
+            if library.trackEditDraft != nil {
+                Form {
+                    TextField("Titolo", text: draftBinding(\.title))
+                        .focused($focusedField, equals: .title)
+                    TextField("Artista", text: draftBinding(\.artist))
+                        .focused($focusedField, equals: .artist)
+                    TextField("Album", text: draftBinding(\.album))
+                        .focused($focusedField, equals: .album)
+                    TextField("Genere", text: draftBinding(\.genre))
+                        .focused($focusedField, equals: .genre)
+                    TextField("Numero traccia", text: draftBinding(\.trackNumber))
+                        .focused($focusedField, equals: .trackNumber)
+                    TextField("Anno", text: draftBinding(\.year))
+                        .focused($focusedField, equals: .year)
+                }
+                .formStyle(.grouped)
+                .padding(.horizontal, 8)
+            }
+
+            HStack {
+                Spacer()
+                Button("Annulla") {
+                    library.cancelTrackEdit()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Salva") {
+                    library.saveTrackEdit()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(VTTheme.amber)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(20)
+        }
+        .frame(width: 440, height: 420)
+        .onAppear { focusedField = .title }
+    }
+
+    private func draftBinding(_ keyPath: WritableKeyPath<TrackEditDraft, String>) -> Binding<String> {
+        Binding(
+            get: { library.trackEditDraft?[keyPath: keyPath] ?? "" },
+            set: { newValue in
+                guard library.trackEditDraft != nil else { return }
+                library.trackEditDraft![keyPath: keyPath] = newValue
+            }
+        )
     }
 }

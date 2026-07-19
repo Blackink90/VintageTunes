@@ -51,6 +51,8 @@ struct Track: Identifiable, Hashable {
     var displayArtist: String { artist.isEmpty ? "Artista sconosciuto" : artist }
     var displayTitle: String { title.isEmpty ? "Senza titolo" : title }
     var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : album }
+    var displayGenre: String { genre.isEmpty ? "—" : genre }
+    var displayYear: String { year == 0 ? "—" : "\(year)" }
 
     /// Chiave logica per riconoscere la stessa canzone anche dopo conversione FLAC→M4A.
     var identityKey: String {

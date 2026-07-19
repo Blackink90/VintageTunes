@@ -39,6 +39,13 @@ struct RootView: View {
         } message: {
             Text(library.conversionPrompt?.message ?? "")
         }
+        .sheet(isPresented: Binding(
+            get: { library.trackEditDraft != nil },
+            set: { if !$0 { library.cancelTrackEdit() } }
+        )) {
+            TrackEditSheet()
+                .environmentObject(library)
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 LibraryStatsBar()

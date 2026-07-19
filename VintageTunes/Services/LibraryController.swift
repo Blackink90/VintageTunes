@@ -20,6 +20,7 @@ final class LibraryController: ObservableObject {
     @Published var dbVersion: UInt32 = 0x14
     @Published var pendingImports: [ImportCandidate] = []
     @Published var conversionPrompt: ConversionPrompt?
+    @Published var trackEditDraft: TrackEditDraft?
 
     let detector = iPodDetector()
     let playback = PlaybackController()
@@ -71,6 +72,8 @@ final class LibraryController: ObservableObject {
             $0.title.localizedCaseInsensitiveContains(q)
                 || $0.artist.localizedCaseInsensitiveContains(q)
                 || $0.album.localizedCaseInsensitiveContains(q)
+                || $0.genre.localizedCaseInsensitiveContains(q)
+                || ($0.year != 0 && "\($0.year)".contains(q))
         }
     }
 
@@ -247,6 +250,75 @@ final class LibraryController: ObservableObject {
         playback.play(track)
     }
 
+    func beginEditingSelectedTrack() {
+        guard selection.count == 1, let id = selection.first,
+              let track = tracks.first(where: { $0.id == id }) else { return }
+        trackEditDraft = TrackEditDraft(track: track)
+    }
+
+    func beginEditingTrack(id: UInt32) {
+        guard let track = tracks.first(where: { $0.id == id }) else { return }
+        selection = [id]
+        trackEditDraft = TrackEditDraft(track: track)
+    }
+
+    func cancelTrackEdit() {
+        trackEditDraft = nil
+    }
+
+    func saveTrackEdit() {
+        guard var draft = trackEditDraft,
+              let device = connectedDevice,
+              let idx = tracks.firstIndex(where: { $0.id == draft.trackID }) else {
+            trackEditDraft = nil
+            return
+        }
+
+        draft.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.artist = draft.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.album = draft.album.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.genre = draft.genre.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let trackNumber = UInt32(draft.trackNumber.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let year = UInt32(draft.year.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+
+        tracks[idx].title = draft.title
+        tracks[idx].artist = draft.artist
+        tracks[idx].album = draft.album
+        tracks[idx].genre = draft.genre
+        tracks[idx].trackNumber = trackNumber
+        tracks[idx].year = year
+
+        var overrides = TrackTagStore.load(from: device)
+        overrides[tracks[idx].location] = TrackTagOverride(
+            title: draft.title,
+            artist: draft.artist,
+            album: draft.album,
+            genre: draft.genre,
+            trackNumber: trackNumber,
+            year: year
+        )
+
+        do {
+            try TrackTagStore.save(overrides, to: device)
+            try sync.savePlaylists(
+                tracks: tracks,
+                playlists: playlists,
+                dbVersion: dbVersion,
+                device: device
+            )
+            artwork.request(
+                artist: tracks[idx].displayArtist,
+                album: tracks[idx].displayAlbum,
+                fileURL: tracks[idx].resolvedPath
+            )
+            trackEditDraft = nil
+            setStatus(.success("Informazioni brano aggiornate"))
+        } catch {
+            setStatus(.failure(error.localizedDescription))
+        }
+    }
+
     func playSelectedOrToggle() {
         if let id = selection.first, let track = tracks.first(where: { $0.id == id }) {
             playback.playOrToggle(track)
@@ -304,6 +376,7 @@ final class LibraryController: ObservableObject {
             var result = try sync.loadLibrary(for: device)
             let before = result.tracks
             await sync.backfillMissingMetadata(&result.tracks)
+            TrackTagStore.apply(TrackTagStore.load(from: device), to: &result.tracks)
             if result.tracks != before {
                 try? sync.savePlaylists(
                     tracks: result.tracks,
