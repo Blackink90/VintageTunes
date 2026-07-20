@@ -104,6 +104,9 @@ final class SyncService {
 
         ensureMusicFolders(on: device)
 
+        let artworkStore = try? ArtworkDBStore.open(for: device)
+        var nextDBID = max(tracks.map(\.dbid).filter { $0 > 0 }.max() ?? 0, 1)
+
         for (index, meta) in audioItems.enumerated() {
             try Task.checkCancellation()
             let step = Double(index) / Double(max(audioItems.count, 1))
@@ -137,6 +140,8 @@ final class SyncService {
 
             let trackID = nextID
             nextID += 1
+            nextDBID += 1
+            let dbid = nextDBID
 
             let location: String
             switch device.firmwareMode {
@@ -148,7 +153,7 @@ final class SyncService {
 
             hashIndex.set(location: location, hash: fileHash)
 
-            let track = Track(
+            var track = Track(
                 id: trackID,
                 title: meta.title,
                 artist: meta.artist,
@@ -162,9 +167,32 @@ final class SyncService {
                 bitrate: meta.bitrate,
                 sampleRate: meta.sampleRate,
                 mediaType: 1,
+                dbid: dbid,
+                hasArtwork: 2,
+                artworkCount: 0,
+                mhiiLink: 0,
                 contentHash: fileHash,
                 resolvedPath: resolveLocation(location, device: device)
             )
+
+            if device.firmwareMode == .stock, let store = artworkStore {
+                let artURL = track.resolvedPath ?? meta.url
+                if let artData = await CoverArtService.resolveArtworkData(
+                    artist: track.artist,
+                    album: track.album,
+                    fileURL: artURL
+                ) {
+                    do {
+                        let mhii = try store.addArtwork(imageData: artData, songDBID: dbid)
+                        track.hasArtwork = 1
+                        track.artworkCount = 1
+                        track.mhiiLink = mhii
+                    } catch {
+                        // Cover sul device opzionale: l'import audio non fallisce.
+                    }
+                }
+            }
+
             tracks.append(track)
             imported += 1
 
@@ -175,6 +203,10 @@ final class SyncService {
                let idx = playlists.firstIndex(where: { $0.id == playlistID && !$0.isMaster }) {
                 playlists[idx].trackIDs.append(trackID)
             }
+        }
+
+        if let store = artworkStore {
+            try? store.save()
         }
 
         progress(SyncProgress(fraction: 0.95, message: "Aggiorno database…"))
@@ -401,6 +433,10 @@ final class SyncService {
                     rating: $0.rating,
                     playCount: $0.playCount,
                     lastPlayedMacTime: $0.lastPlayedMacTime,
+                    dbid: $0.dbid,
+                    hasArtwork: $0.hasArtwork,
+                    artworkCount: $0.artworkCount,
+                    mhiiLink: $0.mhiiLink,
                     dbBlob: $0.dbBlob
                 )
             }

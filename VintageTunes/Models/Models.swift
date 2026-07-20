@@ -50,6 +50,14 @@ struct Track: Identifiable, Hashable {
     var playCount: UInt32 = 0
     /// Ultima riproduzione in epoch Mac (secondi dal 1904-01-01); 0 = mai.
     var lastPlayedMacTime: UInt32 = 0
+    /// ID stabile per collegare iTunesDB ↔ ArtworkDB (mhit @112).
+    var dbid: UInt64 = 0
+    /// 1 = mostra artwork, 2 = nessuna (mhit @164).
+    var hasArtwork: UInt8 = 2
+    /// Conteggio artwork (mhit @124).
+    var artworkCount: UInt16 = 0
+    /// Link all’mhii in ArtworkDB (mhit @352); 0 = usa solo dbid.
+    var mhiiLink: UInt32 = 0
     var contentHash: String? = nil
     /// Raw mhit header + unmanaged MHODs; nil for tracks created in-app.
     var dbBlob: TrackDBBlob? = nil
@@ -128,6 +136,10 @@ struct Track: Identifiable, Hashable {
             && lhs.rating == rhs.rating
             && lhs.playCount == rhs.playCount
             && lhs.lastPlayedMacTime == rhs.lastPlayedMacTime
+            && lhs.dbid == rhs.dbid
+            && lhs.hasArtwork == rhs.hasArtwork
+            && lhs.artworkCount == rhs.artworkCount
+            && lhs.mhiiLink == rhs.mhiiLink
             && lhs.contentHash == rhs.contentHash
             && lhs.resolvedPath == rhs.resolvedPath
     }
@@ -149,6 +161,10 @@ struct Track: Identifiable, Hashable {
         hasher.combine(rating)
         hasher.combine(playCount)
         hasher.combine(lastPlayedMacTime)
+        hasher.combine(dbid)
+        hasher.combine(hasArtwork)
+        hasher.combine(artworkCount)
+        hasher.combine(mhiiLink)
         hasher.combine(contentHash)
         hasher.combine(resolvedPath)
     }
