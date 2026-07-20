@@ -46,6 +46,35 @@ final class iPodDetector: ObservableObject {
         scan()
     }
 
+    /// Rinomina il volume montato (come l’etichetta in Finder / iTunes).
+    func rename(_ device: iPodDevice, to newName: String) throws {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw RenameError.emptyName
+        }
+        guard !device.isSimulated else {
+            throw RenameError.notApplicable
+        }
+
+        var url = device.volumeURL
+        var values = URLResourceValues()
+        values.volumeName = trimmed
+        try url.setResourceValues(values)
+        scan()
+    }
+
+    enum RenameError: LocalizedError {
+        case emptyName
+        case notApplicable
+
+        var errorDescription: String? {
+            switch self {
+            case .emptyName: return "Il nome non può essere vuoto"
+            case .notApplicable: return "Rinomina non disponibile per questo dispositivo"
+            }
+        }
+    }
+
     private func inspect(volume: URL) -> iPodDevice? {
         let control = volume.appendingPathComponent("iPod_Control", isDirectory: true)
         var isDir: ObjCBool = false

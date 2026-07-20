@@ -783,6 +783,7 @@ struct DropImportView: View {
 struct SettingsView: View {
     @EnvironmentObject private var library: LibraryController
     @EnvironmentObject private var settings: AppSettings
+    @State private var deviceNameDraft = ""
 
     var body: some View {
         Form {
@@ -869,7 +870,22 @@ struct SettingsView: View {
 
             Section("Dispositivo") {
                 if let device = library.connectedDevice {
-                    LabeledContent("Nome", value: device.name)
+                    HStack(spacing: 8) {
+                        TextField("Nome iPod", text: $deviceNameDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { applyDeviceName() }
+                        Button("Rinomina") {
+                            applyDeviceName()
+                        }
+                        .disabled(
+                            deviceNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                || deviceNameDraft.trimmingCharacters(in: .whitespacesAndNewlines) == device.name
+                        )
+                    }
+                    Text("Come in iTunes: cambia il nome del volume (visibile anche in Finder).")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+
                     LabeledContent("Modello", value: device.modelHint)
                     LabeledContent(
                         "Firmware",
@@ -902,7 +918,19 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 560)
+        .frame(width: 520, height: 620)
+        .onAppear { syncDeviceNameDraft() }
+        .onChange(of: library.connectedDevice?.id) { _, _ in syncDeviceNameDraft() }
+        .onChange(of: library.connectedDevice?.name) { _, _ in syncDeviceNameDraft() }
+    }
+
+    private func syncDeviceNameDraft() {
+        deviceNameDraft = library.connectedDevice?.name ?? ""
+    }
+
+    private func applyDeviceName() {
+        library.renameConnectedDevice(to: deviceNameDraft)
+        syncDeviceNameDraft()
     }
 }
 

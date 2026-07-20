@@ -60,6 +60,18 @@ enum SimulatediPod {
         return makeDevice(at: root)
     }
 
+    private static var customNameURL: URL {
+        rootURL.appendingPathComponent(".vintagetunes-name", isDirectory: false)
+    }
+
+    static func rename(to newName: String) throws {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        try trimmed.write(to: customNameURL, atomically: true, encoding: .utf8)
+    }
+
     static func makeDevice(at root: URL) -> iPodDevice {
         let used = directorySize(at: root)
         let capacity: Int64 = 80 * 1024 * 1024 * 1024 // 80 GB come un 5.5G
@@ -67,10 +79,13 @@ enum SimulatediPod {
         let hasDB = FileManager.default.fileExists(
             atPath: root.appendingPathComponent("iPod_Control/iTunes/iTunesDB").path
         )
+        let storedName = (try? String(contentsOf: customNameURL, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = (storedName?.isEmpty == false) ? storedName! : "iPod Demo 5.5"
 
         return iPodDevice(
             id: deviceID,
-            name: "iPod Demo 5.5",
+            name: name,
             volumeURL: root,
             capacityBytes: capacity,
             availableBytes: available,

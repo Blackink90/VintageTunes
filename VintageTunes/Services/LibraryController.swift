@@ -320,6 +320,44 @@ final class LibraryController: ObservableObject {
         }
     }
 
+    /// Rinomina l’iPod collegato (etichetta volume, come in iTunes).
+    func renameConnectedDevice(to rawName: String) {
+        guard let device = connectedDevice else { return }
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            setStatus(.failure("Il nome non può essere vuoto"))
+            return
+        }
+        guard name != device.name else { return }
+
+        do {
+            if device.isSimulated {
+                try SimulatediPod.rename(to: name)
+                connectedDevice = SimulatediPod.makeDevice(at: SimulatediPod.rootURL)
+            } else {
+                try detector.rename(device, to: name)
+                if let updated = detector.devices.first(where: { $0.id == device.id }) {
+                    connectedDevice = updated
+                } else {
+                    connectedDevice = iPodDevice(
+                        id: device.id,
+                        name: name,
+                        volumeURL: device.volumeURL,
+                        capacityBytes: device.capacityBytes,
+                        availableBytes: device.availableBytes,
+                        modelHint: device.modelHint,
+                        firmwareMode: device.firmwareMode,
+                        hasDatabase: device.hasDatabase,
+                        isSimulated: false
+                    )
+                }
+            }
+            setStatus(.success("Rinominato in \"\(name)\""))
+        } catch {
+            setStatus(.failure(error.localizedDescription))
+        }
+    }
+
     func playTrack(_ track: Track) {
         playback.play(track, queue: filteredTracks)
     }
