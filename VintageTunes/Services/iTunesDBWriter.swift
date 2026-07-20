@@ -21,6 +21,10 @@ struct iTunesDBWriter {
         var rating: UInt8 = 0
         var playCount: UInt32 = 0
         var lastPlayedMacTime: UInt32 = 0
+        var dbid: UInt64 = 0
+        var hasArtwork: UInt8 = 2
+        var artworkCount: UInt16 = 0
+        var mhiiLink: UInt32 = 0
         var dbBlob: TrackDBBlob? = nil
     }
 
@@ -191,6 +195,7 @@ struct iTunesDBWriter {
             }
             writeU32(&header, at: 88, track.lastPlayedMacTime)
             // Preserve date added and other unknown header bytes.
+            patchArtworkFields(&header, track: track)
             if headerLen > 212 {
                 writeU32(&header, at: 208, track.mediaType == 0 ? 1 : track.mediaType)
             }
@@ -221,6 +226,7 @@ struct iTunesDBWriter {
             writeU32(&header, at: 84, track.playCount)
             writeU32(&header, at: 88, track.lastPlayedMacTime)
             writeU32(&header, at: 104, macTimestamp()) // date added
+            patchArtworkFields(&header, track: track)
             if headerLen > 212 {
                 writeU32(&header, at: 208, track.mediaType == 0 ? 1 : track.mediaType)
             }
@@ -228,6 +234,22 @@ struct iTunesDBWriter {
 
         header.append(mhods)
         return header
+    }
+
+    private func patchArtworkFields(_ header: inout Data, track: TrackDraft) {
+        let headerLen = header.count
+        if headerLen > 120 {
+            writeU64(&header, at: 112, track.dbid)
+        }
+        if headerLen > 126 {
+            writeU16(&header, at: 124, track.artworkCount)
+        }
+        if headerLen > 164 {
+            header[164] = track.hasArtwork == 1 ? 1 : 2
+        }
+        if headerLen > 356 {
+            writeU32(&header, at: 352, track.mhiiLink)
+        }
     }
 
     private func buildPlaylistList(_ playlists: [PlaylistDraft]) -> Data {

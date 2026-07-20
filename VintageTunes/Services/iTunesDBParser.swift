@@ -153,6 +153,10 @@ final class iTunesDBParser {
             let rating: UInt8 = headerLen > 31 ? data[offset + 31] : 0
             let playCount = headerLen > 80 ? readU32(data, offset + 80) : 0
             let lastPlayedMacTime = headerLen > 88 ? readU32(data, offset + 88) : 0
+            let dbid = headerLen > 120 ? readU64(data, offset + 112) : 0
+            let artworkCount: UInt16 = headerLen > 126 ? readU16(data, offset + 124) : 0
+            let hasArtwork: UInt8 = headerLen > 164 ? data[offset + 164] : 2
+            let mhiiLink = headerLen > 356 ? readU32(data, offset + 352) : 0
 
             var title = ""
             var artist = ""
@@ -214,6 +218,10 @@ final class iTunesDBParser {
                     rating: rating,
                     playCount: playCount,
                     lastPlayedMacTime: lastPlayedMacTime,
+                    dbid: dbid,
+                    hasArtwork: hasArtwork == 0 ? 2 : hasArtwork,
+                    artworkCount: artworkCount,
+                    mhiiLink: mhiiLink,
                     dbBlob: TrackDBBlob(header: headerBytes, extraMhods: extraMhods),
                     resolvedPath: resolved
                 )
