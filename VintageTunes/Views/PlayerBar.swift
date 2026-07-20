@@ -25,10 +25,10 @@ struct LibraryStatsBar: View {
             .padding(.vertical, 8)
             .background(
                 Rectangle()
-                    .fill(Color(red: 0.10, green: 0.11, blue: 0.13))
+                    .fill(VTTheme.charcoal)
                     .overlay(alignment: .top) {
                         Rectangle()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(VTTheme.hairline)
                             .frame(height: 1)
                     }
             )
@@ -48,13 +48,13 @@ struct LibraryStatsBar: View {
     private func stat(_ text: String) -> some View {
         Text(text)
             .font(.custom("Avenir Next", size: 12).weight(.medium))
-            .foregroundStyle(Color.white.opacity(0.78))
+            .foregroundStyle(VTTheme.textSecondary)
     }
 
     private var separator: some View {
         Text("·")
             .font(.custom("Avenir Next", size: 12).weight(.bold))
-            .foregroundStyle(Color.white.opacity(0.28))
+            .foregroundStyle(VTTheme.textSecondary.opacity(0.45))
             .padding(.horizontal, 10)
     }
 }
@@ -92,7 +92,7 @@ struct PlayerBar: View {
                 } label: {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.85))
+                        .foregroundStyle(VTTheme.textPrimary.opacity(0.85))
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
@@ -101,11 +101,11 @@ struct PlayerBar: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(track.displayTitle)
                         .font(.custom("Avenir Next", size: 13).weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.95))
+                        .foregroundStyle(VTTheme.textPrimary)
                         .lineLimit(1)
                     Text(track.displayArtist)
                         .font(.custom("Avenir Next", size: 11))
-                        .foregroundStyle(Color.white.opacity(0.55))
+                        .foregroundStyle(VTTheme.textSecondary)
                         .lineLimit(1)
 
                     GeometryReader { geo in
@@ -122,7 +122,7 @@ struct PlayerBar: View {
 
                 Text("\(playback.currentTimeLabel) / \(playback.durationLabel)")
                     .font(.custom("Avenir Next", size: 11).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.55))
+                    .foregroundStyle(VTTheme.textSecondary)
                     .frame(minWidth: 84, alignment: .trailing)
 
                 Button {
@@ -144,12 +144,12 @@ struct PlayerBar: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(red: 0.12, green: 0.13, blue: 0.16))
+                    .fill(VTTheme.playerChrome)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                            .stroke(VTTheme.panelStroke, lineWidth: 1)
                     )
-                    .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
+                    .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
             )
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
@@ -233,7 +233,7 @@ struct PlaybackScrubber: View {
     private var trackBackground: some View {
         switch style {
         case .playerBar:
-            Capsule().fill(Color.white.opacity(0.12))
+            Capsule().fill(VTTheme.controlFill)
         case .stockiPod:
             // Barra rettangolare stile Classic (niente capsule)
             Rectangle()

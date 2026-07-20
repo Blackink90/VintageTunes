@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @EnvironmentObject private var library: LibraryController
+    @Environment(\.openSettings) private var openSettings
     @State private var newPlaylistName = ""
     @State private var showingNewPlaylist = false
 
@@ -23,6 +24,13 @@ struct SidebarView: View {
                         disabled: library.connectedDevice == nil
                     ) {
                         library.eject()
+                    }
+                    sidebarActionButton(
+                        systemImage: "gearshape",
+                        help: "Impostazioni",
+                        disabled: false
+                    ) {
+                        openSettings()
                     }
                     Spacer(minLength: 0)
                 }
@@ -51,7 +59,7 @@ struct SidebarView: View {
                 } header: {
                     Text("LIBRERIA")
                         .font(.custom("Avenir Next", size: 11).weight(.bold))
-                        .foregroundStyle(Color.white.opacity(0.55))
+                        .foregroundStyle(VTTheme.textSecondary)
                 }
 
                 Section {
@@ -76,7 +84,7 @@ struct SidebarView: View {
                     HStack {
                         Text("PLAYLIST")
                             .font(.custom("Avenir Next", size: 11).weight(.bold))
-                            .foregroundStyle(Color.white.opacity(0.55))
+                            .foregroundStyle(VTTheme.textSecondary)
                         Spacer()
                         Button {
                             showingNewPlaylist = true
@@ -94,7 +102,6 @@ struct SidebarView: View {
             .listRowSeparator(.hidden)
         }
         .background(VTTheme.panel)
-        .environment(\.colorScheme, .dark)
         .alert("Nuova playlist", isPresented: $showingNewPlaylist) {
             TextField("Nome", text: $newPlaylistName)
             Button("Crea") {
@@ -118,9 +125,9 @@ struct SidebarView: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(disabled ? 0.35 : 0.85))
+                .foregroundStyle(VTTheme.textPrimary.opacity(disabled ? 0.35 : 0.85))
                 .frame(width: 28, height: 28)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .background(VTTheme.controlFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(disabled)
@@ -138,16 +145,16 @@ struct SidebarView: View {
             HStack(spacing: 10) {
                 Image(systemName: systemImage)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(selected ? VTTheme.amber : Color.white.opacity(0.7))
+                    .foregroundStyle(selected ? VTTheme.amber : VTTheme.textSecondary)
                     .frame(width: 18)
                 Text(title)
                     .font(.custom("Avenir Next", size: 13).weight(.medium))
-                    .foregroundStyle(Color.white.opacity(0.92))
+                    .foregroundStyle(VTTheme.textPrimary)
                 Spacer()
                 if let badge {
                     Text(badge)
                         .font(.custom("Avenir Next", size: 11).weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.45))
+                        .foregroundStyle(VTTheme.textSecondary.opacity(0.8))
                 }
             }
             .padding(.horizontal, 10)
@@ -174,7 +181,7 @@ struct DeviceCard: View {
                     .foregroundStyle(VTTheme.amber)
                 Text(device.name)
                     .font(.custom("Avenir Next", size: 13).weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.95))
+                    .foregroundStyle(VTTheme.textPrimary)
                     .lineLimit(1)
                 Spacer()
                 Text(device.firmwareMode == .rockbox ? "Rockbox" : (device.isSimulated ? "Demo" : "Stock"))
@@ -187,11 +194,11 @@ struct DeviceCard: View {
 
             Text(device.modelHint)
                 .font(.custom("Avenir Next", size: 11))
-                .foregroundStyle(Color.white.opacity(0.55))
+                .foregroundStyle(VTTheme.textSecondary)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.08))
+                    Capsule().fill(VTTheme.controlFill)
                     Capsule()
                         .fill(VTTheme.amber)
                         .frame(width: max(4, geo.size.width * device.usedFraction))
@@ -201,12 +208,12 @@ struct DeviceCard: View {
 
             Text("\(ByteCountFormatter.string(fromByteCount: device.usedBytes, countStyle: .file)) di \(ByteCountFormatter.string(fromByteCount: device.capacityBytes, countStyle: .file))")
                 .font(.custom("Avenir Next", size: 10))
-                .foregroundStyle(Color.white.opacity(0.45))
+                .foregroundStyle(VTTheme.textSecondary.opacity(0.85))
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.05))
+                .fill(VTTheme.elevatedFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(VTTheme.panelStroke)

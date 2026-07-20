@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var library: LibraryController
+    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
         // VStack (non safeAreaInset): la Table/NSTableView di macOS ignora gli inset
@@ -28,7 +29,7 @@ struct RootView: View {
             LibraryStatsBar()
             PlayerBar(playback: library.playback)
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(settings.appearanceMode.preferredColorScheme)
         .tint(VTTheme.amber)
         .onAppear { library.start() }
         .alert(
@@ -200,7 +201,7 @@ struct EmptyDeviceView: View {
 
                     VStack(spacing: 18) {
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(VTTheme.charcoal)
+                            .fill(VTTheme.ink)
                             .frame(width: 110, height: 72)
                             .overlay {
                                 Text("WAIT")
@@ -209,10 +210,10 @@ struct EmptyDeviceView: View {
                                     .foregroundStyle(VTTheme.lcdGreen.opacity(pulse ? 1 : 0.45))
                             }
                         Circle()
-                            .stroke(VTTheme.charcoal.opacity(0.35), lineWidth: 10)
+                            .stroke(VTTheme.ink.opacity(0.35), lineWidth: 10)
                             .frame(width: 70, height: 70)
                             .overlay {
-                                Circle().fill(VTTheme.charcoal.opacity(0.2)).frame(width: 12, height: 12)
+                                Circle().fill(VTTheme.ink.opacity(0.2)).frame(width: 12, height: 12)
                             }
                     }
                 }

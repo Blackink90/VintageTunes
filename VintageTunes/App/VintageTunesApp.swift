@@ -3,11 +3,13 @@ import SwiftUI
 @main
 struct VintageTunesApp: App {
     @StateObject private var library = LibraryController()
+    @StateObject private var settings = AppSettings()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(library)
+                .environmentObject(settings)
                 .frame(minWidth: 960, minHeight: 640)
         }
         .windowStyle(.titleBar)
@@ -81,6 +83,8 @@ struct VintageTunesApp: App {
         Settings {
             SettingsView()
                 .environmentObject(library)
+                .environmentObject(settings)
+                .preferredColorScheme(settings.appearanceMode.preferredColorScheme)
         }
     }
 }

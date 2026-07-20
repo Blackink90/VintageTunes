@@ -98,7 +98,7 @@ struct TrackTableView: View {
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .scrollContentBackground(.hidden)
-            .background(Color(red: 0.11, green: 0.12, blue: 0.14))
+            .background(VTTheme.tableBackground)
             .foregroundStyle(VTTheme.textPrimary)
             .onNativeTableDoubleClick { row in
                 // Preferisci la selezione (ID): l’indice riga della NSTableView può non allinearsi a filteredTracks.
@@ -647,7 +647,7 @@ struct CoverArtView: View {
             } else {
                 Image(systemName: placeholderSystemImage)
                     .font(.system(size: isCircle ? 14 : 22, weight: .light))
-                    .foregroundStyle(Color.white.opacity(0.35))
+                    .foregroundStyle(VTTheme.textSecondary.opacity(0.55))
             }
         }
     }
@@ -655,8 +655,8 @@ struct CoverArtView: View {
     private var placeholderFill: LinearGradient {
         LinearGradient(
             colors: [
-                Color(red: 0.22, green: 0.23, blue: 0.26),
-                Color(red: 0.12, green: 0.13, blue: 0.15)
+                VTTheme.controlFill,
+                VTTheme.panel
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -782,9 +782,22 @@ struct DropImportView: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var library: LibraryController
+    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
         Form {
+            Section("Aspetto") {
+                Picker("Tema", selection: $settings.appearanceMode) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("Automatica segue le impostazioni di sistema di macOS.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Dispositivo") {
                 if let device = library.connectedDevice {
                     LabeledContent("Nome", value: device.name)
@@ -820,7 +833,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 360)
+        .frame(width: 480, height: 420)
     }
 }
 
