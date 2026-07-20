@@ -13,6 +13,9 @@ final class PlaybackController: ObservableObject {
     /// Coda della lista da cui è partita la riproduzione (per ◀◀ / ▶▶).
     private(set) var queue: [Track] = []
 
+    /// Chiamato all’avvio di ogni nuovo brano (play count / last played).
+    var onTrackPlayStarted: ((Track) -> Void)?
+
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
@@ -122,6 +125,7 @@ final class PlaybackController: ObservableObject {
 
         newPlayer.play()
         isPlaying = true
+        onTrackPlayStarted?(track)
     }
 
     @discardableResult

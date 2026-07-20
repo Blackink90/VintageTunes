@@ -24,11 +24,14 @@ struct SyncProgress {
 final class SyncService {
     private let parser = iTunesDBParser()
     private let writer = iTunesDBWriter()
+    /// Opaque iTunesDB sections preserved between load and persist (stock only).
+    private var stockSession: iTunesDBSessionState?
 
     func loadLibrary(for device: iPodDevice) throws -> (tracks: [Track], playlists: [Playlist], dbVersion: UInt32) {
         let hashIndex = TrackHashIndex.load(from: device)
         switch device.firmwareMode {
         case .rockbox:
+            stockSession = nil
             var result = try loadRockbox(device)
             for i in result.tracks.indices {
                 result.tracks[i].contentHash = hashIndex.byLocation[result.tracks[i].location]
@@ -37,11 +40,21 @@ final class SyncService {
         case .stock:
             if device.hasDatabase {
                 var parsed = try parser.parse(at: device.databaseURL, volumeRoot: device.volumeURL)
+                stockSession = parsed.session
                 for i in parsed.tracks.indices {
                     parsed.tracks[i].contentHash = hashIndex.byLocation[parsed.tracks[i].location]
                 }
+                if PlayCountsFile.merge(into: &parsed.tracks, device: device) {
+                    try? persist(
+                        tracks: parsed.tracks,
+                        playlists: parsed.playlists,
+                        dbVersion: parsed.dbVersion,
+                        device: device
+                    )
+                }
                 return (parsed.tracks, parsed.playlists, parsed.dbVersion)
             }
+            stockSession = iTunesDBSessionState.emptyNewDatabase
             return ([], [Playlist(id: 1, name: "Libreria", isMaster: true, trackIDs: [])], 0x14)
         }
     }
@@ -385,7 +398,10 @@ final class SyncService {
                     sampleRate: $0.sampleRate,
                     mediaType: $0.mediaType == 0 ? 1 : $0.mediaType,
                     filetype: filetypeLabel(for: $0.location),
-                    rating: $0.rating
+                    rating: $0.rating,
+                    playCount: $0.playCount,
+                    lastPlayedMacTime: $0.lastPlayedMacTime,
+                    dbBlob: $0.dbBlob
                 )
             }
             var plistDrafts = playlists.map {
@@ -393,7 +409,8 @@ final class SyncService {
                     id: $0.id,
                     name: $0.name,
                     isMaster: $0.isMaster,
-                    trackIDs: $0.trackIDs
+                    trackIDs: $0.trackIDs,
+                    dbBlob: $0.dbBlob
                 )
             }
             // Ensure master first
@@ -405,6 +422,7 @@ final class SyncService {
                 tracks: drafts,
                 playlists: plistDrafts,
                 dbVersion: dbVersion == 0 ? 0x14 : dbVersion,
+                session: stockSession,
                 to: device.databaseURL
             )
         case .rockbox:
