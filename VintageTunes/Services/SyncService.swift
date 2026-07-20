@@ -92,6 +92,7 @@ final class SyncService {
         ensureMusicFolders(on: device)
 
         for (index, meta) in audioItems.enumerated() {
+            try Task.checkCancellation()
             let step = Double(index) / Double(max(audioItems.count, 1))
             progress(SyncProgress(fraction: step, message: "Controllo \(meta.url.lastPathComponent)…"))
 

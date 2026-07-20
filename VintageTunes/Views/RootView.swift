@@ -4,21 +4,29 @@ struct RootView: View {
     @EnvironmentObject private var library: LibraryController
 
     var body: some View {
-        ZStack {
-            VTTheme.background
+        // VStack (non safeAreaInset): la Table/NSTableView di macOS ignora gli inset
+        // e disegnava le ultime righe sotto stats/player.
+        VStack(spacing: 0) {
+            ZStack {
+                VTTheme.background
 
-            if library.connectedDevice == nil && !library.isLoading {
-                EmptyDeviceView()
-            } else {
-                NavigationSplitView {
-                    SidebarView()
-                        .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 300)
-                } detail: {
-                    DetailContainer()
+                if library.connectedDevice == nil && !library.isLoading {
+                    EmptyDeviceView()
+                } else {
+                    NavigationSplitView {
+                        SidebarView()
+                            .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 300)
+                    } detail: {
+                        DetailContainer()
+                    }
+                    .navigationSplitViewStyle(.balanced)
+                    .background(.clear)
                 }
-                .navigationSplitViewStyle(.balanced)
-                .background(.clear)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            LibraryStatsBar()
+            PlayerBar(playback: library.playback)
         }
         .preferredColorScheme(.dark)
         .tint(VTTheme.amber)
@@ -27,14 +35,22 @@ struct RootView: View {
             "Convertire in M4A?",
             isPresented: Binding(
                 get: { library.conversionPrompt != nil },
-                set: { if !$0 { library.declineConversion() } }
+                set: { newValue in
+                    // I pulsanti gestiscono conferma/rifiuto; dismiss “vuoto” = annulla tutto.
+                    if !newValue, library.conversionPrompt != nil {
+                        library.cancelImport()
+                    }
+                }
             )
         ) {
             Button("Converti e trasferisci") {
                 library.confirmConversion()
             }
-            Button("Solo file compatibili", role: .cancel) {
+            Button("Solo file compatibili") {
                 library.declineConversion()
+            }
+            Button("Annulla", role: .cancel) {
+                library.cancelImport()
             }
         } message: {
             Text(library.conversionPrompt?.message ?? "")
@@ -46,17 +62,13 @@ struct RootView: View {
             TrackEditSheet()
                 .environmentObject(library)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                LibraryStatsBar()
-                PlayerBar(playback: library.playback)
-            }
-        }
         .overlay(alignment: .bottom) {
             if case .idle = library.syncStatus {
                 EmptyView()
             } else {
-                StatusBanner(status: library.syncStatus)
+                StatusBanner(status: library.syncStatus) {
+                    library.cancelImport()
+                }
                     .padding(.horizontal, 16)
                     .padding(.bottom, bottomBannerPadding)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -92,6 +104,7 @@ struct RootView: View {
 
 struct StatusBanner: View {
     let status: SyncStatus
+    var onCancel: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -117,6 +130,17 @@ struct StatusBanner: View {
                 .foregroundStyle(.white)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if case .working = status, let onCancel {
+                Button("Annulla") {
+                    onCancel()
+                }
+                .buttonStyle(.plain)
+                .font(.custom("Avenir Next", size: 12).weight(.bold))
+                .foregroundStyle(VTTheme.amber)
+                .padding(.leading, 4)
+                .help("Interrompi import / conversione")
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)

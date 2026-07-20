@@ -30,6 +30,13 @@ final class LibraryController: ObservableObject {
     private let sync = SyncService()
     private var detectorCancellable: AnyCancellable?
     private var statusDismissTask: Task<Void, Never>?
+    private var importTask: Task<Void, Never>?
+    private var importCancelled = false
+
+    var isImportRunning: Bool {
+        if case .working = syncStatus { return true }
+        return conversionPrompt != nil
+    }
 
     /// Aggiorna lo stato UI; success/failure spariscono da soli dopo pochi secondi.
     func setStatus(_ status: SyncStatus) {
@@ -549,7 +556,9 @@ final class LibraryController: ObservableObject {
     private var importSecurityRoots: [URL] = []
 
     func importDroppedURLs(_ urls: [URL]) {
-        Task { @MainActor in
+        cancelImport(silent: true)
+        importCancelled = false
+        importTask = Task { @MainActor in
             await prepareImport(urls)
         }
     }
@@ -571,7 +580,8 @@ final class LibraryController: ObservableObject {
     func confirmConversion() {
         guard let prompt = conversionPrompt else { return }
         conversionPrompt = nil
-        Task {
+        importCancelled = false
+        importTask = Task { @MainActor in
             await runImport(
                 ready: prompt.readyURLs,
                 toConvert: prompt.convertibleURLs,
@@ -589,10 +599,30 @@ final class LibraryController: ObservableObject {
             releaseImportSecurityRoots()
             return
         }
-        Task {
+        importCancelled = false
+        importTask = Task { @MainActor in
             await runImport(ready: prompt.readyURLs, toConvert: [], convert: false)
             releaseImportSecurityRoots()
         }
+    }
+
+    /// Interrompe scan/conversione/import in corso (o chiude il prompt di conversione senza trasferire).
+    func cancelImport(silent: Bool = false) {
+        importCancelled = true
+        importTask?.cancel()
+        importTask = nil
+        if conversionPrompt != nil {
+            conversionPrompt = nil
+            releaseImportSecurityRoots()
+        }
+        if !silent {
+            setStatus(.success("Import annullato"))
+        }
+    }
+
+    private func throwIfImportCancelled() throws {
+        try Task.checkCancellation()
+        if importCancelled { throw CancellationError() }
     }
 
     private func beginImportSecurityAccess(for urls: [URL]) {
@@ -618,33 +648,47 @@ final class LibraryController: ObservableObject {
         beginImportSecurityAccess(for: urls)
         setStatus(.working("Cerco file audio…"))
 
-        let files = AudioFileCollector.collectAudioFiles(from: urls)
-        let ready = files.filter(AudioMetadataReader.isSupportedAudio)
-        let convertible = files.filter {
-            AudioConverter.needsConversion($0) && !AudioMetadataReader.isSupportedAudio($0)
-        }
+        do {
+            try throwIfImportCancelled()
+            let files = AudioFileCollector.collectAudioFiles(from: urls)
+            try throwIfImportCancelled()
 
-        if files.isEmpty {
-            setStatus(.failure("Nessun file audio trovato nella selezione (mp3, m4a, flac, wav, …)"))
+            let ready = files.filter(AudioMetadataReader.isSupportedAudio)
+            let convertible = files.filter {
+                AudioConverter.needsConversion($0) && !AudioMetadataReader.isSupportedAudio($0)
+            }
+
+            if files.isEmpty {
+                setStatus(.failure("Nessun file audio trovato nella selezione (mp3, m4a, flac, wav, …)"))
+                releaseImportSecurityRoots()
+                return
+            }
+
+            setStatus(.working("Trovati \(files.count) file audio…"))
+            try throwIfImportCancelled()
+
+            if !convertible.isEmpty {
+                conversionPrompt = ConversionPrompt(
+                    convertibleURLs: convertible,
+                    readyURLs: ready,
+                    rejectedNames: []
+                )
+                setStatus(.idle)
+                // Security roots restano aperti fino a conferma/rifiuto conversione
+                return
+            }
+
+            await runImport(ready: ready, toConvert: [], convert: false)
             releaseImportSecurityRoots()
-            return
+        } catch is CancellationError {
+            releaseImportSecurityRoots()
+            if importCancelled {
+                setStatus(.success("Import annullato"))
+            }
+        } catch {
+            releaseImportSecurityRoots()
+            setStatus(.failure(error.localizedDescription))
         }
-
-        setStatus(.working("Trovati \(files.count) file audio…"))
-
-        if !convertible.isEmpty {
-            conversionPrompt = ConversionPrompt(
-                convertibleURLs: convertible,
-                readyURLs: ready,
-                rejectedNames: []
-            )
-            setStatus(.idle)
-            // Security roots restano aperti fino a conferma/rifiuto conversione
-            return
-        }
-
-        await runImport(ready: ready, toConvert: [], convert: false)
-        releaseImportSecurityRoots()
     }
 
     private func runImport(
@@ -669,39 +713,38 @@ final class LibraryController: ObservableObject {
         var tempFiles: [URL] = []
         var skippedBeforeImport = 0
 
-        for url in ready {
-            setStatus(.working("Leggo \(url.lastPathComponent)…"))
-            var meta = await AudioMetadataReader.read(url: url)
-            meta = await MetadataLookup.enrich(meta)
-            meta.contentHash = try? FileHasher.sha256(of: url)
-            if tracks.contains(where: { $0.contentHash == meta.contentHash && meta.contentHash != nil })
-                || tracks.contains(where: { $0.identityKey == meta.identityKey }) {
-                skippedBeforeImport += 1
-                continue
-            }
-            items.append(meta)
-        }
-
-        if convert {
-            for (index, url) in toConvert.enumerated() {
-                setStatus(.working("Leggo tag \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
-                var sourceMeta = await AudioMetadataReader.read(url: url)
-                sourceMeta = await MetadataLookup.enrich(sourceMeta)
-                do {
-                    sourceMeta.contentHash = try FileHasher.sha256(of: url)
-                } catch {
-                    setStatus(.failure("Hash fallito: \(error.localizedDescription)"))
-                    return
-                }
-
-                if tracks.contains(where: { $0.contentHash == sourceMeta.contentHash })
-                    || tracks.contains(where: { $0.identityKey == sourceMeta.identityKey }) {
+        do {
+            for url in ready {
+                try throwIfImportCancelled()
+                setStatus(.working("Leggo \(url.lastPathComponent)…"))
+                var meta = await AudioMetadataReader.read(url: url)
+                try throwIfImportCancelled()
+                meta = await MetadataLookup.enrich(meta)
+                meta.contentHash = try? FileHasher.sha256(of: url)
+                if tracks.contains(where: { $0.contentHash == meta.contentHash && meta.contentHash != nil })
+                    || tracks.contains(where: { $0.identityKey == meta.identityKey }) {
                     skippedBeforeImport += 1
                     continue
                 }
+                items.append(meta)
+            }
 
-                setStatus(.working("Conversione \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
-                do {
+            if convert {
+                for (index, url) in toConvert.enumerated() {
+                    try throwIfImportCancelled()
+                    setStatus(.working("Leggo tag \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
+                    var sourceMeta = await AudioMetadataReader.read(url: url)
+                    sourceMeta = await MetadataLookup.enrich(sourceMeta)
+                    sourceMeta.contentHash = try FileHasher.sha256(of: url)
+
+                    if tracks.contains(where: { $0.contentHash == sourceMeta.contentHash })
+                        || tracks.contains(where: { $0.identityKey == sourceMeta.identityKey }) {
+                        skippedBeforeImport += 1
+                        continue
+                    }
+
+                    try throwIfImportCancelled()
+                    setStatus(.working("Conversione \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
                     let niceNameParts = [sourceMeta.artist, sourceMeta.title].filter { !$0.isEmpty }
                     let niceName = niceNameParts.isEmpty
                         ? sourceMeta.title
@@ -714,6 +757,7 @@ final class LibraryController: ObservableObject {
                     ) { message in
                         Task { @MainActor in self.setStatus(.working(message)) }
                     }
+                    try throwIfImportCancelled()
                     var merged = AudioMetadataReader.remapped(sourceMeta, to: m4a)
                     if merged.durationMs == 0 {
                         let m4aMeta = await AudioMetadataReader.read(url: m4a)
@@ -741,26 +785,22 @@ final class LibraryController: ObservableObject {
                     }
                     items.append(merged)
                     tempFiles.append(m4a)
-                } catch {
-                    setStatus(.failure("Conversione fallita: \(error.localizedDescription)"))
-                    tempFiles.forEach { try? FileManager.default.removeItem(at: $0) }
-                    return
                 }
             }
-        }
 
-        if items.isEmpty {
-            removeLibraryDuplicates(silentIfNone: true)
-            if skippedBeforeImport > 0 {
-                setStatus(.success("Nessuna nuova traccia · \(skippedBeforeImport) già presenti"))
-            } else {
-                setStatus(.failure("Nessun file da trasferire"))
+            try throwIfImportCancelled()
+
+            if items.isEmpty {
+                removeLibraryDuplicates(silentIfNone: true)
+                if skippedBeforeImport > 0 {
+                    setStatus(.success("Nessuna nuova traccia · \(skippedBeforeImport) già presenti"))
+                } else {
+                    setStatus(.failure("Nessun file da trasferire"))
+                }
+                return
             }
-            return
-        }
 
-        setStatus(.working("Preparazione import…"))
-        do {
+            setStatus(.working("Preparazione import…"))
             let result = try await sync.importFiles(
                 items,
                 to: device,
@@ -773,6 +813,7 @@ final class LibraryController: ObservableObject {
                     self.setStatus(.working(progress.message))
                 }
             }
+            try throwIfImportCancelled()
             tracks = result.tracks
             playlists = result.playlists
             dbVersion = result.dbVersion
@@ -785,6 +826,10 @@ final class LibraryController: ObservableObject {
             setStatus(.success(parts.isEmpty ? "Nessuna nuova traccia da aggiungere" : parts.joined(separator: " · ")))
             selectSection(.songs)
             prefetchArtwork()
+        } catch is CancellationError {
+            if importCancelled {
+                setStatus(.success("Import annullato"))
+            }
         } catch {
             setStatus(.failure(error.localizedDescription))
         }
