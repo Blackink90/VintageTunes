@@ -155,9 +155,8 @@ private struct iPodBaseOverlay: View {
         Button(action: action) {
             Color.clear
                 .frame(width: size, height: size)
-                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(iPodWheelCenterStyle(size: size))
         .help("Play / Pausa")
     }
 
@@ -172,16 +171,69 @@ private struct iPodBaseOverlay: View {
         let inner = radius * 0.38
         let outer = radius * 0.98
         return Button(action: action) {
-            WheelArcShape(startDegrees: startDeg, endDegrees: endDeg, innerRadius: inner, outerRadius: outer)
-                .fill(Color.clear)
+            Color.clear
                 .frame(width: outer * 2, height: outer * 2)
-                .contentShape(
-                    WheelArcShape(startDegrees: startDeg, endDegrees: endDeg, innerRadius: inner, outerRadius: outer)
-                )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(
+            iPodWheelArcStyle(
+                startDegrees: startDeg,
+                endDegrees: endDeg,
+                innerRadius: inner,
+                outerRadius: outer
+            )
+        )
         .frame(width: outer * 2, height: outer * 2)
         .position(x: center.x, y: center.y)
+    }
+}
+
+/// Feedback “tasto fisico” sul centro Select.
+private struct iPodWheelCenterStyle: ButtonStyle {
+    let size: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
+        return ZStack {
+            Circle()
+                .fill(Color.black.opacity(pressed ? 0.22 : 0))
+            Circle()
+                .stroke(Color.black.opacity(pressed ? 0.14 : 0), lineWidth: 1.5)
+                .padding(1)
+            configuration.label
+        }
+        .frame(width: size, height: size)
+        .contentShape(Circle())
+        .scaleEffect(pressed ? 0.96 : 1)
+        .animation(.spring(response: 0.18, dampingFraction: 0.7), value: pressed)
+    }
+}
+
+/// Feedback “tasto fisico” sulle zone MENU / << / >> / play della corona.
+private struct iPodWheelArcStyle: ButtonStyle {
+    let startDegrees: Double
+    let endDegrees: Double
+    let innerRadius: CGFloat
+    let outerRadius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
+        let shape = WheelArcShape(
+            startDegrees: startDegrees,
+            endDegrees: endDegrees,
+            innerRadius: innerRadius,
+            outerRadius: outerRadius
+        )
+        return ZStack {
+            shape
+                .fill(Color.black.opacity(pressed ? 0.22 : 0))
+            shape
+                .stroke(Color.black.opacity(pressed ? 0.12 : 0), lineWidth: 1)
+            configuration.label
+        }
+        .frame(width: outerRadius * 2, height: outerRadius * 2)
+        .contentShape(shape)
+        .scaleEffect(pressed ? 0.97 : 1)
+        .animation(.spring(response: 0.18, dampingFraction: 0.7), value: pressed)
     }
 }
 
