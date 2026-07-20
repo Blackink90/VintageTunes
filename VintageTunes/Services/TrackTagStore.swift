@@ -8,6 +8,7 @@ struct TrackTagOverride: Codable, Equatable {
     var genre: String
     var trackNumber: UInt32
     var year: UInt32
+    var rating: UInt8 = 0
 }
 
 enum TrackTagStore {
@@ -42,6 +43,7 @@ enum TrackTagStore {
             tracks[i].genre = patch.genre
             tracks[i].trackNumber = patch.trackNumber
             tracks[i].year = patch.year
+            tracks[i].rating = patch.rating
         }
     }
 }
@@ -54,6 +56,10 @@ struct TrackEditDraft: Equatable {
     var genre: String
     var trackNumber: String
     var year: String
+    /// Stelle 0…5 (0 = nessuna).
+    var starRating: Int
+    /// true se in multi-edit le stelle erano diverse (non mostrare un valore unico).
+    var mixedRating: Bool
 
     /// true se i brani selezionati avevano valori diversi (campo lasciato vuoto in UI).
     var mixedArtist: Bool
@@ -76,6 +82,8 @@ struct TrackEditDraft: Equatable {
             genre = track.genre
             trackNumber = track.trackNumber == 0 ? "" : "\(track.trackNumber)"
             year = track.year == 0 ? "" : "\(track.year)"
+            starRating = track.starRating
+            mixedRating = false
             mixedArtist = false
             mixedAlbum = false
             mixedGenre = false
@@ -90,18 +98,21 @@ struct TrackEditDraft: Equatable {
         let genres = tracks.map(\.genre)
         let numbers = tracks.map(\.trackNumber)
         let years = tracks.map(\.year)
+        let ratings = tracks.map(\.starRating)
 
         mixedArtist = !Self.valuesAreEqual(artists)
         mixedAlbum = !Self.valuesAreEqual(albums)
         mixedGenre = !Self.valuesAreEqual(genres)
         mixedTrackNumber = !Self.valuesAreEqual(numbers)
         mixedYear = !Self.valuesAreEqual(years)
+        mixedRating = !Self.valuesAreEqual(ratings)
 
         artist = mixedArtist ? "" : (artists.first ?? "")
         album = mixedAlbum ? "" : (albums.first ?? "")
         genre = mixedGenre ? "" : (genres.first ?? "")
         trackNumber = mixedTrackNumber ? "" : (numbers.first == 0 ? "" : "\(numbers.first!)")
         year = mixedYear ? "" : (years.first == 0 ? "" : "\(years.first!)")
+        starRating = mixedRating ? 0 : (ratings.first ?? 0)
     }
 
     private static func valuesAreEqual<T: Equatable>(_ values: [T]) -> Bool {

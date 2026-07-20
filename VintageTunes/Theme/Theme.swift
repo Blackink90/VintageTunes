@@ -312,3 +312,29 @@ struct BrandMark: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+/// Stelle 0…5 stile iPod/iTunes. Tap sulla stessa stella attiva la azzera.
+struct StarRatingControl: View {
+    let stars: Int
+    var size: CGFloat = 12
+    var interactive: Bool = false
+    var onRate: ((Int) -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: max(1, size * 0.15)) {
+            ForEach(1...5, id: \.self) { index in
+                Image(systemName: index <= stars ? "star.fill" : "star")
+                    .font(.system(size: size, weight: .semibold))
+                    .foregroundStyle(index <= stars ? VTTheme.amber : VTTheme.textSecondary.opacity(0.45))
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        guard interactive, let onRate else { return }
+                        onRate(index == stars ? 0 : index)
+                    }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(stars == 0 ? "Nessuna valutazione" : "\(stars) stelle")
+        .accessibilityAddTraits(interactive ? .isButton : [])
+    }
+}

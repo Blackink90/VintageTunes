@@ -401,6 +401,48 @@ final class LibraryController: ObservableObject {
         trackEditDraft = nil
     }
 
+    /// Imposta stelle 0…5 su uno o più brani e salva su iPod.
+    func setStarRating(_ stars: Int, for ids: [UInt32]) {
+        guard let device = connectedDevice, !ids.isEmpty else { return }
+        let rating = Track.rating(fromStars: stars)
+        var overrides = TrackTagStore.load(from: device)
+        var updated = 0
+
+        for id in ids {
+            guard let idx = tracks.firstIndex(where: { $0.id == id }) else { continue }
+            tracks[idx].rating = rating
+            overrides[tracks[idx].location] = TrackTagOverride(
+                title: tracks[idx].title,
+                artist: tracks[idx].artist,
+                album: tracks[idx].album,
+                genre: tracks[idx].genre,
+                trackNumber: tracks[idx].trackNumber,
+                year: tracks[idx].year,
+                rating: tracks[idx].rating
+            )
+            updated += 1
+        }
+
+        guard updated > 0 else { return }
+
+        do {
+            try TrackTagStore.save(overrides, to: device)
+            try sync.savePlaylists(
+                tracks: tracks,
+                playlists: playlists,
+                dbVersion: dbVersion,
+                device: device
+            )
+            setStatus(.success(
+                updated == 1
+                    ? (stars == 0 ? "Valutazione rimossa" : "Valutazione: \(stars) ★")
+                    : "Valutazione aggiornata su \(updated) brani"
+            ))
+        } catch {
+            setStatus(.failure(error.localizedDescription))
+        }
+    }
+
     func saveTrackEdit() {
         guard var draft = trackEditDraft,
               let device = connectedDevice,
@@ -433,6 +475,7 @@ final class LibraryController: ObservableObject {
                 tracks[idx].genre = draft.genre
                 tracks[idx].trackNumber = UInt32(trackNumberText) ?? 0
                 tracks[idx].year = UInt32(yearText) ?? 0
+                tracks[idx].rating = Track.rating(fromStars: draft.starRating)
             } else {
                 // Multi: campo vuoto = non modificare quel dato sul brano
                 if !draft.artist.isEmpty { tracks[idx].artist = draft.artist }
@@ -444,6 +487,9 @@ final class LibraryController: ObservableObject {
                 if !yearText.isEmpty {
                     tracks[idx].year = UInt32(yearText) ?? 0
                 }
+                if !draft.mixedRating {
+                    tracks[idx].rating = Track.rating(fromStars: draft.starRating)
+                }
             }
 
             overrides[tracks[idx].location] = TrackTagOverride(
@@ -452,7 +498,8 @@ final class LibraryController: ObservableObject {
                 album: tracks[idx].album,
                 genre: tracks[idx].genre,
                 trackNumber: tracks[idx].trackNumber,
-                year: tracks[idx].year
+                year: tracks[idx].year,
+                rating: tracks[idx].rating
             )
 
             let newArtist = tracks[idx].displayArtist
@@ -574,7 +621,8 @@ final class LibraryController: ObservableObject {
                         album: track.album,
                         genre: track.genre,
                         trackNumber: track.trackNumber,
-                        year: track.year
+                        year: track.year,
+                        rating: track.rating
                     )
                 }
                 try? TrackTagStore.save(overrides, to: device)

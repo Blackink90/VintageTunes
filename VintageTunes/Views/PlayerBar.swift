@@ -120,6 +120,12 @@ struct PlayerBar: View {
                     .padding(.top, 2)
                 }
 
+                let liveStars = library.tracks.first(where: { $0.id == track.id })?.starRating ?? track.starRating
+                StarRatingControl(stars: liveStars, size: 12, interactive: true) { stars in
+                    library.setStarRating(stars, for: [track.id])
+                }
+                .help("Valutazione")
+
                 Text("\(playback.currentTimeLabel) / \(playback.durationLabel)")
                     .font(.custom("Avenir Next", size: 11).monospacedDigit())
                     .foregroundStyle(VTTheme.textSecondary)

@@ -384,7 +384,8 @@ final class SyncService {
                     bitrate: $0.bitrate,
                     sampleRate: $0.sampleRate,
                     mediaType: $0.mediaType == 0 ? 1 : $0.mediaType,
-                    filetype: filetypeLabel(for: $0.location)
+                    filetype: filetypeLabel(for: $0.location),
+                    rating: $0.rating
                 )
             }
             var plistDrafts = playlists.map {

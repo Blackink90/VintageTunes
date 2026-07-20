@@ -85,6 +85,17 @@ struct TrackTableView: View {
                 }
                 .width(56)
 
+                TableColumn("★") { track in
+                    StarRatingControl(
+                        stars: track.starRating,
+                        size: 11,
+                        interactive: true
+                    ) { stars in
+                        library.setStarRating(stars, for: [track.id])
+                    }
+                }
+                .width(88)
+
                 TableColumn("Durata") { track in
                     Text(track.durationLabel)
                         .monospacedDigit()
@@ -127,6 +138,16 @@ struct TrackTableView: View {
                     }
                     Button("Modifica informazioni…") {
                         library.beginEditingTracks(ids: Array(ids))
+                    }
+                    Menu("Valutazione") {
+                        Button("Nessuna stella") {
+                            library.setStarRating(0, for: Array(ids))
+                        }
+                        ForEach(1...5, id: \.self) { stars in
+                            Button(String(repeating: "★", count: stars)) {
+                                library.setStarRating(stars, for: Array(ids))
+                            }
+                        }
                     }
                     Button("Ricarica copertina") {
                         library.refreshArtwork(for: Array(ids))
@@ -997,6 +1018,31 @@ struct TrackEditSheet: View {
                         prompt: prompt(mixed: draft.mixedYear, current: draft.year)
                     )
                     .focused($focusedField, equals: .year)
+
+                    LabeledContent("Valutazione") {
+                        HStack(spacing: 10) {
+                            if draft.mixedRating {
+                                Text("Valori diversi")
+                                    .font(.custom("Avenir Next", size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
+                            StarRatingControl(
+                                stars: draft.mixedRating ? 0 : draft.starRating,
+                                size: 16,
+                                interactive: true
+                            ) { stars in
+                                library.trackEditDraft?.starRating = stars
+                                library.trackEditDraft?.mixedRating = false
+                            }
+                            if !draft.mixedRating, draft.starRating > 0 {
+                                Button("Nessuna") {
+                                    library.trackEditDraft?.starRating = 0
+                                    library.trackEditDraft?.mixedRating = false
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                        }
+                    }
                 }
                 .formStyle(.grouped)
                 .scrollDisabled(true)
@@ -1019,7 +1065,7 @@ struct TrackEditSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 440, height: isMulti ? 360 : 400)
+        .frame(width: 440, height: isMulti ? 400 : 440)
         .onAppear {
             focusedField = isMulti ? .artist : .title
         }

@@ -17,6 +17,7 @@ struct iTunesDBWriter {
         var sampleRate: UInt32
         var mediaType: UInt32
         var filetype: String
+        var rating: UInt8 = 0
     }
 
     struct PlaylistDraft {
@@ -134,7 +135,7 @@ struct iTunesDBWriter {
         header[28] = 0
         header[29] = 1
         header[30] = 0
-        header[31] = 0
+        header[31] = min(track.rating, 100)
         writeU32(&header, at: 32, macTimestamp()) // last modified
         writeU32(&header, at: 36, track.sizeBytes)
         writeU32(&header, at: 40, track.durationMs)

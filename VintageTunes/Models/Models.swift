@@ -44,6 +44,8 @@ struct Track: Identifiable, Hashable {
     var bitrate: UInt32
     var sampleRate: UInt32
     var mediaType: UInt32
+    /// Rating iPod/iTunes: 0…100 a passi di 20 (0 = nessuna, 100 = 5 stelle).
+    var rating: UInt8 = 0
     var contentHash: String? = nil
 
     var resolvedPath: URL?
@@ -53,6 +55,14 @@ struct Track: Identifiable, Hashable {
     var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : album }
     var displayGenre: String { genre.isEmpty ? "—" : genre }
     var displayYear: String { year == 0 ? "—" : "\(year)" }
+
+    /// Stelle 0…5.
+    var starRating: Int { Int(rating) / 20 }
+
+    static func rating(fromStars stars: Int) -> UInt8 {
+        let clamped = max(0, min(5, stars))
+        return UInt8(clamped * 20)
+    }
 
     /// Chiave genere per raggruppamento (solo generi non vuoti).
     var genreKey: String? {

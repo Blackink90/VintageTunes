@@ -114,6 +114,7 @@ final class iTunesDBParser {
             let rawRate = headerLen > 60 ? readU32(data, offset + 60) : 0
             let sampleRate = rawRate > 0x10000 ? rawRate >> 16 : rawRate
             let mediaType = headerLen > 208 ? readU32(data, offset + 208) : 1
+            let rating: UInt8 = headerLen > 31 ? data[offset + 31] : 0
 
             var title = ""
             var artist = ""
@@ -167,6 +168,7 @@ final class iTunesDBParser {
                     bitrate: bitrate,
                     sampleRate: sampleRate,
                     mediaType: mediaType,
+                    rating: rating,
                     resolvedPath: resolved
                 )
             )
