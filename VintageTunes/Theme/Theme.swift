@@ -25,9 +25,27 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum SyncMode: String, CaseIterable, Identifiable {
+    case manual
+    case automatic
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .manual: return "Manuale"
+        case .automatic: return "Automatica"
+        }
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private static let appearanceKey = "appearanceMode"
+    private static let syncModeKey = "syncMode"
+    private static let syncBookmarkKey = "syncFolderBookmark"
+    private static let syncPathKey = "syncFolderDisplayPath"
+    private static let dismissedHashesKey = "dismissedSyncHashes"
 
     @Published var appearanceMode: AppearanceMode {
         didSet {
@@ -35,9 +53,126 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var syncMode: SyncMode {
+        didSet {
+            UserDefaults.standard.set(syncMode.rawValue, forKey: Self.syncModeKey)
+        }
+    }
+
+    @Published private(set) var syncFolderDisplayPath: String? {
+        didSet {
+            if let syncFolderDisplayPath {
+                UserDefaults.standard.set(syncFolderDisplayPath, forKey: Self.syncPathKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.syncPathKey)
+            }
+        }
+    }
+
+    @Published private(set) var dismissedSyncHashes: Set<String> {
+        didSet {
+            UserDefaults.standard.set(Array(dismissedSyncHashes).sorted(), forKey: Self.dismissedHashesKey)
+        }
+    }
+
+    private var syncFolderBookmark: Data? {
+        didSet {
+            if let syncFolderBookmark {
+                UserDefaults.standard.set(syncFolderBookmark, forKey: Self.syncBookmarkKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.syncBookmarkKey)
+            }
+        }
+    }
+
+    var hasSyncFolder: Bool { syncFolderBookmark != nil }
+
     init() {
-        let raw = UserDefaults.standard.string(forKey: Self.appearanceKey) ?? AppearanceMode.dark.rawValue
-        appearanceMode = AppearanceMode(rawValue: raw) ?? .dark
+        let appearanceRaw = UserDefaults.standard.string(forKey: Self.appearanceKey) ?? AppearanceMode.dark.rawValue
+        appearanceMode = AppearanceMode(rawValue: appearanceRaw) ?? .dark
+
+        let syncRaw = UserDefaults.standard.string(forKey: Self.syncModeKey) ?? SyncMode.manual.rawValue
+        syncMode = SyncMode(rawValue: syncRaw) ?? .manual
+
+        syncFolderBookmark = UserDefaults.standard.data(forKey: Self.syncBookmarkKey)
+        syncFolderDisplayPath = UserDefaults.standard.string(forKey: Self.syncPathKey)
+        let dismissed = UserDefaults.standard.stringArray(forKey: Self.dismissedHashesKey) ?? []
+        dismissedSyncHashes = Set(dismissed)
+    }
+
+    @discardableResult
+    func chooseSyncFolder() -> Bool {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Seleziona"
+        panel.message = "Cartella da cui VintageTunes proporrà le nuove canzoni all’iPod"
+        if let current = resolvedSyncFolderURL() {
+            panel.directoryURL = current
+        } else {
+            panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Music")
+        }
+
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        return storeSyncFolderBookmark(for: url)
+    }
+
+    @discardableResult
+    private func storeSyncFolderBookmark(for url: URL) -> Bool {
+        do {
+            let data = try url.bookmarkData(
+                options: [.withSecurityScope],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            syncFolderBookmark = data
+            syncFolderDisplayPath = url.path
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    func clearSyncFolder() {
+        syncFolderBookmark = nil
+        syncFolderDisplayPath = nil
+    }
+
+    func resolvedSyncFolderURL() -> URL? {
+        guard let data = syncFolderBookmark else { return nil }
+        var isStale = false
+        do {
+            let url = try URL(
+                resolvingBookmarkData: data,
+                options: [.withSecurityScope],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+            if isStale {
+                if let refreshed = try? url.bookmarkData(
+                    options: [.withSecurityScope],
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                ) {
+                    syncFolderBookmark = refreshed
+                    syncFolderDisplayPath = url.path
+                }
+            }
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    func dismissSyncHashes(_ hashes: [String]) {
+        guard !hashes.isEmpty else { return }
+        dismissedSyncHashes.formUnion(hashes)
+    }
+
+    func clearDismissedSyncHashes() {
+        dismissedSyncHashes = []
     }
 }
 

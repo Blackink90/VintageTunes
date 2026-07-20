@@ -798,6 +798,75 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Sincronizzazione") {
+                Picker("Modalità", selection: $settings.syncMode) {
+                    ForEach(SyncMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: settings.syncMode) { _, mode in
+                    library.refreshAutoSyncWatching()
+                    if mode == .automatic {
+                        library.checkAutoSync()
+                    }
+                }
+
+                if settings.syncMode == .automatic {
+                    HStack(spacing: 8) {
+                        TextField(
+                            "Seleziona una cartella…",
+                            text: Binding(
+                                get: { settings.syncFolderDisplayPath ?? "" },
+                                set: { newValue in
+                                    let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if trimmed.isEmpty {
+                                        settings.clearSyncFolder()
+                                        library.refreshAutoSyncWatching()
+                                    }
+                                }
+                            )
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .help("Cartella osservata per le nuove canzoni")
+
+                        Button("Sfoglia…") {
+                            // Aspetta il ciclo UI: un NSOpenPanel dentro Settings altrimenti fallisce spesso.
+                            DispatchQueue.main.async {
+                                if settings.chooseSyncFolder() {
+                                    library.refreshAutoSyncWatching()
+                                    library.checkAutoSync()
+                                }
+                            }
+                        }
+                        .help("Scegli la cartella di sincronizzazione")
+                    }
+
+                    if settings.hasSyncFolder {
+                        HStack {
+                            Spacer()
+                            Button("Rimuovi cartella", role: .destructive) {
+                                settings.clearSyncFolder()
+                                library.refreshAutoSyncWatching()
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    } else {
+                        Text("Scegli una cartella: con l’iPod collegato verranno proposte le canzoni mancanti.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("Le nuove canzoni nella cartella vengono rilevate anche mentre l’app è aperta.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("In modalità manuale importa con trascina-e-rilascia o da File → Importa cartella.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Dispositivo") {
                 if let device = library.connectedDevice {
                     LabeledContent("Nome", value: device.name)
@@ -833,7 +902,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 420)
+        .frame(width: 520, height: 560)
     }
 }
 

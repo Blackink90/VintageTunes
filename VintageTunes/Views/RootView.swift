@@ -31,36 +31,19 @@ struct RootView: View {
         }
         .preferredColorScheme(settings.appearanceMode.preferredColorScheme)
         .tint(VTTheme.amber)
-        .onAppear { library.start() }
-        .alert(
-            "Convertire in M4A?",
-            isPresented: Binding(
-                get: { library.conversionPrompt != nil },
-                set: { newValue in
-                    // I pulsanti gestiscono conferma/rifiuto; dismiss “vuoto” = annulla tutto.
-                    if !newValue, library.conversionPrompt != nil {
-                        library.cancelImport()
-                    }
-                }
-            )
-        ) {
-            Button("Converti e trasferisci") {
-                library.confirmConversion()
-            }
-            Button("Solo file compatibili") {
-                library.declineConversion()
-            }
-            Button("Annulla", role: .cancel) {
-                library.cancelImport()
-            }
-        } message: {
-            Text(library.conversionPrompt?.message ?? "")
-        }
+        .onAppear { library.start(settings: settings) }
         .sheet(isPresented: Binding(
             get: { library.trackEditDraft != nil },
             set: { if !$0 { library.cancelTrackEdit() } }
         )) {
             TrackEditSheet()
+                .environmentObject(library)
+        }
+        .sheet(isPresented: Binding(
+            get: { library.autoSyncPrompt != nil },
+            set: { if !$0 { library.dismissAutoSync() } }
+        )) {
+            AutoSyncConfirmSheet()
                 .environmentObject(library)
         }
         .overlay(alignment: .bottom) {
@@ -262,5 +245,93 @@ struct EmptyDeviceView: View {
                 .foregroundStyle(VTTheme.textSecondary)
         }
         .padding(40)
+    }
+}
+
+struct AutoSyncConfirmSheet: View {
+    @EnvironmentObject private var library: LibraryController
+
+    private var candidates: [AutoSyncCandidate] {
+        library.autoSyncPrompt?.candidates ?? []
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Nuove canzoni nella cartella sync")
+                        .font(VTTheme.displayFont(size: 20))
+                        .foregroundStyle(VTTheme.textPrimary)
+                    Text(candidates.count == 1
+                          ? "1 brano non è ancora sull’iPod."
+                          : "\(candidates.count) brani non sono ancora sull’iPod.")
+                        .font(.custom("Avenir Next", size: 13))
+                        .foregroundStyle(VTTheme.textSecondary)
+                }
+                Spacer()
+            }
+            .padding(20)
+
+            Divider().opacity(0.2)
+
+            List(candidates) { candidate in
+                HStack(spacing: 12) {
+                    CoverArtView(
+                        artist: candidate.displayArtist,
+                        album: candidate.displayAlbum,
+                        fileURL: candidate.url,
+                        cornerRadius: 6
+                    )
+                    .frame(width: 44, height: 44)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(candidate.displayTitle)
+                            .font(.custom("Avenir Next", size: 13).weight(.semibold))
+                            .foregroundStyle(VTTheme.textPrimary)
+                            .lineLimit(1)
+                        Text("\(candidate.displayArtist) · \(candidate.displayAlbum)")
+                            .font(.custom("Avenir Next", size: 11))
+                            .foregroundStyle(VTTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if candidate.needsConversion {
+                        Text("Conversione")
+                            .font(.custom("Avenir Next", size: 10).weight(.bold))
+                            .foregroundStyle(VTTheme.amber)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(VTTheme.amberSoft, in: Capsule())
+                    }
+                }
+                .padding(.vertical, 2)
+                .listRowBackground(Color.clear)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+
+            Divider().opacity(0.2)
+
+            HStack {
+                Button("Non ora") {
+                    library.dismissAutoSync()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button(candidates.count == 1 ? "Importa 1 canzone" : "Importa \(candidates.count) canzoni") {
+                    library.confirmAutoSync()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(VTTheme.amber)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(20)
+        }
+        .frame(width: 520, height: 480)
+        .background(VTTheme.panel)
     }
 }

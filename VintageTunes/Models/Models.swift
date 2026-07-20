@@ -190,31 +190,21 @@ enum SyncStatus: Equatable {
     case failure(String)
 }
 
-struct ConversionPrompt: Identifiable, Equatable {
+struct AutoSyncCandidate: Identifiable, Equatable, Hashable {
+    var id: String { contentHash }
+    let url: URL
+    let title: String
+    let artist: String
+    let album: String
+    let contentHash: String
+    let needsConversion: Bool
+
+    var displayTitle: String { title.isEmpty ? url.deletingPathExtension().lastPathComponent : title }
+    var displayArtist: String { artist.isEmpty ? "Artista sconosciuto" : artist }
+    var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : album }
+}
+
+struct AutoSyncPrompt: Identifiable, Equatable {
     let id = UUID()
-    let convertibleURLs: [URL]
-    let readyURLs: [URL]
-    let rejectedNames: [String]
-
-    var formatsLabel: String {
-        let exts = Set(convertibleURLs.map { $0.pathExtension.uppercased() }).sorted()
-        return exts.joined(separator: ", ")
-    }
-
-    var message: String {
-        let n = convertibleURLs.count
-        let formats = formatsLabel
-        var text = n == 1
-            ? "1 file (\(formats)) non è riproducibile sull'iPod stock."
-            : "\(n) file (\(formats)) non sono riproducibili sull'iPod stock."
-        text += " Vuoi convertirli in M4A (AAC) e trasferirli?"
-        if !readyURLs.isEmpty {
-            text += "\n\n\(readyURLs.count) file già compatibili verranno trasferiti comunque."
-        }
-        if !rejectedNames.isEmpty {
-            text += "\n\nIgnorati: \(rejectedNames.prefix(3).joined(separator: ", "))"
-            if rejectedNames.count > 3 { text += "…" }
-        }
-        return text
-    }
+    let candidates: [AutoSyncCandidate]
 }

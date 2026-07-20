@@ -20,22 +20,27 @@ final class LibraryController: ObservableObject {
     @Published var isLoading = false
     @Published var dbVersion: UInt32 = 0x14
     @Published var pendingImports: [ImportCandidate] = []
-    @Published var conversionPrompt: ConversionPrompt?
     @Published var trackEditDraft: TrackEditDraft?
     @Published var showiPodPreview = false
+    @Published var autoSyncPrompt: AutoSyncPrompt?
 
     let detector = iPodDetector()
     let playback = PlaybackController()
     let artwork = ArtworkCache.shared
     private let sync = SyncService()
+    private let folderSync = FolderSyncService()
+    private weak var appSettings: AppSettings?
     private var detectorCancellable: AnyCancellable?
     private var statusDismissTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
     private var importCancelled = false
+    private var autoSyncTask: Task<Void, Never>?
+    private var pendingAutoSyncCheck = false
+    private var syncFolderScopedURL: URL?
 
     var isImportRunning: Bool {
         if case .working = syncStatus { return true }
-        return conversionPrompt != nil
+        return false
     }
 
     /// Aggiorna lo stato UI; success/failure spariscono da soli dopo pochi secondi.
@@ -266,13 +271,18 @@ final class LibraryController: ObservableObject {
         }
     }
 
-    func start() {
+    func start(settings: AppSettings) {
+        appSettings = settings
         detector.start()
         detectorCancellable = detector.$devices
             .receive(on: RunLoop.main)
             .sink { [weak self] devices in
                 self?.handleDevices(devices)
             }
+        folderSync.onFolderChanged = { [weak self] in
+            self?.checkAutoSync()
+        }
+        refreshAutoSyncWatching()
     }
 
     func refresh() {
@@ -292,6 +302,7 @@ final class LibraryController: ObservableObject {
             selection.removeAll()
             clearBrowse()
             artwork.clear()
+            clearAutoSyncUI()
             setStatus(.success("Demo disconnessa"))
             return
         }
@@ -302,6 +313,7 @@ final class LibraryController: ObservableObject {
             playlists = []
             clearBrowse()
             artwork.clear()
+            clearAutoSyncUI()
             setStatus(.success("iPod espulso"))
         } catch {
             setStatus(.failure(error.localizedDescription))
@@ -548,6 +560,7 @@ final class LibraryController: ObservableObject {
                 selectedPlaylistID = playlists.first(where: { !$0.isMaster })?.id
             }
             setStatus(.success("Caricate \(result.tracks.count) tracce"))
+            checkAutoSync()
         } catch {
             setStatus(.failure(error.localizedDescription))
         }
@@ -577,46 +590,15 @@ final class LibraryController: ObservableObject {
         importDroppedURLs(panel.urls)
     }
 
-    func confirmConversion() {
-        guard let prompt = conversionPrompt else { return }
-        conversionPrompt = nil
-        importCancelled = false
-        importTask = Task { @MainActor in
-            await runImport(
-                ready: prompt.readyURLs,
-                toConvert: prompt.convertibleURLs,
-                convert: true
-            )
-            releaseImportSecurityRoots()
-        }
-    }
-
-    func declineConversion() {
-        guard let prompt = conversionPrompt else { return }
-        conversionPrompt = nil
-        if prompt.readyURLs.isEmpty {
-            setStatus(.failure("Trasferimento annullato: nessun file compatibile"))
-            releaseImportSecurityRoots()
-            return
-        }
-        importCancelled = false
-        importTask = Task { @MainActor in
-            await runImport(ready: prompt.readyURLs, toConvert: [], convert: false)
-            releaseImportSecurityRoots()
-        }
-    }
-
-    /// Interrompe scan/conversione/import in corso (o chiude il prompt di conversione senza trasferire).
+    /// Interrompe scan/conversione/import in corso.
     func cancelImport(silent: Bool = false) {
         importCancelled = true
         importTask?.cancel()
         importTask = nil
-        if conversionPrompt != nil {
-            conversionPrompt = nil
-            releaseImportSecurityRoots()
-        }
+        releaseImportSecurityRoots()
         if !silent {
             setStatus(.success("Import annullato"))
+            finishImportAndMaybeAutoSync()
         }
     }
 
@@ -667,18 +649,12 @@ final class LibraryController: ObservableObject {
             setStatus(.working("Trovati \(files.count) file audio…"))
             try throwIfImportCancelled()
 
-            if !convertible.isEmpty {
-                conversionPrompt = ConversionPrompt(
-                    convertibleURLs: convertible,
-                    readyURLs: ready,
-                    rejectedNames: []
-                )
-                setStatus(.idle)
-                // Security roots restano aperti fino a conferma/rifiuto conversione
-                return
-            }
-
-            await runImport(ready: ready, toConvert: [], convert: false)
+            // Conversione M4A automatica per formati non riprodotti dallo stock (FLAC, …).
+            await runImport(
+                ready: ready,
+                toConvert: convertible,
+                convert: !convertible.isEmpty
+            )
             releaseImportSecurityRoots()
         } catch is CancellationError {
             releaseImportSecurityRoots()
@@ -835,6 +811,101 @@ final class LibraryController: ObservableObject {
         }
 
         tempFiles.forEach { try? FileManager.default.removeItem(at: $0) }
+        finishImportAndMaybeAutoSync()
+    }
+
+    private func finishImportAndMaybeAutoSync() {
+        if pendingAutoSyncCheck {
+            pendingAutoSyncCheck = false
+            checkAutoSync()
+        }
+    }
+
+    // MARK: - Auto sync
+
+    func refreshAutoSyncWatching() {
+        folderSync.stopWatching()
+        releaseSyncFolderAccess()
+        guard let settings = appSettings, settings.syncMode == .automatic else { return }
+        guard let folder = ensureSyncFolderAccess() else { return }
+        folderSync.startWatching(url: folder)
+    }
+
+    func checkAutoSync() {
+        guard let settings = appSettings, settings.syncMode == .automatic else { return }
+        guard connectedDevice != nil, !isLoading else { return }
+
+        if isImportRunning || autoSyncPrompt != nil {
+            pendingAutoSyncCheck = true
+            return
+        }
+
+        guard let folder = ensureSyncFolderAccess() else { return }
+
+        autoSyncTask?.cancel()
+        let dismissed = settings.dismissedSyncHashes
+        let librarySnapshot = tracks
+        autoSyncTask = Task { @MainActor in
+            let candidates = await FolderSyncService.findNewCandidates(
+                in: folder,
+                libraryTracks: librarySnapshot,
+                dismissedHashes: dismissed
+            )
+            guard !Task.isCancelled else { return }
+            guard !candidates.isEmpty else { return }
+
+            if self.isImportRunning {
+                self.pendingAutoSyncCheck = true
+                return
+            }
+            if self.autoSyncPrompt != nil { return }
+
+            self.autoSyncPrompt = AutoSyncPrompt(candidates: candidates)
+            for candidate in candidates {
+                self.artwork.request(
+                    artist: candidate.displayArtist,
+                    album: candidate.displayAlbum,
+                    fileURL: candidate.url
+                )
+            }
+        }
+    }
+
+    func confirmAutoSync() {
+        guard let prompt = autoSyncPrompt else { return }
+        let urls = prompt.candidates.map(\.url)
+        autoSyncPrompt = nil
+        importDroppedURLs(urls)
+    }
+
+    func dismissAutoSync() {
+        guard let prompt = autoSyncPrompt else { return }
+        appSettings?.dismissSyncHashes(prompt.candidates.map(\.contentHash))
+        autoSyncPrompt = nil
+        if pendingAutoSyncCheck {
+            pendingAutoSyncCheck = false
+            checkAutoSync()
+        }
+    }
+
+    private func ensureSyncFolderAccess() -> URL? {
+        if let syncFolderScopedURL { return syncFolderScopedURL }
+        guard let url = appSettings?.resolvedSyncFolderURL() else { return nil }
+        _ = url.startAccessingSecurityScopedResource()
+        syncFolderScopedURL = url
+        return url
+    }
+
+    private func releaseSyncFolderAccess() {
+        syncFolderScopedURL?.stopAccessingSecurityScopedResource()
+        syncFolderScopedURL = nil
+    }
+
+    private func clearAutoSyncUI() {
+        autoSyncTask?.cancel()
+        autoSyncTask = nil
+        autoSyncPrompt = nil
+        pendingAutoSyncCheck = false
     }
 
     func removeLibraryDuplicates(silentIfNone: Bool = false) {
@@ -961,6 +1032,7 @@ final class LibraryController: ObservableObject {
                 playlists = []
                 clearBrowse()
                 artwork.clear()
+                clearAutoSyncUI()
                 setStatus(.idle)
             }
         }
