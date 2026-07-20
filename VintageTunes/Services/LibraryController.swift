@@ -889,7 +889,7 @@ final class LibraryController: ObservableObject {
                     let artData: Data?
                     if let embedded = await CoverArtService.loadEmbeddedData(from: m4a) {
                         artData = embedded
-                    } else if let remote = await CoverArtService.fetchFromiTunes(
+                    } else if let remote = await CoverArtService.fetchFromOnline(
                         artist: merged.artist,
                         album: merged.album
                     ) {
