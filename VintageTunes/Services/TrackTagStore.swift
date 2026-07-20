@@ -9,6 +9,8 @@ struct TrackTagOverride: Codable, Equatable {
     var trackNumber: UInt32
     var year: UInt32
     var rating: UInt8 = 0
+    var playCount: UInt32 = 0
+    var lastPlayedMacTime: UInt32 = 0
 }
 
 enum TrackTagStore {
@@ -44,6 +46,8 @@ enum TrackTagStore {
             tracks[i].trackNumber = patch.trackNumber
             tracks[i].year = patch.year
             tracks[i].rating = patch.rating
+            tracks[i].playCount = patch.playCount
+            tracks[i].lastPlayedMacTime = patch.lastPlayedMacTime
         }
     }
 }

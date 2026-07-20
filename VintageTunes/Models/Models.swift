@@ -46,7 +46,13 @@ struct Track: Identifiable, Hashable {
     var mediaType: UInt32
     /// Rating iPod/iTunes: 0…100 a passi di 20 (0 = nessuna, 100 = 5 stelle).
     var rating: UInt8 = 0
+    /// Conteggio riproduzioni (iTunesDB mhit).
+    var playCount: UInt32 = 0
+    /// Ultima riproduzione in epoch Mac (secondi dal 1904-01-01); 0 = mai.
+    var lastPlayedMacTime: UInt32 = 0
     var contentHash: String? = nil
+    /// Raw mhit header + unmanaged MHODs; nil for tracks created in-app.
+    var dbBlob: TrackDBBlob? = nil
 
     var resolvedPath: URL?
 
@@ -55,6 +61,7 @@ struct Track: Identifiable, Hashable {
     var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : album }
     var displayGenre: String { genre.isEmpty ? "—" : genre }
     var displayYear: String { year == 0 ? "—" : "\(year)" }
+    var displayPlayCount: String { playCount == 0 ? "—" : "\(playCount)" }
 
     /// Stelle 0…5.
     var starRating: Int { Int(rating) / 20 }
@@ -63,6 +70,18 @@ struct Track: Identifiable, Hashable {
         let clamped = max(0, min(5, stars))
         return UInt8(clamped * 20)
     }
+
+    /// Epoch Mac ↔ Date.
+    static func macTimestamp(from date: Date = Date()) -> UInt32 {
+        UInt32(date.timeIntervalSince1970 + 2_082_844_800)
+    }
+
+    static func date(fromMacTimestamp stamp: UInt32) -> Date? {
+        guard stamp > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(stamp) - 2_082_844_800)
+    }
+
+    var lastPlayedDate: Date? { Self.date(fromMacTimestamp: lastPlayedMacTime) }
 
     /// Chiave genere per raggruppamento (solo generi non vuoti).
     var genreKey: String? {
@@ -90,6 +109,49 @@ struct Track: Identifiable, Hashable {
     }
 
     var albumKey: String { "\(displayAlbum)|||\(displayArtist)" }
+
+    /// Equality ignores opaque DB bytes so UI/metadata diffs stay meaningful.
+    static func == (lhs: Track, rhs: Track) -> Bool {
+        lhs.id == rhs.id
+            && lhs.title == rhs.title
+            && lhs.artist == rhs.artist
+            && lhs.album == rhs.album
+            && lhs.genre == rhs.genre
+            && lhs.location == rhs.location
+            && lhs.durationMs == rhs.durationMs
+            && lhs.sizeBytes == rhs.sizeBytes
+            && lhs.trackNumber == rhs.trackNumber
+            && lhs.year == rhs.year
+            && lhs.bitrate == rhs.bitrate
+            && lhs.sampleRate == rhs.sampleRate
+            && lhs.mediaType == rhs.mediaType
+            && lhs.rating == rhs.rating
+            && lhs.playCount == rhs.playCount
+            && lhs.lastPlayedMacTime == rhs.lastPlayedMacTime
+            && lhs.contentHash == rhs.contentHash
+            && lhs.resolvedPath == rhs.resolvedPath
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(title)
+        hasher.combine(artist)
+        hasher.combine(album)
+        hasher.combine(genre)
+        hasher.combine(location)
+        hasher.combine(durationMs)
+        hasher.combine(sizeBytes)
+        hasher.combine(trackNumber)
+        hasher.combine(year)
+        hasher.combine(bitrate)
+        hasher.combine(sampleRate)
+        hasher.combine(mediaType)
+        hasher.combine(rating)
+        hasher.combine(playCount)
+        hasher.combine(lastPlayedMacTime)
+        hasher.combine(contentHash)
+        hasher.combine(resolvedPath)
+    }
 }
 
 struct AlbumRef: Identifiable, Hashable {
@@ -141,12 +203,28 @@ struct Playlist: Identifiable, Hashable {
     var name: String
     var isMaster: Bool
     var trackIDs: [UInt32]
+    /// Raw mhyp header + unmanaged MHODs; nil for playlists created in-app.
+    var dbBlob: PlaylistDBBlob? = nil
 
     var songCount: Int { trackIDs.count }
 
     func resolvedSongCount(using tracks: [Track]) -> Int {
         let known = Set(tracks.map(\.id))
         return trackIDs.filter { known.contains($0) }.count
+    }
+
+    static func == (lhs: Playlist, rhs: Playlist) -> Bool {
+        lhs.id == rhs.id
+            && lhs.name == rhs.name
+            && lhs.isMaster == rhs.isMaster
+            && lhs.trackIDs == rhs.trackIDs
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(name)
+        hasher.combine(isMaster)
+        hasher.combine(trackIDs)
     }
 }
 

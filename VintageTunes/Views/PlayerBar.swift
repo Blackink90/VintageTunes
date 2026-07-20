@@ -121,10 +121,18 @@ struct PlayerBar: View {
                 }
 
                 let liveStars = library.tracks.first(where: { $0.id == track.id })?.starRating ?? track.starRating
-                StarRatingControl(stars: liveStars, size: 12, interactive: true) { stars in
-                    library.setStarRating(stars, for: [track.id])
+                let livePlays = library.tracks.first(where: { $0.id == track.id })?.playCount ?? track.playCount
+                VStack(alignment: .trailing, spacing: 2) {
+                    StarRatingControl(stars: liveStars, size: 12, interactive: true) { stars in
+                        library.setStarRating(stars, for: [track.id])
+                    }
+                    if livePlays > 0 {
+                        Text("\(livePlays) ascolti")
+                            .font(.custom("Avenir Next", size: 10))
+                            .foregroundStyle(VTTheme.textSecondary)
+                    }
                 }
-                .help("Valutazione")
+                .help("Valutazione e ascolti")
 
                 Text("\(playback.currentTimeLabel) / \(playback.durationLabel)")
                     .font(.custom("Avenir Next", size: 11).monospacedDigit())

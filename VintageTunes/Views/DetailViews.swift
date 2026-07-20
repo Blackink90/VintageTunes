@@ -96,6 +96,13 @@ struct TrackTableView: View {
                 }
                 .width(88)
 
+                TableColumn("Ascolti") { track in
+                    Text(track.displayPlayCount)
+                        .monospacedDigit()
+                        .foregroundStyle(VTTheme.textSecondary)
+                }
+                .width(56)
+
                 TableColumn("Durata") { track in
                     Text(track.durationLabel)
                         .monospacedDigit()

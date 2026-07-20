@@ -21,9 +21,13 @@ struct ParsedLibrary {
     var playlists: [Playlist]
     var dbVersion: UInt32
     var rawData: Data
+    var session: iTunesDBSessionState
 }
 
 final class iTunesDBParser {
+    /// MHOD string types managed by VintageTunes (rebuilt on write).
+    private static let managedMhodTypes: Set<UInt32> = [1, 2, 3, 4, 5, 6]
+
     func parse(at url: URL, volumeRoot: URL) throws -> ParsedLibrary {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw iTunesDBError.missingFile
@@ -34,11 +38,17 @@ final class iTunesDBParser {
         let magic = String(bytes: data[0..<4], encoding: .ascii) ?? ""
         guard magic == "mhbd" else { throw iTunesDBError.invalidHeader(magic) }
 
+        let mhbdHeaderLen = Int(readU32(data, 4))
+        guard mhbdHeaderLen >= 12, mhbdHeaderLen <= data.count else { throw iTunesDBError.truncated }
+        let mhbdHeader = Data(data[0..<mhbdHeaderLen])
+
         let dbVersion = readU32(data, 16)
         var tracks: [Track] = []
         var playlists: [Playlist] = []
+        var mhsdLayout: [iTunesDBMHSDSlot] = []
+        var hasPlaylistSlot = false
 
-        var offset = Int(readU32(data, 4))
+        var offset = mhbdHeaderLen
         let total = Int(readU32(data, 8))
         let end = min(total, data.count)
 
@@ -52,23 +62,46 @@ final class iTunesDBParser {
                 let type = readU32(data, offset + 12)
                 let bodyStart = offset + headerLen
                 let bodyEnd = offset + totalLen
+                let preservedChunk = Data(data[offset..<(offset + totalLen)])
+
                 switch type {
                 case 1:
                     tracks = parseTrackList(data, start: bodyStart, end: bodyEnd, volumeRoot: volumeRoot)
-                case 2, 3, 5:
+                    mhsdLayout.append(.tracks)
+                case 2:
                     let parsed = parsePlaylistList(data, start: bodyStart, end: bodyEnd)
-                    if type == 2 || playlists.isEmpty {
+                    playlists.append(contentsOf: parsed)
+                    if !hasPlaylistSlot {
+                        mhsdLayout.append(.playlists)
+                        hasPlaylistSlot = true
+                    } else {
+                        mhsdLayout.append(.preserved(preservedChunk))
+                    }
+                case 3, 5:
+                    if !hasPlaylistSlot {
+                        let parsed = parsePlaylistList(data, start: bodyStart, end: bodyEnd)
                         playlists.append(contentsOf: parsed)
+                        mhsdLayout.append(.playlists)
+                        hasPlaylistSlot = true
+                    } else {
+                        mhsdLayout.append(.preserved(preservedChunk))
                     }
                 default:
-                    break
+                    mhsdLayout.append(.preserved(preservedChunk))
                 }
             }
 
             offset += totalLen
         }
 
-        // Deduplicate playlists by id while preferring fuller lists
+        if !mhsdLayout.contains(where: { if case .tracks = $0 { return true }; return false }) {
+            mhsdLayout.insert(.tracks, at: 0)
+        }
+        if !hasPlaylistSlot {
+            mhsdLayout.append(.playlists)
+        }
+
+        // Deduplicate playlists by id while preferring fuller lists (keep their blob).
         var unique: [UInt64: Playlist] = [:]
         for p in playlists {
             if let existing = unique[p.id] {
@@ -84,7 +117,8 @@ final class iTunesDBParser {
             tracks: tracks,
             playlists: Array(unique.values).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending },
             dbVersion: dbVersion,
-            rawData: data
+            rawData: data,
+            session: iTunesDBSessionState(mhbdHeader: mhbdHeader, mhsdLayout: mhsdLayout)
         )
     }
 
@@ -104,6 +138,8 @@ final class iTunesDBParser {
             let totalLen = Int(readU32(data, offset + 8))
             guard headerLen >= 0x9c, totalLen >= headerLen, offset + totalLen <= data.count else { break }
 
+            let headerBytes = Data(data[offset..<(offset + headerLen)])
+
             let trackID = readU32(data, offset + 16)
             let sizeBytes = headerLen > 36 ? readU32(data, offset + 36) : 0
             let durationMs = headerLen > 40 ? readU32(data, offset + 40) : 0
@@ -115,12 +151,15 @@ final class iTunesDBParser {
             let sampleRate = rawRate > 0x10000 ? rawRate >> 16 : rawRate
             let mediaType = headerLen > 208 ? readU32(data, offset + 208) : 1
             let rating: UInt8 = headerLen > 31 ? data[offset + 31] : 0
+            let playCount = headerLen > 80 ? readU32(data, offset + 80) : 0
+            let lastPlayedMacTime = headerLen > 88 ? readU32(data, offset + 88) : 0
 
             var title = ""
             var artist = ""
             var album = ""
             var genre = ""
             var location = ""
+            var extraMhods: [Data] = []
 
             var child = offset + headerLen
             let childEnd = offset + totalLen
@@ -132,15 +171,19 @@ final class iTunesDBParser {
                 let type = readU32(data, child + 12)
                 guard cTotal >= cHeader, child + cTotal <= data.count else { break }
 
-                if let str = readMhodString(data, at: child) {
-                    switch type {
-                    case 1: title = str
-                    case 2: location = str
-                    case 3: album = str
-                    case 4: artist = str
-                    case 5: genre = str
-                    default: break
+                if Self.managedMhodTypes.contains(type) {
+                    if let str = readMhodString(data, at: child) {
+                        switch type {
+                        case 1: title = str
+                        case 2: location = str
+                        case 3: album = str
+                        case 4: artist = str
+                        case 5: genre = str
+                        default: break // type 6 filetype — regenerated on write
+                        }
                     }
+                } else {
+                    extraMhods.append(Data(data[child..<(child + cTotal)]))
                 }
                 child += cTotal
             }
@@ -169,6 +212,9 @@ final class iTunesDBParser {
                     sampleRate: sampleRate,
                     mediaType: mediaType,
                     rating: rating,
+                    playCount: playCount,
+                    lastPlayedMacTime: lastPlayedMacTime,
+                    dbBlob: TrackDBBlob(header: headerBytes, extraMhods: extraMhods),
                     resolvedPath: resolved
                 )
             )
@@ -195,11 +241,13 @@ final class iTunesDBParser {
             let totalLen = Int(readU32(data, offset + 8))
             guard totalLen >= headerLen, offset + totalLen <= data.count else { break }
 
+            let headerBytes = Data(data[offset..<(offset + headerLen)])
             let isMaster = headerLen > 20 ? readU32(data, offset + 20) == 1 : false
             let timestamp = headerLen > 28 ? readU64(data, offset + 28) : UInt64(offset)
 
             var name = isMaster ? "Libreria" : "Playlist"
             var trackIDs: [UInt32] = []
+            var extraMhods: [Data] = []
 
             var child = offset + headerLen
             let childEnd = offset + totalLen
@@ -213,6 +261,8 @@ final class iTunesDBParser {
                     let type = readU32(data, child + 12)
                     if type == 1, let str = readMhodString(data, at: child), !str.isEmpty {
                         name = str
+                    } else {
+                        extraMhods.append(Data(data[child..<(child + cTotal)]))
                     }
                 } else if cmagic == "mhip" {
                     // track id typically at offset 24 in mhip
@@ -230,7 +280,8 @@ final class iTunesDBParser {
                     id: timestamp == 0 ? UInt64(offset) : timestamp,
                     name: name,
                     isMaster: isMaster,
-                    trackIDs: trackIDs
+                    trackIDs: trackIDs,
+                    dbBlob: PlaylistDBBlob(header: headerBytes, extraMhods: extraMhods)
                 )
             )
 

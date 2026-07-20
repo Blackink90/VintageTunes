@@ -282,6 +282,9 @@ final class LibraryController: ObservableObject {
         folderSync.onFolderChanged = { [weak self] in
             self?.checkAutoSync()
         }
+        playback.onTrackPlayStarted = { [weak self] track in
+            self?.recordPlayback(of: track.id)
+        }
         refreshAutoSyncWatching()
     }
 
@@ -362,6 +365,54 @@ final class LibraryController: ObservableObject {
         playback.play(track, queue: filteredTracks)
     }
 
+    /// Incrementa play count + last played (come ascolto in iTunes) e salva con debounce.
+    func recordPlayback(of trackID: UInt32) {
+        guard let idx = tracks.firstIndex(where: { $0.id == trackID }) else { return }
+        tracks[idx].playCount &+= 1
+        tracks[idx].lastPlayedMacTime = Track.macTimestamp()
+        schedulePlayStatsPersist()
+    }
+
+    private var playStatsPersistTask: Task<Void, Never>?
+
+    private func schedulePlayStatsPersist() {
+        playStatsPersistTask?.cancel()
+        playStatsPersistTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            persistPlayStatsNow()
+        }
+    }
+
+    private func persistPlayStatsNow() {
+        guard let device = connectedDevice else { return }
+        var overrides = TrackTagStore.load(from: device)
+        for track in tracks {
+            overrides[track.location] = TrackTagOverride(
+                title: track.title,
+                artist: track.artist,
+                album: track.album,
+                genre: track.genre,
+                trackNumber: track.trackNumber,
+                year: track.year,
+                rating: track.rating,
+                playCount: track.playCount,
+                lastPlayedMacTime: track.lastPlayedMacTime
+            )
+        }
+        do {
+            try TrackTagStore.save(overrides, to: device)
+            try sync.savePlaylists(
+                tracks: tracks,
+                playlists: playlists,
+                dbVersion: dbVersion,
+                device: device
+            )
+        } catch {
+            setStatus(.failure(error.localizedDescription))
+        }
+    }
+
     func refreshArtwork(for ids: [UInt32]) {
         let selected = ids.compactMap { id in tracks.first(where: { $0.id == id }) }
         guard !selected.isEmpty else { return }
@@ -418,7 +469,9 @@ final class LibraryController: ObservableObject {
                 genre: tracks[idx].genre,
                 trackNumber: tracks[idx].trackNumber,
                 year: tracks[idx].year,
-                rating: tracks[idx].rating
+                rating: tracks[idx].rating,
+                playCount: tracks[idx].playCount,
+                lastPlayedMacTime: tracks[idx].lastPlayedMacTime
             )
             updated += 1
         }
@@ -499,7 +552,9 @@ final class LibraryController: ObservableObject {
                 genre: tracks[idx].genre,
                 trackNumber: tracks[idx].trackNumber,
                 year: tracks[idx].year,
-                rating: tracks[idx].rating
+                rating: tracks[idx].rating,
+                playCount: tracks[idx].playCount,
+                lastPlayedMacTime: tracks[idx].lastPlayedMacTime
             )
 
             let newArtist = tracks[idx].displayArtist
@@ -622,7 +677,9 @@ final class LibraryController: ObservableObject {
                         genre: track.genre,
                         trackNumber: track.trackNumber,
                         year: track.year,
-                        rating: track.rating
+                        rating: track.rating,
+                        playCount: track.playCount,
+                        lastPlayedMacTime: track.lastPlayedMacTime
                     )
                 }
                 try? TrackTagStore.save(overrides, to: device)
