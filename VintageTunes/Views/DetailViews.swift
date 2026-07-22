@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct DetailContainer: View {
     @EnvironmentObject private var library: LibraryController
@@ -829,6 +830,15 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Accesso all’iPod") {
+                Text("Se macOS chiede il permesso a ogni avvio, in Xcode aggiungi il tuo Apple ID (Settings → Accounts) e abilita Signing Team sul target: così la firma resta stabile e il consenso viene ricordato.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Text("In Impostazioni di sistema → Privacy e sicurezza, concedi a VintageTunes l’accesso ai volumi rimovibili.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Sincronizzazione") {
                 Picker("Modalità", selection: $settings.syncMode) {
                     ForEach(SyncMode.allCases) { mode in
@@ -1052,6 +1062,50 @@ struct TrackEditSheet: View {
                             }
                         }
                     }
+
+                    LabeledContent("Copertina") {
+                        HStack(alignment: .center, spacing: 12) {
+                            coverPreview(for: draft)
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                if let name = draft.coverFileName, draft.coverImageData != nil, !draft.removeManualCover {
+                                    Text(name)
+                                        .font(.custom("Avenir Next", size: 12))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                    Text("Priorità su file e ricerca online")
+                                        .font(.custom("Avenir Next", size: 10))
+                                        .foregroundStyle(.tertiary)
+                                } else {
+                                    Text(draft.isMulti
+                                          ? "Stessa immagine per i brani selezionati"
+                                          : "Nessuna copertina personalizzata")
+                                        .font(.custom("Avenir Next", size: 12))
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                HStack(spacing: 10) {
+                                    Button("Scegli file…") {
+                                        pickCoverImage()
+                                    }
+                                    .buttonStyle(.borderless)
+
+                                    if draft.coverImageData != nil, !draft.removeManualCover {
+                                        Button("Rimuovi") {
+                                            library.trackEditDraft?.coverImageData = nil
+                                            library.trackEditDraft?.coverFileName = nil
+                                            library.trackEditDraft?.removeManualCover = true
+                                            library.trackEditDraft?.coverDidChange = true
+                                        }
+                                        .buttonStyle(.borderless)
+                                    }
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
                 }
                 .formStyle(.grouped)
                 .scrollDisabled(true)
@@ -1074,9 +1128,50 @@ struct TrackEditSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 440, height: isMulti ? 400 : 440)
+        .frame(width: 460, height: isMulti ? 460 : 500)
         .onAppear {
             focusedField = isMulti ? .artist : .title
+        }
+    }
+
+    @ViewBuilder
+    private func coverPreview(for draft: TrackEditDraft) -> some View {
+        if !draft.removeManualCover, let data = draft.coverImageData, let image = NSImage(data: data) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(VTTheme.controlFill)
+                Image(systemName: "music.note")
+                    .foregroundStyle(VTTheme.textSecondary.opacity(0.55))
+            }
+        }
+    }
+
+    private func pickCoverImage() {
+        // NSOpenPanel in un foglio a volte fallisce nello stesso ciclo runloop.
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = [.jpeg, .png, .heic, .tiff, .gif]
+            panel.prompt = "Scegli"
+            panel.message = "Copertina personalizzata (ha priorità su file e online)"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url), !data.isEmpty,
+                  NSImage(data: data) != nil else {
+                library.setStatus(.failure("Immagine non valida"))
+                return
+            }
+            library.trackEditDraft?.coverImageData = data
+            library.trackEditDraft?.coverFileName = url.lastPathComponent
+            library.trackEditDraft?.removeManualCover = false
+            library.trackEditDraft?.coverDidChange = true
         }
     }
 

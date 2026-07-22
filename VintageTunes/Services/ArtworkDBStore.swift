@@ -150,17 +150,71 @@ final class ArtworkDBStore {
     /// Append cover art for a track. Returns mhii id to store in `Track.mhiiLink`.
     @discardableResult
     func addArtwork(imageData: Data, songDBID: UInt64) throws -> UInt32 {
+        try setArtwork(imageData: imageData, songDBID: songDBID, existingMhiiLink: 0)
+    }
+
+    /// Imposta/sostituisce la cover di un brano. Se esiste già un mhii per lo stesso `songDBID`
+    /// (o `existingMhiiLink`), sovrascrive i pixel negli slot `.ithmb` e riusa lo stesso id —
+    /// così l’iPod non resta agganciato alle thumb vecchie.
+    @discardableResult
+    func setArtwork(imageData: Data, songDBID: UInt64, existingMhiiLink: UInt32 = 0) throws -> UInt32 {
         guard let nsImage = NSImage(data: imageData) else { throw ArtworkDBError.invalidImage }
+
+        // Preferisci entry già collegata, altrimenti per songDBID.
+        let existingIndex = images.firstIndex(where: { $0.id == existingMhiiLink && existingMhiiLink != 0 })
+            ?? images.firstIndex(where: { $0.songDBID == songDBID && songDBID != 0 })
+
+        if let existingIndex {
+            var entry = images[existingIndex]
+            var thumbs: [ArtworkThumbRef] = []
+            for format in profile.formats {
+                let slot = try Self.preparedRGB565Slot(from: nsImage, format: format)
+                let fileURL = artworkDir.appendingPathComponent(format.ithmbName)
+                if !FileManager.default.fileExists(atPath: fileURL.path) {
+                    FileManager.default.createFile(atPath: fileURL.path, contents: Data(), attributes: nil)
+                }
+
+                let offset: UInt32
+                if let old = entry.thumbs.first(where: { $0.correlationID == format.correlationID }),
+                   old.size >= UInt32(format.slotBytes) {
+                    offset = old.offset
+                    let handle = try FileHandle(forWritingTo: fileURL)
+                    defer { try? handle.close() }
+                    try handle.seek(toOffset: UInt64(offset))
+                    try handle.write(contentsOf: slot)
+                    try handle.synchronize()
+                } else {
+                    let handle = try FileHandle(forWritingTo: fileURL)
+                    defer { try? handle.close() }
+                    try handle.seekToEnd()
+                    offset = UInt32(handle.offsetInFile)
+                    try handle.write(contentsOf: slot)
+                    try handle.synchronize()
+                }
+
+                thumbs.append(
+                    ArtworkThumbRef(
+                        correlationID: format.correlationID,
+                        offset: offset,
+                        size: UInt32(format.slotBytes),
+                        width: UInt16(format.width),
+                        height: UInt16(format.height)
+                    )
+                )
+            }
+            entry.songDBID = songDBID
+            entry.sourceImageBytes = UInt32(clamping: imageData.count)
+            entry.thumbs = thumbs
+            images[existingIndex] = entry
+
+            // Elimina duplicati orfani (aggiunte precedenti per lo stesso brano).
+            images.removeAll { $0.songDBID == songDBID && $0.id != entry.id }
+            return entry.id
+        }
 
         var thumbs: [ArtworkThumbRef] = []
         for format in profile.formats {
-            let pixels = try Self.rgb565LE(from: nsImage, width: format.width, height: format.height)
-            var slot = pixels
-            if slot.count < format.slotBytes {
-                slot.append(Data(count: format.slotBytes - slot.count))
-            } else if slot.count > format.slotBytes {
-                slot = Data(slot.prefix(format.slotBytes))
-            }
+            let slot = try Self.preparedRGB565Slot(from: nsImage, format: format)
             let fileURL = artworkDir.appendingPathComponent(format.ithmbName)
             if !FileManager.default.fileExists(atPath: fileURL.path) {
                 FileManager.default.createFile(atPath: fileURL.path, contents: Data(), attributes: nil)
@@ -193,6 +247,17 @@ final class ArtworkDBStore {
             )
         )
         return id
+    }
+
+    private static func preparedRGB565Slot(from image: NSImage, format: ArtworkThumbFormat) throws -> Data {
+        let pixels = try rgb565LE(from: image, width: format.width, height: format.height)
+        var slot = pixels
+        if slot.count < format.slotBytes {
+            slot.append(Data(count: format.slotBytes - slot.count))
+        } else if slot.count > format.slotBytes {
+            slot = Data(slot.prefix(format.slotBytes))
+        }
+        return slot
     }
 
     func save() throws {

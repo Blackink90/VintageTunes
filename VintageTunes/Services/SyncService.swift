@@ -465,6 +465,70 @@ final class SyncService {
         return true
     }
 
+    /// Rebuild / replace cover art using raw image bytes (es. copertina caricata a mano).
+    @discardableResult
+    func pushArtworkDataToDevice(
+        imageData: Data,
+        forTrackIDs ids: Set<UInt32>,
+        tracks: inout [Track],
+        playlists: [Playlist],
+        dbVersion: UInt32,
+        device: iPodDevice
+    ) async throws -> Int {
+        guard device.firmwareMode == .stock, !ids.isEmpty else { return 0 }
+        guard let store = try ArtworkDBStore.open(for: device) else { return 0 }
+
+        // Stessa cover per tutti i brani dello stesso album.
+        var targetIDs = ids
+        let albums = Set(
+            tracks.filter { ids.contains($0.id) }
+                .map { CoverArtService.cacheKey(artist: $0.artist, album: $0.album) }
+        )
+        for track in tracks where albums.contains(CoverArtService.cacheKey(artist: track.artist, album: track.album)) {
+            targetIDs.insert(track.id)
+            CoverArtService.saveManualToDisk(data: imageData, artist: track.artist, album: track.album)
+        }
+
+        if store.needsRebuild {
+            await rewriteAllArtwork(tracks: &tracks, store: store, device: device)
+            try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+            return tracks.filter { targetIDs.contains($0.id) && $0.hasArtwork == 1 }.count
+        }
+
+        let merge = absorbPlayCounts(into: &tracks, device: device)
+        var updated = 0
+        for i in tracks.indices where targetIDs.contains(tracks[i].id) {
+            if tracks[i].dbid == 0 { continue }
+            do {
+                let mhii = try store.setArtwork(
+                    imageData: imageData,
+                    songDBID: tracks[i].dbid,
+                    existingMhiiLink: tracks[i].mhiiLink
+                )
+                tracks[i].hasArtwork = 1
+                tracks[i].artworkCount = 1
+                tracks[i].mhiiLink = mhii
+                updated += 1
+                await MainActor.run {
+                    ArtworkCache.shared.store(
+                        artist: tracks[i].artist,
+                        album: tracks[i].album,
+                        data: imageData
+                    )
+                }
+            } catch {
+                continue
+            }
+        }
+        guard updated > 0 else { return 0 }
+        try store.save()
+        try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        if merge.canRemoveFile {
+            PlayCountsFile.remove(from: device)
+        }
+        return updated
+    }
+
     /// Scrive (o aggiorna) le cover sull’ArtworkDB del dispositivo per i brani indicati.
     /// Con `includeAlbumMates` aggiorna anche gli altri brani dello stesso album.
     @discardableResult
@@ -569,7 +633,11 @@ final class SyncService {
             title: track.title
         ) else { return }
         do {
-            let mhii = try store.addArtwork(imageData: artData, songDBID: track.dbid)
+            let mhii = try store.setArtwork(
+                imageData: artData,
+                songDBID: track.dbid,
+                existingMhiiLink: track.mhiiLink
+            )
             track.hasArtwork = 1
             track.artworkCount = 1
             track.mhiiLink = mhii

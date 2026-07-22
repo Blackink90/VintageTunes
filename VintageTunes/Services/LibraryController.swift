@@ -549,7 +549,8 @@ final class LibraryController: ObservableObject {
 
         var overrides = TrackTagStore.load(from: device)
         var updated = 0
-        var artworkRefresh: [(artist: String, album: String, fileURL: URL?)] = []
+        var artworkRefresh: [(artist: String, album: String, fileURL: URL?, title: String?)] = []
+        var coverTargets = Set<UInt32>()
 
         for id in draft.trackIDs {
             guard let idx = tracks.firstIndex(where: { $0.id == id }) else { continue }
@@ -596,9 +597,32 @@ final class LibraryController: ObservableObject {
             let newArtist = tracks[idx].displayArtist
             let newAlbum = tracks[idx].displayAlbum
             if previousArtist != newArtist || previousAlbum != newAlbum {
+                CoverArtService.migrateManualArtwork(
+                    fromArtist: previousArtist,
+                    fromAlbum: previousAlbum,
+                    toArtist: newArtist,
+                    toAlbum: newAlbum
+                )
                 // Non riusare l’embedded del file: può essere dell’album precedente e avvelenare la cache.
                 artwork.invalidate(artist: previousArtist, album: previousAlbum)
-                artworkRefresh.append((newArtist, newAlbum, tracks[idx].resolvedPath))
+                if let migrated = CoverArtService.loadManualFromDisk(artist: newArtist, album: newAlbum) {
+                    artwork.store(artist: newArtist, album: newAlbum, data: migrated)
+                } else {
+                    artworkRefresh.append((newArtist, newAlbum, tracks[idx].resolvedPath, tracks[idx].displayTitle))
+                }
+            }
+
+            if draft.coverDidChange {
+                if draft.removeManualCover {
+                    CoverArtService.removeManualFromDisk(artist: newArtist, album: newAlbum)
+                    CoverArtService.removeFromDisk(artist: newArtist, album: newAlbum)
+                    artwork.invalidate(artist: newArtist, album: newAlbum)
+                    artworkRefresh.append((newArtist, newAlbum, tracks[idx].resolvedPath, tracks[idx].displayTitle))
+                } else if let coverData = draft.coverImageData {
+                    CoverArtService.saveManualToDisk(data: coverData, artist: newArtist, album: newAlbum)
+                    artwork.store(artist: newArtist, album: newAlbum, data: coverData)
+                    coverTargets.insert(tracks[idx].id)
+                }
             }
             updated += 1
         }
@@ -616,20 +640,58 @@ final class LibraryController: ObservableObject {
                 dbVersion: dbVersion,
                 device: device
             )
+            let coverData = draft.coverDidChange && !draft.removeManualCover ? draft.coverImageData : nil
+            let coverIDs = coverTargets
             trackEditDraft = nil
 
             var seenKeys = Set<String>()
             for item in artworkRefresh {
                 let key = artwork.key(artist: item.artist, album: item.album)
                 guard seenKeys.insert(key).inserted else { continue }
-                artwork.refresh(artist: item.artist, album: item.album, fileURL: item.fileURL)
+                artwork.refresh(
+                    artist: item.artist,
+                    album: item.album,
+                    fileURL: item.fileURL,
+                    title: item.title
+                )
             }
 
-            setStatus(.success(
-                updated == 1
-                    ? "Informazioni brano aggiornate"
-                    : "Informazioni aggiornate su \(updated) brani"
-            ))
+            if let coverData, !coverIDs.isEmpty, device.firmwareMode == .stock {
+                setStatus(.working("Scrivo copertina sull’iPod…"))
+                let playlistSnapshot = playlists
+                let version = dbVersion
+                Task {
+                    do {
+                        var localTracks = tracks
+                        let n = try await sync.pushArtworkDataToDevice(
+                            imageData: coverData,
+                            forTrackIDs: coverIDs,
+                            tracks: &localTracks,
+                            playlists: playlistSnapshot,
+                            dbVersion: version,
+                            device: device
+                        )
+                        tracks = localTracks
+                        setStatus(.success(
+                            n > 0
+                                ? (updated == 1
+                                    ? "Informazioni e copertina aggiornate"
+                                    : "Informazioni aggiornate; copertina scritta sull’iPod")
+                                : (updated == 1
+                                    ? "Informazioni brano aggiornate"
+                                    : "Informazioni aggiornate su \(updated) brani")
+                        ))
+                    } catch {
+                        setStatus(.failure(error.localizedDescription))
+                    }
+                }
+            } else {
+                setStatus(.success(
+                    updated == 1
+                        ? "Informazioni brano aggiornate"
+                        : "Informazioni aggiornate su \(updated) brani"
+                ))
+            }
         } catch {
             setStatus(.failure(error.localizedDescription))
         }

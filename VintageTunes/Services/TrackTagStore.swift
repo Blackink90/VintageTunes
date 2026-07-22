@@ -75,6 +75,14 @@ struct TrackEditDraft: Equatable {
     var mixedTrackNumber: Bool
     var mixedYear: Bool
 
+    /// Copertina scelta dall’utente (JPEG/PNG…); nil = nessuna in bozza.
+    var coverImageData: Data? = nil
+    var coverFileName: String? = nil
+    /// Se true, rimuove l’override manuale al salvataggio (senza nuovo file).
+    var removeManualCover: Bool = false
+    /// true solo se l’utente ha scelto/rimosso una copertina in questa sessione di edit.
+    var coverDidChange: Bool = false
+
     var isMulti: Bool { trackIDs.count > 1 }
 
     init(tracks: [Track]) {
@@ -96,6 +104,10 @@ struct TrackEditDraft: Equatable {
             mixedGenre = false
             mixedTrackNumber = false
             mixedYear = false
+            if let manual = CoverArtService.loadManualFromDisk(artist: track.artist, album: track.album) {
+                coverImageData = manual
+                coverFileName = "Copertina attuale"
+            }
             return
         }
 
@@ -120,6 +132,12 @@ struct TrackEditDraft: Equatable {
         trackNumber = mixedTrackNumber ? "" : (numbers.first == 0 ? "" : "\(numbers.first!)")
         year = mixedYear ? "" : (years.first == 0 ? "" : "\(years.first!)")
         starRating = mixedRating ? 0 : (ratings.first ?? 0)
+
+        if !mixedArtist, !mixedAlbum,
+           let manual = CoverArtService.loadManualFromDisk(artist: artist, album: album) {
+            coverImageData = manual
+            coverFileName = "Copertina attuale"
+        }
     }
 
     private static func valuesAreEqual<T: Equatable>(_ values: [T]) -> Bool {

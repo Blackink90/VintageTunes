@@ -40,11 +40,19 @@ final class ArtworkCache: ObservableObject {
     }
 
     /// Ricarica dalla rete (ignora embedded/cache disco), utile se la cover è stata avvelenata.
+    /// Non sostituisce una copertina caricata manualmente.
     func refresh(artist: String, album: String, fileURL: URL? = nil, title: String? = nil) {
         let k = key(artist: artist, album: album)
         images.removeValue(forKey: k)
         failed.remove(k)
         inFlight.remove(k)
+
+        if let manual = CoverArtService.loadManualFromDisk(artist: artist, album: album),
+           let image = NSImage(data: manual) {
+            images[k] = image.resized(maxPixel: 256)
+            return
+        }
+
         CoverArtService.removeFromDisk(artist: artist, album: album)
         inFlight.insert(k)
         Task {
@@ -84,6 +92,7 @@ final class ArtworkCache: ObservableObject {
         failed.remove(k)
         inFlight.remove(k)
         CoverArtService.removeFromDisk(artist: artist, album: album)
+        CoverArtService.removeManualFromDisk(artist: artist, album: album)
     }
 
     func clear() {
@@ -100,7 +109,7 @@ enum ArtworkResolvePolicy {
     case preferRemote
 }
 
-/// Risolve cover: file audio → iTunes Search API → cache disco.
+/// Risolve cover: **manuale** → file audio → iTunes Search API → cache disco.
 enum CoverArtService {
     private static var diskCacheURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -108,6 +117,10 @@ enum CoverArtService {
         return base
             .appendingPathComponent("VintageTunes", isDirectory: true)
             .appendingPathComponent("Artwork", isDirectory: true)
+    }
+
+    private static var manualCacheURL: URL {
+        diskCacheURL.appendingPathComponent("Manual", isDirectory: true)
     }
 
     static func cacheKey(artist: String, album: String) -> String {
@@ -126,6 +139,11 @@ enum CoverArtService {
         policy: ArtworkResolvePolicy = .standard,
         title: String? = nil
     ) async -> Data? {
+        // Copertina scelta dall’utente: priorità assoluta su embedded/rete/cache.
+        if let manual = loadManualFromDisk(artist: artist, album: album) {
+            return manual
+        }
+
         switch policy {
         case .preferRemote:
             if let remote = await fetchFromOnline(artist: artist, album: album, title: title) {
@@ -192,6 +210,43 @@ enum CoverArtService {
     static func removeFromDisk(artist: String, album: String) {
         let url = diskCacheURL.appendingPathComponent("\(cacheKey(artist: artist, album: album)).jpg")
         try? FileManager.default.removeItem(at: url)
+    }
+
+    static func hasManualArtwork(artist: String, album: String) -> Bool {
+        loadManualFromDisk(artist: artist, album: album) != nil
+    }
+
+    static func loadManualFromDisk(artist: String, album: String) -> Data? {
+        let url = manualCacheURL.appendingPathComponent("\(cacheKey(artist: artist, album: album)).jpg")
+        guard FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              !data.isEmpty else { return nil }
+        return data
+    }
+
+    /// Salva una copertina scelta dall’utente (priorità su ogni altra fonte).
+    static func saveManualToDisk(data: Data, artist: String, album: String) {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: manualCacheURL, withIntermediateDirectories: true)
+        let jpeg = jpegData(from: data) ?? data
+        let url = manualCacheURL.appendingPathComponent("\(cacheKey(artist: artist, album: album)).jpg")
+        try? jpeg.write(to: url, options: .atomic)
+        // Allinea anche la cache “auto” così le viste che leggono solo quella restano coerenti.
+        saveToDisk(data: jpeg, artist: artist, album: album)
+    }
+
+    static func removeManualFromDisk(artist: String, album: String) {
+        let url = manualCacheURL.appendingPathComponent("\(cacheKey(artist: artist, album: album)).jpg")
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Sposta l’override manuale quando cambiano artista/album.
+    static func migrateManualArtwork(fromArtist: String, fromAlbum: String, toArtist: String, toAlbum: String) {
+        guard let data = loadManualFromDisk(artist: fromArtist, album: fromAlbum) else { return }
+        saveManualToDisk(data: data, artist: toArtist, album: toAlbum)
+        if cacheKey(artist: fromArtist, album: fromAlbum) != cacheKey(artist: toArtist, album: toAlbum) {
+            removeManualFromDisk(artist: fromArtist, album: fromAlbum)
+        }
     }
 
     /// Cerca su iTunes Search API (nessuna API key).
