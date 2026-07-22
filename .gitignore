@@ -4,3 +4,6 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 *.vintagebackup
+
+# Local iPod reference dumps (can be large; keep locally)
+backup-ipod/

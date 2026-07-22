@@ -680,6 +680,17 @@ final class LibraryController: ObservableObject {
                 }
                 try? TrackTagStore.save(overrides, to: device)
             }
+            if device.firmwareMode == .stock {
+                setStatus(.working("Verifico cover sul dispositivo…"))
+                if try await sync.repairArtworkIfNeeded(
+                    tracks: &result.tracks,
+                    playlists: result.playlists,
+                    dbVersion: result.dbVersion,
+                    device: device
+                ) {
+                    setStatus(.success("Cover riscritte per l'iPod"))
+                }
+            }
             connectedDevice = device
             artwork.clear()
             clearBrowse()
@@ -767,10 +778,10 @@ final class LibraryController: ObservableObject {
             let files = AudioFileCollector.collectAudioFiles(from: urls)
             try throwIfImportCancelled()
 
-            let ready = files.filter(AudioMetadataReader.isSupportedAudio)
-            let convertible = files.filter {
-                AudioConverter.needsConversion($0) && !AudioMetadataReader.isSupportedAudio($0)
+            let ready = files.filter {
+                AudioMetadataReader.isSupportedAudio($0) && !AudioConverter.needsConversion($0)
             }
+            let convertible = files.filter(AudioConverter.needsConversion)
 
             if files.isEmpty {
                 setStatus(.failure("Nessun file audio trovato nella selezione (mp3, m4a, flac, wav, …)"))
@@ -781,7 +792,7 @@ final class LibraryController: ObservableObject {
             setStatus(.working("Trovati \(files.count) file audio…"))
             try throwIfImportCancelled()
 
-            // Conversione M4A automatica per formati non riprodotti dallo stock (FLAC, …).
+            // FLAC/WAV/… → M4A AAC (come Music.app). MP3/M4A pronti restano in ready.
             await runImport(
                 ready: ready,
                 toConvert: convertible,
@@ -876,7 +887,7 @@ final class LibraryController: ObservableObject {
                         }
                     }
                     let artData: Data?
-                    if let embedded = await CoverArtService.loadEmbeddedData(from: m4a) {
+                    if let embedded = await CoverArtService.loadEmbeddedData(from: url) {
                         artData = embedded
                     } else if let remote = await CoverArtService.fetchFromOnline(
                         artist: merged.artist,
@@ -909,13 +920,17 @@ final class LibraryController: ObservableObject {
             }
 
             setStatus(.working("Preparazione import…"))
+            // Se una playlist utente è selezionata (anche dopo switch di sezione), aggiungi lì.
+            let playlistTarget = selectedPlaylistID.flatMap { pid in
+                playlists.first(where: { $0.id == pid && !$0.isMaster })?.id
+            }
             let result = try await sync.importFiles(
                 items,
                 to: device,
                 existingTracks: tracks,
                 existingPlaylists: playlists,
                 dbVersion: dbVersion,
-                targetPlaylistID: selectedSection == .playlists ? selectedPlaylistID : nil
+                targetPlaylistID: playlistTarget
             ) { progress in
                 Task { @MainActor in
                     self.setStatus(.working(progress.message))

@@ -36,6 +36,7 @@
 		F0A1B2C3D4E5F67890123456 /* FolderSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B1C2D3E4F5708192A3B4C5 /* FolderSyncService.swift */; };
 		B1C2D3E4F5A6071829B0C1D2 /* PlayCountsFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D3E4F5A6B7081930C1D2E3 /* PlayCountsFile.swift */; };
 		D3E4F5A6B7C8091A2B3C4D5E /* ArtworkDBStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F5A6B7C8091A2B3C4D5E6F /* ArtworkDBStore.swift */; };
+		A1B2C3D4E5F6071829A0B1C2 /* OfficialDBFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6071829A0B1C2D3 /* OfficialDBFormat.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -72,6 +73,7 @@
 		A0B1C2D3E4F5708192A3B4C5 /* FolderSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderSyncService.swift; sourceTree = "<group>"; };
 		C2D3E4F5A6B7081930C1D2E3 /* PlayCountsFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayCountsFile.swift; sourceTree = "<group>"; };
 		E4F5A6B7C8091A2B3C4D5E6F /* ArtworkDBStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkDBStore.swift; sourceTree = "<group>"; };
+		B2C3D4E5F6071829A0B1C2D3 /* OfficialDBFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficialDBFormat.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -144,7 +146,8 @@
 				A0B1C2D3E4F5708192A3B4C5 /* FolderSyncService.swift */,
 				C2D3E4F5A6B7081930C1D2E3 /* PlayCountsFile.swift */,
 				E4F5A6B7C8091A2B3C4D5E6F /* ArtworkDBStore.swift */,
-);
+				B2C3D4E5F6071829A0B1C2D3 /* OfficialDBFormat.swift */,
+			);
 			path = Services;
 			sourceTree = "<group>";
 		};
@@ -306,6 +309,7 @@
 				F0A1B2C3D4E5F67890123456 /* FolderSyncService.swift in Sources */,
 				B1C2D3E4F5A6071829B0C1D2 /* PlayCountsFile.swift in Sources */,
 				D3E4F5A6B7C8091A2B3C4D5E /* ArtworkDBStore.swift in Sources */,
+				A1B2C3D4E5F6071829A0B1C2 /* OfficialDBFormat.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

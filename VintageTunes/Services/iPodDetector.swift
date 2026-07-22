@@ -78,8 +78,16 @@ final class iPodDetector: ObservableObject {
     private func inspect(volume: URL) -> iPodDevice? {
         let control = volume.appendingPathComponent("iPod_Control", isDirectory: true)
         var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: control.path, isDirectory: &isDir), isDir.boolValue else {
-            return nil
+        let hasControl = FileManager.default.fileExists(atPath: control.path, isDirectory: &isDir) && isDir.boolValue
+
+        // iPod appena ripristinato da Finder: HFS+ “iPod” con partizione firmware, senza iPod_Control.
+        if !hasControl {
+            guard Self.looksLikeRestoredStockiPod(volume: volume) else { return nil }
+            do {
+                try Self.initializeStockControl(at: volume)
+            } catch {
+                return nil
+            }
         }
 
         let values = try? volume.resourceValues(forKeys: [
@@ -112,22 +120,96 @@ final class iPodDetector: ObservableObject {
         )
     }
 
+    /// Volume dati di un classic/video ripristinato su Mac (schema Apple + Apple_MDFW).
+    private static func looksLikeRestoredStockiPod(volume: URL) -> Bool {
+        let name = (try? volume.resourceValues(forKeys: [.volumeNameKey]).volumeName)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // Nome di default post-restore Finder.
+        guard name.compare("iPod", options: [.caseInsensitive]) == .orderedSame else { return false }
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
+        task.arguments = ["info", "-plist", volume.path]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return false
+        }
+        guard task.terminationStatus == 0,
+              let plist = try? PropertyListSerialization.propertyList(
+                from: pipe.fileHandleForReading.readDataToEndOfFile(),
+                options: [],
+                format: nil
+              ) as? [String: Any],
+              let parent = plist["ParentWholeDisk"] as? String
+        else { return false }
+
+        let list = Process()
+        list.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
+        list.arguments = ["list", parent]
+        let listPipe = Pipe()
+        list.standardOutput = listPipe
+        list.standardError = Pipe()
+        do {
+            try list.run()
+            list.waitUntilExit()
+        } catch {
+            return false
+        }
+        let output = String(data: listPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return output.contains("Apple_MDFW")
+    }
+
+    private static func initializeStockControl(at volume: URL) throws {
+        let fm = FileManager.default
+        let control = volume.appendingPathComponent("iPod_Control", isDirectory: true)
+        let music = control.appendingPathComponent("Music", isDirectory: true)
+        let itunes = control.appendingPathComponent("iTunes", isDirectory: true)
+        let device = control.appendingPathComponent("Device", isDirectory: true)
+        let artwork = control.appendingPathComponent("Artwork", isDirectory: true)
+        try fm.createDirectory(at: music, withIntermediateDirectories: true)
+        try fm.createDirectory(at: itunes, withIntermediateDirectories: true)
+        try fm.createDirectory(at: device, withIntermediateDirectories: true)
+        try fm.createDirectory(at: artwork, withIntermediateDirectories: true)
+        for i in 0..<50 {
+            try fm.createDirectory(
+                at: music.appendingPathComponent(String(format: "F%02d", i), isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+        let sysInfoURL = device.appendingPathComponent("SysInfo")
+        let sysInfoEmpty: Bool = {
+            guard let data = try? Data(contentsOf: sysInfoURL) else { return true }
+            return data.isEmpty
+        }()
+        if sysInfoEmpty {
+            let body = """
+            ModelNumStr: MA450
+            """
+            try? body.write(to: sysInfoURL, atomically: true, encoding: .utf8)
+        }
+    }
+
     private static func modelHint(for controlURL: URL) -> String {
         let sysInfo = controlURL.appendingPathComponent("Device/SysInfo")
-        guard let data = try? String(contentsOf: sysInfo, encoding: .utf8) else {
-            return "iPod Classic / Video"
-        }
-
-        let lines = data.split(whereSeparator: \.isNewline)
-        for line in lines {
-            let parts = line.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-            guard parts.count == 2 else { continue }
-            let key = parts[0].lowercased()
-            if key.contains("modelnum") || key.contains("model") || key.contains("psz") {
-                return mapModel(parts[1])
+        if let data = try? String(contentsOf: sysInfo, encoding: .utf8), !data.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let lines = data.split(whereSeparator: \.isNewline)
+            for line in lines {
+                let parts = line.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+                guard parts.count == 2 else { continue }
+                let key = parts[0].lowercased()
+                if key.contains("modelnum") || key.contains("model") || key.contains("psz") {
+                    return mapModel(parts[1])
+                }
             }
         }
-        return "iPod Classic / Video"
+        // Prefer Video sizing when SysInfo is missing/empty (common after restore).
+        // Do not return a string containing "CLASSIC" — ArtworkDB would pick Classic thumbs.
+        return "iPod Video"
     }
 
     private static func mapModel(_ raw: String) -> String {

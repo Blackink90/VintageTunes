@@ -1,7 +1,7 @@
 import Foundation
 
-/// Rebuilds a compatible iTunesDB for iPod Video 5G / 5.5G style databases.
-/// Existing tracks/playlists are rewritten via preserve-and-patch when a blob is present.
+/// Rebuilds iTunesDB matching Music.app format for iPod Video 5.5G (HFS+).
+/// Reference: `backup-ipod/official-*/critical/iTunesDB` + `OfficialDBFormat`.
 struct iTunesDBWriter {
     struct TrackDraft {
         var id: UInt32
@@ -43,24 +43,32 @@ struct iTunesDBWriter {
         session: iTunesDBSessionState? = nil,
         to url: URL
     ) throws {
-        let version = dbVersion == 0 ? 0x14 : dbVersion
-        let defaultMHITHeader: Int = version >= 0x14 ? 0x184 : (version >= 0x12 ? 0x148 : 0xf4)
-        let defaultMHBDHeader: Int = version >= 0x17 ? 0xBC : 0x68
+        let version = dbVersion >= 0x14 ? dbVersion : OfficialDBFormat.preferredVersion
 
-        let trackList = buildTrackList(tracks, defaultMHITHeader: defaultMHITHeader)
+        let trackList = buildTrackList(tracks)
         let playlistList = buildPlaylistList(playlists)
+        let specialList = buildSpecialPlaylistList()
 
         let trackDataset = wrapDataset(type: 1, child: trackList)
         let playlistDataset = wrapDataset(type: 2, child: playlistList)
+        let type3Mirror = wrapDataset(type: 3, child: playlistList) // Music.app mirrors playlists here
+        let specialDataset = wrapDataset(type: 5, child: specialList)
 
-        let layout = session?.mhsdLayout.isEmpty == false
-            ? session!.mhsdLayout
-            : [.tracks, .playlists]
+        let layout: [iTunesDBMHSDSlot]
+        if let session, !session.mhsdLayout.isEmpty {
+            layout = session.mhsdLayout
+        } else {
+            // Official order: albums(4) → tracks → type3 → playlists → special → type9
+            layout = [.tracks, .podcastPlaylists, .playlists, .specialPlaylists]
+        }
 
         var body = Data()
         var emittedTracks = false
         var emittedPlaylists = false
+        var emittedSpecial = false
+        var emittedType3 = false
         var datasetCount = 0
+
         for slot in layout {
             switch slot {
             case .tracks:
@@ -71,13 +79,19 @@ struct iTunesDBWriter {
                 body.append(playlistDataset)
                 emittedPlaylists = true
                 datasetCount += 1
+            case .podcastPlaylists:
+                body.append(type3Mirror)
+                emittedType3 = true
+                datasetCount += 1
+            case .specialPlaylists:
+                body.append(specialDataset)
+                emittedSpecial = true
+                datasetCount += 1
             case .preserved(let chunk):
-                // Defense in depth: never re-emit playlist/album list datasets.
                 guard chunk.count >= 16 else { continue }
                 let type = readU32(chunk, 12)
-                if type == 1 || type == 2 || type == 3 || type == 4 || type == 5 {
-                    continue
-                }
+                // Never re-emit sections we regenerate.
+                if type == 1 || type == 2 || type == 3 || type == 5 { continue }
                 body.append(chunk)
                 datasetCount += 1
             }
@@ -85,89 +99,175 @@ struct iTunesDBWriter {
         if !emittedTracks {
             body.insert(contentsOf: trackDataset, at: 0)
             datasetCount += 1
-            emittedTracks = true
+        }
+        if !emittedType3 {
+            // Keep type-3 mirror before type-2 when inserting late.
+            body.append(type3Mirror)
+            datasetCount += 1
         }
         if !emittedPlaylists {
             body.append(playlistDataset)
             datasetCount += 1
         }
+        if !emittedSpecial {
+            body.append(specialDataset)
+            datasetCount += 1
+        }
 
         var file = Data()
-        if let preserved = session?.mhbdHeader, preserved.count >= 12,
+        if let preserved = session?.mhbdHeader, preserved.count >= OfficialDBFormat.mhbdHeaderLength,
            String(bytes: preserved[0..<4], encoding: .ascii) == "mhbd" {
-            let headerLen = Int(readU32(preserved, 4))
-            file = Data(preserved.prefix(min(headerLen, preserved.count)))
-            while file.count < headerLen { file.append(0) }
-            if file.count > 16 {
-                writeU32(&file, at: 16, version)
-            }
-            if file.count > 24 {
-                writeU32(&file, at: 20, UInt32(datasetCount))
-            }
+            file = Data(preserved.prefix(OfficialDBFormat.mhbdHeaderLength))
+            while file.count < OfficialDBFormat.mhbdHeaderLength { file.append(0) }
+            writeU32(&file, at: 16, version)
+            writeU32(&file, at: 20, UInt32(datasetCount))
         } else {
             appendFourCC(&file, "mhbd")
-            appendU32(&file, UInt32(defaultMHBDHeader))
-            appendU32(&file, 0) // patched later
+            appendU32(&file, UInt32(OfficialDBFormat.mhbdHeaderLength))
+            appendU32(&file, 0)
             appendU32(&file, 1)
             appendU32(&file, version)
             appendU32(&file, UInt32(datasetCount))
             appendU64(&file, UInt64.random(in: 1...UInt64.max))
-            appendU16(&file, 2)
-            while file.count < defaultMHBDHeader {
-                file.append(0)
-            }
-            if defaultMHBDHeader > 72 {
-                file[70] = 0x65
-                file[71] = 0x6e
-            }
+            appendU16(&file, 1) // Mac platform
+            while file.count < OfficialDBFormat.mhbdHeaderLength { file.append(0) }
+            file[0x46] = 0x69 // i
+            file[0x47] = 0x74 // t
         }
 
         file.append(body)
         writeU32(&file, at: 8, UInt32(file.count))
-        if file.count > 24 {
-            writeU32(&file, at: 20, UInt32(datasetCount))
-        }
+        writeU32(&file, at: 20, UInt32(datasetCount))
 
         let dir = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fm = FileManager.default
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        if FileManager.default.fileExists(atPath: url.path) {
+        let lockURL = dir.appendingPathComponent("iTunesLock")
+        try? fm.removeItem(at: lockURL)
+
+        if fm.fileExists(atPath: url.path) {
             let backup = dir.appendingPathComponent("iTunesDB.vintagebackup")
-            try? FileManager.default.removeItem(at: backup)
-            try FileManager.default.copyItem(at: url, to: backup)
+            try? fm.removeItem(at: backup)
+            try performFileOpWithBusyRetry {
+                try fm.copyItem(at: url, to: backup)
+            }
         }
 
-        try file.write(to: url, options: .atomic)
+        try performFileOpWithBusyRetry {
+            try file.write(to: url, options: .atomic)
+        }
+        try? fm.removeItem(at: lockURL)
+    }
+
+    private func performFileOpWithBusyRetry(_ body: () throws -> Void) throws {
+        var lastError: Error?
+        for attempt in 0..<5 {
+            do {
+                try body()
+                return
+            } catch {
+                lastError = error
+                guard isFileBusy(error), attempt < 4 else { break }
+                Thread.sleep(forTimeInterval: 0.25 * Double(attempt + 1))
+            }
+        }
+        if let lastError {
+            if isFileBusy(lastError) {
+                throw SyncError.database(
+                    "File iTunesDB occupato (OSStatus -47). Chiudi Musica/iTunes e riprova."
+                )
+            }
+            throw lastError
+        }
+    }
+
+    private func isFileBusy(_ error: Error) -> Bool {
+        let ns = error as NSError
+        if ns.domain == NSOSStatusErrorDomain, ns.code == -47 { return true }
+        if ns.domain == NSPOSIXErrorDomain, ns.code == Int(EBUSY) { return true }
+        if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isFileBusy(underlying)
+        }
+        let text = ns.localizedDescription.lowercased()
+        return text.contains("-47") || text.contains("occupat") || text.contains("busy")
     }
 
     private func wrapDataset(type: UInt32, child: Data) -> Data {
-        let headerLen = 0x10
+        let headerLength = OfficialDBFormat.mhsdHeaderLength
         var data = Data()
         appendFourCC(&data, "mhsd")
-        appendU32(&data, UInt32(headerLen))
-        appendU32(&data, UInt32(headerLen + child.count))
+        appendU32(&data, UInt32(headerLength))
+        appendU32(&data, UInt32(headerLength + child.count))
         appendU32(&data, type)
+        while data.count < headerLength { data.append(0) }
         data.append(child)
         return data
     }
 
-    private func buildTrackList(_ tracks: [TrackDraft], defaultMHITHeader: Int) -> Data {
+    private func buildSpecialPlaylistList() -> Data {
+        var children = Data()
+        for (index, spec) in OfficialDBFormat.categorySpecs.enumerated() {
+            children.append(
+                buildCategoryPlaylist(
+                    name: spec.name,
+                    mhsd5: spec.mhsd5,
+                    mhsd5b: spec.mhsd5b,
+                    playlistID: UInt64(index + 200)
+                )
+            )
+        }
+        return wrapList(magic: "mhlp", count: OfficialDBFormat.categorySpecs.count, children: children)
+    }
+
+    private func buildCategoryPlaylist(name: String, mhsd5: UInt16, mhsd5b: UInt16, playlistID: UInt64) -> Data {
+        var children = Data()
+        children.append(buildStringMhod(type: 1, string: name))
+        children.append(OfficialDBFormat.mhod100)
+        children.append(OfficialDBFormat.mhod102)
+        children.append(OfficialDBFormat.mhod50)
+        children.append(OfficialDBFormat.mhod51)
+
+        let headerLen = OfficialDBFormat.mhypHeaderLength
+        var header = Data(count: headerLen)
+        writeFourCC(&header, at: 0, "mhyp")
+        writeU32(&header, at: 4, UInt32(headerLen))
+        writeU32(&header, at: 8, UInt32(headerLen + children.count))
+        writeU32(&header, at: 12, 5) // name + 100 + 102 + 50 + 51
+        writeU32(&header, at: 16, 0) // empty membership
+        header[20] = 0
+        writeU32(&header, at: 24, macTimestamp())
+        writeU64(&header, at: 28, playlistID)
+        writeU16(&header, at: 40, 1)
+        writeU16(&header, at: 42, 0)
+        writeU32(&header, at: 44, 1)
+        writeU16(&header, at: 0x50, mhsd5)
+        writeU16(&header, at: 0x52, mhsd5b)
+        writeU32(&header, at: 0x54, 0)
+        header.append(children)
+        return header
+    }
+
+    private func buildTrackList(_ tracks: [TrackDraft]) -> Data {
         var children = Data()
         for track in tracks {
-            children.append(buildTrack(track, defaultHeaderLen: defaultMHITHeader))
+            children.append(buildTrack(track))
         }
+        return wrapList(magic: "mhlt", count: tracks.count, children: children)
+    }
 
-        let headerLen = 0x5c
+    private func wrapList(magic: String, count: Int, children: Data) -> Data {
+        let headerLen = magic == "mhlt" ? OfficialDBFormat.mhltHeaderLength : OfficialDBFormat.mhlpHeaderLength
         var data = Data()
-        appendFourCC(&data, "mhlt")
+        appendFourCC(&data, magic)
         appendU32(&data, UInt32(headerLen))
-        appendU32(&data, UInt32(tracks.count))
+        appendU32(&data, UInt32(count))
         while data.count < headerLen { data.append(0) }
         data.append(children)
         return data
     }
 
-    private func buildTrack(_ track: TrackDraft, defaultHeaderLen: Int) -> Data {
+    private func buildTrack(_ track: TrackDraft) -> Data {
         var mhods = Data()
         mhods.append(buildStringMhod(type: 1, string: track.title))
         mhods.append(buildStringMhod(type: 2, string: track.location))
@@ -190,79 +290,52 @@ struct iTunesDBWriter {
             + (track.filetype.isEmpty ? 0 : 1)
         let mhodCount = managedCount + UInt32(track.dbBlob?.extraMhods.count ?? 0)
 
+        let fourCC = OfficialDBFormat.filetypeFourCC(for: track.filetype)
+        let flags = OfficialDBFormat.codecFlags(for: fourCC)
+
         var header: Data
         if let blob = track.dbBlob, blob.header.count >= 0x9c {
             header = blob.header
-            let headerLen = header.count
-            writeFourCC(&header, at: 0, "mhit")
-            writeU32(&header, at: 4, UInt32(headerLen))
-            writeU32(&header, at: 8, UInt32(headerLen + mhods.count))
-            writeU32(&header, at: 12, mhodCount)
-            writeU32(&header, at: 16, track.id)
-            writeU32(&header, at: 20, 1) // visible
-            writeU32(&header, at: 24, filetypeCode(track.filetype))
-            if headerLen > 31 {
-                header[31] = min(track.rating, 100)
-            }
-            writeU32(&header, at: 32, macTimestamp()) // last modified
-            writeU32(&header, at: 36, track.sizeBytes)
-            writeU32(&header, at: 40, track.durationMs)
-            writeU32(&header, at: 44, track.trackNumber)
-            writeU32(&header, at: 52, track.year)
-            writeU32(&header, at: 56, track.bitrate)
-            let rate = track.sampleRate == 0 ? 44100 : track.sampleRate
-            writeU32(&header, at: 60, rate << 16)
-            writeU32(&header, at: 80, track.playCount)
-            if headerLen > 84 {
-                writeU32(&header, at: 84, track.playCount)
-            }
-            writeU32(&header, at: 88, track.lastPlayedMacTime)
-            // Preserve date added and other unknown header bytes.
-            patchArtworkFields(&header, track: track)
-            if headerLen > 212 {
-                writeU32(&header, at: 208, track.mediaType == 0 ? 1 : track.mediaType)
+            if header.count < OfficialDBFormat.mhitHeaderLength {
+                header.append(Data(count: OfficialDBFormat.mhitHeaderLength - header.count))
             }
         } else {
-            let headerLen = defaultHeaderLen
-            header = Data(count: headerLen)
-            writeFourCC(&header, at: 0, "mhit")
-            writeU32(&header, at: 4, UInt32(headerLen))
-            writeU32(&header, at: 8, UInt32(headerLen + mhods.count))
-            writeU32(&header, at: 12, mhodCount)
-            writeU32(&header, at: 16, track.id)
-            writeU32(&header, at: 20, 1) // visible
-            writeU32(&header, at: 24, filetypeCode(track.filetype))
-            header[28] = 0
-            header[29] = 1
-            header[30] = 0
-            header[31] = min(track.rating, 100)
-            writeU32(&header, at: 32, macTimestamp()) // last modified
-            writeU32(&header, at: 36, track.sizeBytes)
-            writeU32(&header, at: 40, track.durationMs)
-            writeU32(&header, at: 44, track.trackNumber)
-            writeU32(&header, at: 48, 0) // total tracks
-            writeU32(&header, at: 52, track.year)
-            writeU32(&header, at: 56, track.bitrate)
-            let rate = track.sampleRate == 0 ? 44100 : track.sampleRate
-            writeU32(&header, at: 60, rate << 16)
-            writeU32(&header, at: 80, track.playCount)
-            writeU32(&header, at: 84, track.playCount)
-            writeU32(&header, at: 88, track.lastPlayedMacTime)
-            writeU32(&header, at: 104, macTimestamp()) // date added
-            patchArtworkFields(&header, track: track)
-            if headerLen > 212 {
-                writeU32(&header, at: 208, track.mediaType == 0 ? 1 : track.mediaType)
-            }
+            header = OfficialDBFormat.mhitHeaderTemplate
         }
 
-        header.append(mhods)
-        return header
-    }
-
-    private func patchArtworkFields(_ header: inout Data, track: TrackDraft) {
         let headerLen = header.count
+        writeFourCC(&header, at: 0, "mhit")
+        writeU32(&header, at: 4, UInt32(headerLen))
+        writeU32(&header, at: 8, UInt32(headerLen + mhods.count))
+        writeU32(&header, at: 12, mhodCount)
+        writeU32(&header, at: 16, track.id)
+        writeU32(&header, at: 20, 1)
+        OfficialDBFormat.writeFiletypeMarker(&header, at: 24, fourCC: fourCC)
+        header[28] = flags.0
+        header[29] = flags.1
+        header[30] = 0
+        header[31] = min(track.rating, 100)
+        writeU32(&header, at: 32, macTimestamp())
+        writeU32(&header, at: 36, track.sizeBytes)
+        writeU32(&header, at: 40, track.durationMs)
+        writeU32(&header, at: 44, track.trackNumber)
+        writeU32(&header, at: 52, track.year)
+        writeU32(&header, at: 56, track.bitrate)
+        let rate = track.sampleRate == 0 ? 44100 : track.sampleRate
+        writeU32(&header, at: 60, rate << 16)
+        writeU32(&header, at: 80, track.playCount)
+        if headerLen > 84 {
+            writeU32(&header, at: 84, track.playCount)
+        }
+        writeU32(&header, at: 88, track.lastPlayedMacTime)
+        if header.count > 108, readU32(header, 104) == 0 {
+            writeU32(&header, at: 104, macTimestamp())
+        }
+        let dbid = track.dbid == 0
+            ? (UInt64(track.id) | (UInt64.random(in: 1...UInt64(UInt32.max)) << 32))
+            : track.dbid
         if headerLen > 120 {
-            writeU64(&header, at: 112, track.dbid)
+            writeU64(&header, at: 112, dbid)
         }
         if headerLen > 126 {
             writeU16(&header, at: 124, track.artworkCount)
@@ -270,9 +343,21 @@ struct iTunesDBWriter {
         if headerLen > 164 {
             header[164] = track.hasArtwork == 1 ? 1 : 2
         }
+        if headerLen > 176 {
+            writeU64(&header, at: 168, dbid) // dbid2
+        }
+        if headerLen > 178 {
+            header[178] = 2 // mark_unplayed style seen in official DB
+        }
+        if headerLen > 212 {
+            writeU32(&header, at: 208, track.mediaType == 0 ? 1 : track.mediaType)
+        }
         if headerLen > 356 {
             writeU32(&header, at: 352, track.mhiiLink)
         }
+
+        header.append(mhods)
+        return header
     }
 
     private func buildPlaylistList(_ playlists: [PlaylistDraft]) -> Data {
@@ -280,120 +365,101 @@ struct iTunesDBWriter {
         for playlist in playlists {
             children.append(buildPlaylist(playlist))
         }
-
-        let headerLen = 0x5c
-        var data = Data()
-        appendFourCC(&data, "mhlp")
-        appendU32(&data, UInt32(headerLen))
-        appendU32(&data, UInt32(playlists.count))
-        while data.count < headerLen { data.append(0) }
-        data.append(children)
-        return data
+        return wrapList(magic: "mhlp", count: playlists.count, children: children)
     }
 
     private func buildPlaylist(_ playlist: PlaylistDraft) -> Data {
         var children = Data()
         children.append(buildStringMhod(type: 1, string: playlist.name))
-        if let blob = playlist.dbBlob {
-            for extra in blob.extraMhods {
-                children.append(extra)
-            }
-        }
-        for (index, trackID) in playlist.trackIDs.enumerated() {
-            children.append(buildPlaylistItem(trackID: trackID, timestamp: UInt32(index + 1)))
-        }
 
-        let stringMhodCount: UInt32 = 1 + UInt32(playlist.dbBlob?.extraMhods.count ?? 0)
-
-        if let blob = playlist.dbBlob, blob.header.count >= 0x2c {
-            var header = blob.header
-            let headerLen = header.count
-            writeFourCC(&header, at: 0, "mhyp")
-            writeU32(&header, at: 4, UInt32(headerLen))
-            writeU32(&header, at: 8, UInt32(headerLen + children.count))
-            writeU32(&header, at: 12, stringMhodCount)
-            writeU32(&header, at: 16, UInt32(playlist.trackIDs.count))
-            if headerLen > 20 {
-                header[20] = playlist.isMaster ? 1 : 0
-            }
-            // Preserve timestamps / unknown fields; ensure playlist id matches model.
-            if headerLen > 36 {
-                writeU64(&header, at: 28, playlist.id == 0 ? UInt64.random(in: 1...UInt64.max) : playlist.id)
-            }
-            if headerLen > 42 {
-                writeU16(&header, at: 40, UInt16(clamping: stringMhodCount))
-            }
-            header.append(children)
-            return header
+        // Official user/master always include MHOD 100 + 102.
+        var extras = playlist.dbBlob?.extraMhods ?? []
+        let has100 = extras.contains { $0.count >= 16 && readU32($0, 12) == 100 }
+        let has102 = extras.contains { $0.count >= 16 && readU32($0, 12) == 102 }
+        if !has100 { children.append(OfficialDBFormat.mhod100) }
+        if !has102 { children.append(OfficialDBFormat.mhod102) }
+        for extra in extras {
+            children.append(extra)
         }
 
-        let headerLen = 0x6c
-        var header = Data(count: headerLen)
+        for trackID in playlist.trackIDs {
+            children.append(buildPlaylistItem(trackID: trackID, timestamp: macTimestamp()))
+        }
+
+        let stringishCount = 1 + (has100 ? 0 : 1) + (has102 ? 0 : 1) + extras.count
+
+        let headerLen = OfficialDBFormat.mhypHeaderLength
+        var header: Data
+        if let blob = playlist.dbBlob, blob.header.count >= 0x6c {
+            header = blob.header
+            if header.count < headerLen {
+                header.append(Data(count: headerLen - header.count))
+            }
+        } else {
+            header = Data(count: headerLen)
+        }
+
         writeFourCC(&header, at: 0, "mhyp")
-        writeU32(&header, at: 4, UInt32(headerLen))
-        writeU32(&header, at: 8, UInt32(headerLen + children.count))
-        writeU32(&header, at: 12, stringMhodCount)
+        writeU32(&header, at: 4, UInt32(header.count))
+        writeU32(&header, at: 8, UInt32(header.count + children.count))
+        writeU32(&header, at: 12, UInt32(stringishCount))
         writeU32(&header, at: 16, UInt32(playlist.trackIDs.count))
         header[20] = playlist.isMaster ? 1 : 0
         writeU32(&header, at: 24, macTimestamp())
         writeU64(&header, at: 28, playlist.id == 0 ? UInt64.random(in: 1...UInt64.max) : playlist.id)
-        writeU16(&header, at: 40, UInt16(clamping: stringMhodCount))
+        writeU16(&header, at: 40, 1)
+        writeU16(&header, at: 42, 0)
+        writeU32(&header, at: 44, 1)
 
         header.append(children)
         return header
     }
 
+    /// Official mhip: header 76 + child MHOD type 100 (total 120).
     private func buildPlaylistItem(trackID: UInt32, timestamp: UInt32) -> Data {
-        var mhod = Data(count: 0x18)
+        var mhod = Data(count: 0x2c)
         writeFourCC(&mhod, at: 0, "mhod")
         writeU32(&mhod, at: 4, 0x18)
-        writeU32(&mhod, at: 8, 0x18)
+        writeU32(&mhod, at: 8, 0x2c)
         writeU32(&mhod, at: 12, 100)
+        // position field in type-100 child often mirrors track id on modern DBs
+        writeU32(&mhod, at: 24, trackID)
 
-        var data = Data(count: 0x24)
+        var data = Data(count: OfficialDBFormat.mhipHeaderLength)
         writeFourCC(&data, at: 0, "mhip")
-        writeU32(&data, at: 4, 0x24)
-        writeU32(&data, at: 8, UInt32(0x24 + mhod.count))
+        writeU32(&data, at: 4, UInt32(OfficialDBFormat.mhipHeaderLength))
+        writeU32(&data, at: 8, UInt32(OfficialDBFormat.mhipHeaderLength + mhod.count))
+        writeU32(&data, at: 12, 1)
+        writeU32(&data, at: 16, 0)
+        writeU32(&data, at: 20, 0)
         writeU32(&data, at: 24, trackID)
         writeU32(&data, at: 28, timestamp)
         data.append(mhod)
         return data
     }
 
-    /// String MHOD: header declares 0x18, but UTF-16LE payload starts at offset 40 (ipodlinux).
+    /// String MHOD matching Music.app: unk1=0, unk2=0, pos=1, len, unk32=1, unk36=0.
     private func buildStringMhod(type: UInt32, string: String) -> Data {
         var stringBytes = Data()
         for unit in string.utf16 {
             appendU16(&stringBytes, unit)
         }
-        // iTunesDB string mhods are NOT null-terminated
-
         let total = 40 + stringBytes.count
         var data = Data(count: total)
         writeFourCC(&data, at: 0, "mhod")
         writeU32(&data, at: 4, 0x18)
         writeU32(&data, at: 8, UInt32(total))
         writeU32(&data, at: 12, type)
-        writeU32(&data, at: 16, 0) // unk1
-        writeU32(&data, at: 20, 1) // unk2
-        writeU32(&data, at: 24, 0) // position
-        writeU32(&data, at: 28, UInt32(stringBytes.count)) // length in bytes
-        writeU32(&data, at: 32, 0)
+        writeU32(&data, at: 16, 0)
+        writeU32(&data, at: 20, 0)
+        writeU32(&data, at: 24, 1)
+        writeU32(&data, at: 28, UInt32(stringBytes.count))
+        writeU32(&data, at: 32, 1)
         writeU32(&data, at: 36, 0)
         data.replaceSubrange(40..<(40 + stringBytes.count), with: stringBytes)
         return data
     }
 
-    private func filetypeCode(_ filetype: String) -> UInt32 {
-        let ext = filetype.lowercased()
-        if ext.contains("mpeg") || ext.contains("mp3") { return 0x4d503320 } // 'MP3 '
-        if ext.contains("aac") || ext.contains("m4a") { return 0x4d344120 } // 'M4A '
-        if ext.contains("wav") { return 0x57415645 } // 'WAVE'
-        if ext.contains("aiff") || ext.contains("aif") { return 0x41494646 } // 'AIFF'
-        return 0x4d503320
-    }
-
-    /// Mac epoch: seconds since 1904-01-01
     private func macTimestamp() -> UInt32 {
         UInt32(Date().timeIntervalSince1970 + 2_082_844_800)
     }
@@ -402,6 +468,30 @@ struct iTunesDBWriter {
         let chars = Array(value.utf8.prefix(4))
         for (i, b) in chars.enumerated() {
             data[offset + i] = b
+        }
+    }
+
+    private func appendFourCC(_ data: inout Data, _ value: String) {
+        var chars = Array(value.utf8.prefix(4))
+        while chars.count < 4 { chars.append(0x20) }
+        data.append(contentsOf: chars)
+    }
+
+    private func appendU16(_ data: inout Data, _ value: UInt16) {
+        data.append(UInt8(value & 0xff))
+        data.append(UInt8((value >> 8) & 0xff))
+    }
+
+    private func appendU32(_ data: inout Data, _ value: UInt32) {
+        data.append(UInt8(value & 0xff))
+        data.append(UInt8((value >> 8) & 0xff))
+        data.append(UInt8((value >> 16) & 0xff))
+        data.append(UInt8((value >> 24) & 0xff))
+    }
+
+    private func appendU64(_ data: inout Data, _ value: UInt64) {
+        for i in 0..<8 {
+            data.append(UInt8((value >> (8 * i)) & 0xff))
         }
     }
 

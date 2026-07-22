@@ -56,7 +56,8 @@ final class ArtworkCache: ObservableObject {
             inFlight.remove(k)
             if let data, let image = NSImage(data: data) {
                 images[k] = image.resized(maxPixel: 256)
-                if let fileURL {
+                // Non scrivere cover dentro file sull’iPod: spezza l’ottimizzazione M4A.
+                if let fileURL, !fileURL.path.contains("/iPod_Control/") {
                     try? await CoverArtService.embedArtwork(into: fileURL, imageData: data)
                 }
             } else {

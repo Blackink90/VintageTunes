@@ -47,6 +47,7 @@ final class iTunesDBParser {
         var playlists: [Playlist] = []
         var mhsdLayout: [iTunesDBMHSDSlot] = []
         var hasPlaylistSlot = false
+        var hasSpecialSlot = false
 
         var offset = mhbdHeaderLen
         let total = Int(readU32(data, 8))
@@ -74,21 +75,17 @@ final class iTunesDBParser {
                         mhsdLayout.append(.playlists)
                         hasPlaylistSlot = true
                     }
-                    // Extra type-2 lists are NOT preserved: dual masters confuse stock firmware.
-                case 3, 5:
-                    // Prefer type 2 as the playlist source. Still parse once if we have nothing yet,
-                    // but never pass through type 3/5 (often empty "Musica"/Film shells).
-                    if !hasPlaylistSlot {
-                        let parsed = parsePlaylistList(data, start: bodyStart, end: bodyEnd)
-                        if !parsed.isEmpty {
-                            playlists.append(contentsOf: parsed)
-                            mhsdLayout.append(.playlists)
-                            hasPlaylistSlot = true
-                        }
+                case 3:
+                    // Mirror of playlists — preserve slot, regenerate on write.
+                    mhsdLayout.append(.podcastPlaylists)
+                case 5:
+                    if !hasSpecialSlot {
+                        mhsdLayout.append(.specialPlaylists)
+                        hasSpecialSlot = true
                     }
                 default:
-                    // Skip album/artist lists (4, …): they go stale after rewrite and can hide tracks.
-                    break
+                    // Preserve albums (4), type 9, etc. as opaque chunks.
+                    mhsdLayout.append(.preserved(Data(data[offset..<(offset + totalLen)])))
                 }
             }
 
@@ -101,6 +98,7 @@ final class iTunesDBParser {
         if !hasPlaylistSlot {
             mhsdLayout.append(.playlists)
         }
+        // Non aggiungere type 5 se assente: sul Video 5.5G la libreria è la master type 2.
 
         // Deduplicate playlists by id while preferring fuller lists (keep their blob).
         var unique: [UInt64: Playlist] = [:]
