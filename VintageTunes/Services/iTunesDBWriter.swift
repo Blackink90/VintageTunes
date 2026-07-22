@@ -60,20 +60,37 @@ struct iTunesDBWriter {
         var body = Data()
         var emittedTracks = false
         var emittedPlaylists = false
+        var datasetCount = 0
         for slot in layout {
             switch slot {
             case .tracks:
                 body.append(trackDataset)
                 emittedTracks = true
+                datasetCount += 1
             case .playlists:
                 body.append(playlistDataset)
                 emittedPlaylists = true
+                datasetCount += 1
             case .preserved(let chunk):
+                // Defense in depth: never re-emit playlist/album list datasets.
+                guard chunk.count >= 16 else { continue }
+                let type = readU32(chunk, 12)
+                if type == 1 || type == 2 || type == 3 || type == 4 || type == 5 {
+                    continue
+                }
                 body.append(chunk)
+                datasetCount += 1
             }
         }
-        if !emittedTracks { body.insert(contentsOf: trackDataset, at: 0) }
-        if !emittedPlaylists { body.append(playlistDataset) }
+        if !emittedTracks {
+            body.insert(contentsOf: trackDataset, at: 0)
+            datasetCount += 1
+            emittedTracks = true
+        }
+        if !emittedPlaylists {
+            body.append(playlistDataset)
+            datasetCount += 1
+        }
 
         var file = Data()
         if let preserved = session?.mhbdHeader, preserved.count >= 12,
@@ -84,13 +101,16 @@ struct iTunesDBWriter {
             if file.count > 16 {
                 writeU32(&file, at: 16, version)
             }
+            if file.count > 24 {
+                writeU32(&file, at: 20, UInt32(datasetCount))
+            }
         } else {
             appendFourCC(&file, "mhbd")
             appendU32(&file, UInt32(defaultMHBDHeader))
             appendU32(&file, 0) // patched later
             appendU32(&file, 1)
             appendU32(&file, version)
-            appendU32(&file, 2)
+            appendU32(&file, UInt32(datasetCount))
             appendU64(&file, UInt64.random(in: 1...UInt64.max))
             appendU16(&file, 2)
             while file.count < defaultMHBDHeader {
@@ -104,6 +124,9 @@ struct iTunesDBWriter {
 
         file.append(body)
         writeU32(&file, at: 8, UInt32(file.count))
+        if file.count > 24 {
+            writeU32(&file, at: 20, UInt32(datasetCount))
+        }
 
         let dir = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

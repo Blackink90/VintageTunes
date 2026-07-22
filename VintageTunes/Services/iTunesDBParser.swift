@@ -62,7 +62,6 @@ final class iTunesDBParser {
                 let type = readU32(data, offset + 12)
                 let bodyStart = offset + headerLen
                 let bodyEnd = offset + totalLen
-                let preservedChunk = Data(data[offset..<(offset + totalLen)])
 
                 switch type {
                 case 1:
@@ -74,20 +73,22 @@ final class iTunesDBParser {
                     if !hasPlaylistSlot {
                         mhsdLayout.append(.playlists)
                         hasPlaylistSlot = true
-                    } else {
-                        mhsdLayout.append(.preserved(preservedChunk))
                     }
+                    // Extra type-2 lists are NOT preserved: dual masters confuse stock firmware.
                 case 3, 5:
+                    // Prefer type 2 as the playlist source. Still parse once if we have nothing yet,
+                    // but never pass through type 3/5 (often empty "Musica"/Film shells).
                     if !hasPlaylistSlot {
                         let parsed = parsePlaylistList(data, start: bodyStart, end: bodyEnd)
-                        playlists.append(contentsOf: parsed)
-                        mhsdLayout.append(.playlists)
-                        hasPlaylistSlot = true
-                    } else {
-                        mhsdLayout.append(.preserved(preservedChunk))
+                        if !parsed.isEmpty {
+                            playlists.append(contentsOf: parsed)
+                            mhsdLayout.append(.playlists)
+                            hasPlaylistSlot = true
+                        }
                     }
                 default:
-                    mhsdLayout.append(.preserved(preservedChunk))
+                    // Skip album/artist lists (4, …): they go stale after rewrite and can hide tracks.
+                    break
                 }
             }
 
