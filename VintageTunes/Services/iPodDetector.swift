@@ -127,6 +127,11 @@ final class iPodDetector: ObservableObject {
         // Nome di default post-restore Finder.
         guard name.compare("iPod", options: [.caseInsensitive]) == .orderedSame else { return false }
 
+        let cacheKey = "VTRestorediPod:" + (volume.path as NSString).standardizingPath
+        if UserDefaults.standard.object(forKey: cacheKey) != nil {
+            return UserDefaults.standard.bool(forKey: cacheKey)
+        }
+
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
         task.arguments = ["info", "-plist", volume.path]
@@ -161,7 +166,9 @@ final class iPodDetector: ObservableObject {
             return false
         }
         let output = String(data: listPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        return output.contains("Apple_MDFW")
+        let ok = output.contains("Apple_MDFW")
+        UserDefaults.standard.set(ok, forKey: cacheKey)
+        return ok
     }
 
     private static func initializeStockControl(at volume: URL) throws {
