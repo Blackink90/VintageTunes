@@ -40,6 +40,7 @@ struct TrackTableView: View {
                         artist: track.displayArtist,
                         album: track.displayAlbum,
                         fileURL: track.resolvedPath,
+                        title: track.displayTitle,
                         cornerRadius: 4
                     )
                     .frame(width: 28, height: 28)
@@ -640,6 +641,7 @@ struct CoverArtView: View {
     let artist: String
     let album: String
     let fileURL: URL?
+    var title: String? = nil
     var cornerRadius: CGFloat = 6
     var placeholderSystemImage: String = "music.note"
     var isCircle: Bool = false
@@ -700,7 +702,7 @@ struct CoverArtView: View {
 
     private func requestArtwork() {
         guard !album.isEmpty else { return }
-        artwork.request(artist: artist, album: album, fileURL: fileURL)
+        artwork.request(artist: artist, album: album, fileURL: fileURL, title: title)
     }
 }
 

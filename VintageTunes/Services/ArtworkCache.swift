@@ -19,7 +19,7 @@ final class ArtworkCache: ObservableObject {
         images[key(artist: artist, album: album)]
     }
 
-    func request(artist: String, album: String, fileURL: URL?) {
+    func request(artist: String, album: String, fileURL: URL?, title: String? = nil) {
         let k = key(artist: artist, album: album)
         guard images[k] == nil, !failed.contains(k), !inFlight.contains(k) else { return }
         inFlight.insert(k)
@@ -27,7 +27,8 @@ final class ArtworkCache: ObservableObject {
             let data = await CoverArtService.resolveArtworkData(
                 artist: artist,
                 album: album,
-                fileURL: fileURL
+                fileURL: fileURL,
+                title: title
             )
             inFlight.remove(k)
             if let data, let image = NSImage(data: data) {
@@ -39,7 +40,7 @@ final class ArtworkCache: ObservableObject {
     }
 
     /// Ricarica dalla rete (ignora embedded/cache disco), utile se la cover è stata avvelenata.
-    func refresh(artist: String, album: String, fileURL: URL? = nil) {
+    func refresh(artist: String, album: String, fileURL: URL? = nil, title: String? = nil) {
         let k = key(artist: artist, album: album)
         images.removeValue(forKey: k)
         failed.remove(k)
@@ -51,7 +52,8 @@ final class ArtworkCache: ObservableObject {
                 artist: artist,
                 album: album,
                 fileURL: fileURL,
-                policy: .preferRemote
+                policy: .preferRemote,
+                title: title
             )
             inFlight.remove(k)
             if let data, let image = NSImage(data: data) {
@@ -121,11 +123,12 @@ enum CoverArtService {
         artist: String,
         album: String,
         fileURL: URL?,
-        policy: ArtworkResolvePolicy = .standard
+        policy: ArtworkResolvePolicy = .standard,
+        title: String? = nil
     ) async -> Data? {
         switch policy {
         case .preferRemote:
-            if let remote = await fetchFromOnline(artist: artist, album: album) {
+            if let remote = await fetchFromOnline(artist: artist, album: album, title: title) {
                 saveToDisk(data: remote, artist: artist, album: album)
                 return remote
             }
@@ -141,7 +144,7 @@ enum CoverArtService {
                 return embedded
             }
             // Rete prima della cache disco: evita di ripropinare cover sbagliate dopo un delete/reimport.
-            if let remote = await fetchFromOnline(artist: artist, album: album) {
+            if let remote = await fetchFromOnline(artist: artist, album: album, title: title) {
                 saveToDisk(data: remote, artist: artist, album: album)
                 return remote
             }
@@ -149,9 +152,9 @@ enum CoverArtService {
         }
     }
 
-    /// iTunes Search, poi MusicBrainz / Cover Art Archive.
-    static func fetchFromOnline(artist: String, album: String) async -> Data? {
-        if let data = await fetchFromiTunes(artist: artist, album: album) {
+    /// iTunes Search (album + eventuale brano), poi MusicBrainz / Cover Art Archive.
+    static func fetchFromOnline(artist: String, album: String, title: String? = nil) async -> Data? {
+        if let data = await fetchFromiTunes(artist: artist, album: album, title: title) {
             return data
         }
         return await fetchFromMusicBrainz(artist: artist, album: album)
@@ -192,23 +195,23 @@ enum CoverArtService {
     }
 
     /// Cerca su iTunes Search API (nessuna API key).
-    /// Prova artista+album; solo album solo se manca l’artista.
-    static func fetchFromiTunes(artist: String, album: String) async -> Data? {
+    /// Prova artista+album (anche senza suffissi Edition), poi artista+titolo brano.
+    static func fetchFromiTunes(artist: String, album: String, title: String? = nil) async -> Data? {
         let cleanedArtist = primaryArtistName(artist)
         let cleanedAlbum = album.trimmingCharacters(in: .whitespacesAndNewlines)
+        let strippedAlbum = stripEditionAnnotations(cleanedAlbum)
         guard !cleanedArtist.isEmpty || !cleanedAlbum.isEmpty else { return nil }
 
-        let normalizedAlbum = normalizeAlbumTitle(cleanedAlbum)
         var terms: [String] = []
         if !cleanedArtist.isEmpty, !cleanedAlbum.isEmpty {
             terms.append("\(cleanedArtist) \(cleanedAlbum)")
-            if normalizedAlbum != cleanedAlbum.lowercased() {
-                terms.append("\(cleanedArtist) \(normalizedAlbum)")
+            if strippedAlbum != cleanedAlbum, !strippedAlbum.isEmpty {
+                terms.append("\(cleanedArtist) \(strippedAlbum)")
             }
         } else if !cleanedAlbum.isEmpty {
             terms.append(cleanedAlbum)
-            if normalizedAlbum != cleanedAlbum.lowercased() {
-                terms.append(normalizedAlbum)
+            if strippedAlbum != cleanedAlbum, !strippedAlbum.isEmpty {
+                terms.append(strippedAlbum)
             }
         } else if !cleanedArtist.isEmpty {
             terms.append(cleanedArtist)
@@ -219,6 +222,15 @@ enum CoverArtService {
 
         for term in terms {
             if let data = await searchiTunesAlbum(term: term, artist: cleanedArtist, album: cleanedAlbum) {
+                return data
+            }
+        }
+
+        // Fallback: molti album “Anniversary/Bonus/Special Edition” non escono come entity=album,
+        // ma la ricerca per brano restituisce subito artworkUrl (es. Slipknot, Maroon 5, Linkin Park).
+        let cleanedTitle = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanedArtist.isEmpty, !cleanedTitle.isEmpty {
+            if let data = await searchiTunesSong(artist: cleanedArtist, title: cleanedTitle, album: cleanedAlbum) {
                 return data
             }
         }
@@ -236,17 +248,20 @@ enum CoverArtService {
         let cleanedAlbum = album.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedAlbum.isEmpty else { return nil }
 
-        let mbids = await searchMusicBrainzReleaseIDs(artist: cleanedArtist, album: cleanedAlbum)
-        for mbid in mbids {
-            if let data = await downloadCoverArtArchive(releaseID: mbid) {
-                return data
+        let albumVariants = Array(Set([cleanedAlbum, stripEditionAnnotations(cleanedAlbum)].filter { !$0.isEmpty }))
+        for albumVariant in albumVariants {
+            let mbids = await searchMusicBrainzReleaseIDs(artist: cleanedArtist, album: albumVariant)
+            for mbid in mbids {
+                if let data = await downloadCoverArtArchive(releaseID: mbid) {
+                    return data
+                }
             }
-        }
 
-        let groupIDs = await searchMusicBrainzReleaseGroupIDs(artist: cleanedArtist, album: cleanedAlbum)
-        for gid in groupIDs {
-            if let data = await downloadCoverArtArchive(releaseGroupID: gid) {
-                return data
+            let groupIDs = await searchMusicBrainzReleaseGroupIDs(artist: cleanedArtist, album: albumVariant)
+            for gid in groupIDs {
+                if let data = await downloadCoverArtArchive(releaseGroupID: gid) {
+                    return data
+                }
             }
         }
         return nil
@@ -438,6 +453,40 @@ enum CoverArtService {
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Rimuove suffissi tipo (Bonus Edition), [Deluxe Edition], ": 10th Anniversary Edition".
+    private static func stripEditionAnnotations(_ raw: String) -> String {
+        var s = raw
+        let patterns = [
+            #"\s*[\(\[][^\)\]]*\b(edition|version|deluxe|bonus|expanded|remaster(?:ed)?|anniversary|explicit|clean|special)\b[^\)\]]*[\)\]]"#,
+            #"\s*[:\-–—]\s*\d{1,2}(st|nd|rd|th)?\s+anniversary(\s+edition)?\s*$"#,
+            #"\s+[\(\[]\s*(deluxe|bonus|expanded|special)\s*[\)\]]\s*$"#
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) {
+                let range = NSRange(s.startIndex..<s.endIndex, in: s)
+                s = regex.stringByReplacingMatches(in: s, options: [], range: range, withTemplate: "")
+            }
+        }
+        while s.contains("  ") {
+            s = s.replacingOccurrences(of: "  ", with: " ")
+        }
+        return s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.init(charactersIn: "-:")))
+    }
+
+    /// Confronto “morbido”: ignora punteggiatura e annotazioni edizione.
+    private static func canonicalizeForMatch(_ raw: String) -> String {
+        var s = normalizeAlbumTitle(stripEditionAnnotations(raw))
+        // Togli parentesi residue tipo "vol. 3: (the subliminal verses)"
+        if let regex = try? NSRegularExpression(pattern: #"[\(\)\[\]\{\}:.,;/\\'"]+"#, options: []) {
+            let range = NSRange(s.startIndex..<s.endIndex, in: s)
+            s = regex.stringByReplacingMatches(in: s, options: [], range: range, withTemplate: " ")
+        }
+        while s.contains("  ") {
+            s = s.replacingOccurrences(of: "  ", with: " ")
+        }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func searchiTunesAlbum(term: String, artist: String, album: String) async -> Data? {
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
@@ -457,15 +506,74 @@ enum CoverArtService {
                   let results = json["results"] as? [[String: Any]],
                   !results.isEmpty else { return nil }
 
-            guard let pick = bestMatch(results: results, artist: artist, album: album) else {
+            guard let pick = bestMatch(results: results, artist: artist, album: album, titleKey: "collectionName") else {
                 return nil
             }
-            guard var artURLString = pick["artworkUrl100"] as? String else { return nil }
-            artURLString = artURLString
-                .replacingOccurrences(of: "100x100bb", with: "600x600bb")
-                .replacingOccurrences(of: "100x100", with: "600x600")
-            guard let artURL = URL(string: artURLString) else { return nil }
+            return await downloadiTunesArtwork(from: pick)
+        } catch {
+            return nil
+        }
+    }
 
+    private static func searchiTunesSong(artist: String, title: String, album: String) async -> Data? {
+        let term = "\(artist) \(title)"
+        var components = URLComponents(string: "https://itunes.apple.com/search")
+        components?.queryItems = [
+            URLQueryItem(name: "term", value: term),
+            URLQueryItem(name: "media", value: "music"),
+            URLQueryItem(name: "entity", value: "song"),
+            URLQueryItem(name: "limit", value: "12")
+        ]
+        guard let url = components?.url else { return nil }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                return nil
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let results = json["results"] as? [[String: Any]],
+                  !results.isEmpty else { return nil }
+
+            let artistN = canonicalizeForMatch(artist)
+            let titleN = canonicalizeForMatch(title)
+            let albumN = canonicalizeForMatch(album)
+
+            let ranked = results.compactMap { row -> (score: Int, row: [String: Any])? in
+                let ra = canonicalizeForMatch(row["artistName"] as? String ?? "")
+                let rt = canonicalizeForMatch(row["trackName"] as? String ?? "")
+                let rl = canonicalizeForMatch(row["collectionName"] as? String ?? "")
+                let artistOK = artistN.isEmpty
+                    || ra == artistN
+                    || ra.contains(artistN)
+                    || artistN.contains(ra)
+                guard artistOK else { return nil }
+                let titleOK = rt == titleN || rt.contains(titleN) || titleN.contains(rt)
+                guard titleOK else { return nil }
+                var score = 0
+                if rt == titleN { score += 50 }
+                if !albumN.isEmpty, albumsMatch(query: albumN, candidate: rl, artist: artistN) {
+                    score += 40
+                }
+                if ra == artistN { score += 10 }
+                return (score, row)
+            }
+            .sorted { $0.score > $1.score }
+
+            guard let pick = ranked.first?.row else { return nil }
+            return await downloadiTunesArtwork(from: pick)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func downloadiTunesArtwork(from pick: [String: Any]) async -> Data? {
+        guard var artURLString = pick["artworkUrl100"] as? String else { return nil }
+        artURLString = artURLString
+            .replacingOccurrences(of: "100x100bb", with: "600x600bb")
+            .replacingOccurrences(of: "100x100", with: "600x600")
+        guard let artURL = URL(string: artURLString) else { return nil }
+        do {
             let (imageData, imageResponse) = try await URLSession.shared.data(from: artURL)
             guard let imageHTTP = imageResponse as? HTTPURLResponse,
                   (200...299).contains(imageHTTP.statusCode),
@@ -476,14 +584,14 @@ enum CoverArtService {
         }
     }
 
-    private static func bestMatch(results: [[String: Any]], artist: String, album: String) -> [String: Any]? {
-        let artistN = normalizeAlbumTitle(artist)
-        let albumN = normalizeAlbumTitle(album)
+    private static func bestMatch(results: [[String: Any]], artist: String, album: String, titleKey: String) -> [String: Any]? {
+        let artistN = canonicalizeForMatch(artist)
+        let albumN = canonicalizeForMatch(album)
 
         // Match album + artista (obbligatorio se entrambi noti). Niente fallback “primo risultato”.
         if let hit = results.first(where: { row in
-            let ra = normalizeAlbumTitle(row["artistName"] as? String ?? "")
-            let rl = normalizeAlbumTitle(row["collectionName"] as? String ?? "")
+            let ra = canonicalizeForMatch(row["artistName"] as? String ?? "")
+            let rl = canonicalizeForMatch(row[titleKey] as? String ?? "")
             let albumOK = albumsMatch(query: albumN, candidate: rl, artist: artistN)
             let artistOK = artistN.isEmpty
                 || ra == artistN
@@ -497,7 +605,7 @@ enum CoverArtService {
         // Solo se manca l’artista: match esatto sul titolo album
         if artistN.isEmpty, !albumN.isEmpty,
            let hit = results.first(where: { row in
-               normalizeAlbumTitle(row["collectionName"] as? String ?? "") == albumN
+               canonicalizeForMatch(row[titleKey] as? String ?? "") == albumN
            }) {
             return hit
         }
@@ -507,34 +615,41 @@ enum CoverArtService {
 
     /// Confronto album rigoroso: evita che "4ever Hilary Duff" matchi l’album omonimo "Hilary Duff".
     private static func albumsMatch(query: String, candidate: String, artist: String) -> Bool {
-        if query.isEmpty { return true }
-        if candidate.isEmpty { return false }
-        if query == candidate { return true }
+        let q = canonicalizeForMatch(query)
+        let c = canonicalizeForMatch(candidate)
+        let a = canonicalizeForMatch(artist)
+        if q.isEmpty { return true }
+        if c.isEmpty { return false }
+        if q == c { return true }
 
         // Il candidato contiene l’intero titolo cercato (es. "Album (Deluxe)" ⊃ "Album").
-        if candidate.contains(query) { return true }
+        if c.contains(q) { return true }
 
         // Il titolo cercato contiene il candidato solo se non è “solo il nome artista”
         // e copre una parte sostanziale del titolo.
-        if query.contains(candidate) {
-            if !artist.isEmpty {
-                if candidate == artist { return false }
-                if artist.contains(candidate), candidate.count <= artist.count {
+        if q.contains(c) {
+            if !a.isEmpty {
+                if c == a { return false }
+                if a.contains(c), c.count <= a.count {
                     return false
                 }
             }
-            let ratio = Double(candidate.count) / Double(max(query.count, 1))
-            if ratio >= 0.65 { return true }
+            let ratio = Double(c.count) / Double(max(q.count, 1))
+            if ratio >= 0.55 { return true }
         }
 
         // Token distintivi (escludi parole dell’artista): devono comparire nel candidato.
-        let artistTokens = Set(artist.split(separator: " ").map(String.init).filter { $0.count > 1 })
-        let queryTokens = query.split(separator: " ").map(String.init)
+        let artistTokens = Set(a.split(separator: " ").map(String.init).filter { $0.count > 1 })
+        let queryTokens = q.split(separator: " ").map(String.init)
             .filter { $0.count > 1 && !artistTokens.contains($0) }
         if !queryTokens.isEmpty {
-            let candidateTokens = Set(candidate.split(separator: " ").map(String.init))
-            let hits = queryTokens.filter { candidateTokens.contains($0) || candidate.contains($0) }
+            let candidateTokens = Set(c.split(separator: " ").map(String.init))
+            let hits = queryTokens.filter { candidateTokens.contains($0) || c.contains($0) }
             if hits.count == queryTokens.count { return true }
+            // Maggioranza dei token (edizioni con Vol./Pt. leggermente diversi).
+            if queryTokens.count >= 3, hits.count * 2 >= queryTokens.count * 2 - 1 {
+                return true
+            }
         }
 
         return false

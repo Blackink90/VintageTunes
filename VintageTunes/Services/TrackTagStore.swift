@@ -45,9 +45,12 @@ enum TrackTagStore {
             tracks[i].genre = patch.genre
             tracks[i].trackNumber = patch.trackNumber
             tracks[i].year = patch.year
-            tracks[i].rating = patch.rating
-            tracks[i].playCount = patch.playCount
-            tracks[i].lastPlayedMacTime = patch.lastPlayedMacTime
+            // Stats: i tag sono un backup, non devono azzerare iTunesDB / Play Counts.
+            tracks[i].playCount = max(tracks[i].playCount, patch.playCount)
+            tracks[i].lastPlayedMacTime = max(tracks[i].lastPlayedMacTime, patch.lastPlayedMacTime)
+            if tracks[i].rating == 0, patch.rating != 0 {
+                tracks[i].rating = patch.rating
+            }
         }
     }
 }

@@ -44,8 +44,7 @@ final class SyncService {
                 for i in parsed.tracks.indices {
                     parsed.tracks[i].contentHash = hashIndex.byLocation[parsed.tracks[i].location]
                 }
-                // Solo merge in memoria: non riscrivere iTunesDB al collegamento.
-                _ = PlayCountsFile.merge(into: &parsed.tracks, device: device)
+                // Play Counts: merge esplicito in LibraryController / savePlaylists (una sola volta).
                 return (parsed.tracks, parsed.playlists, parsed.dbVersion)
             }
             stockSession = iTunesDBSessionState.emptyNewDatabase
@@ -215,7 +214,11 @@ final class SyncService {
         }
 
         progress(SyncProgress(fraction: 0.95, message: "Aggiorno database…"))
+        let playMerge = absorbPlayCounts(into: &tracks, device: device)
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        if playMerge.changed, playMerge.canRemoveFile {
+            PlayCountsFile.remove(from: device)
+        }
         try hashIndex.save(to: device)
         progress(SyncProgress(fraction: 1, message: "Sincronizzazione completata"))
         return (tracks, playlists, dbVersion == 0 ? 0x14 : dbVersion, imported, skippedDuplicates)
@@ -313,12 +316,35 @@ final class SyncService {
     }
 
     func savePlaylists(
+        tracks: inout [Track],
+        playlists: [Playlist],
+        dbVersion: UInt32,
+        device: iPodDevice
+    ) throws {
+        let merge = absorbPlayCounts(into: &tracks, device: device)
+        try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        if merge.canRemoveFile {
+            PlayCountsFile.remove(from: device)
+        }
+    }
+
+    /// Scrive l’iTunesDB senza ri-leggere Play Counts (già fusi dal caller).
+    func persistLibrary(
         tracks: [Track],
         playlists: [Playlist],
         dbVersion: UInt32,
         device: iPodDevice
     ) throws {
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+    }
+
+    /// Fondi "Play Counts" dell’iPod prima di qualsiasi rewrite dell’iTunesDB.
+    @discardableResult
+    func absorbPlayCounts(into tracks: inout [Track], device: iPodDevice) -> PlayCountsFile.MergeResult {
+        guard device.firmwareMode == .stock else {
+            return PlayCountsFile.MergeResult(changed: false, canRemoveFile: false)
+        }
+        return PlayCountsFile.merge(into: &tracks, device: device)
     }
 
     /// Rimuove tracce duplicate per hash o per artista+titolo+durata. Tiene la prima occorrenza.
@@ -371,7 +397,11 @@ final class SyncService {
         }
 
         if persistNow {
+            let merge = absorbPlayCounts(into: &tracks, device: device)
             try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+            if merge.canRemoveFile {
+                PlayCountsFile.remove(from: device)
+            }
             try hashIndex.save(to: device)
             var tags = TrackTagStore.load(from: device)
             let removedLocs = Set(removed.map(\.location))
@@ -388,6 +418,9 @@ final class SyncService {
         dbVersion: UInt32,
         device: iPodDevice
     ) throws {
+        // Assorbi Play Counts prima di cambiare l’ordine/numero tracce.
+        let merge = absorbPlayCounts(into: &tracks, device: device)
+
         let removed = tracks.filter { ids.contains($0.id) }
         tracks.removeAll { ids.contains($0.id) }
         for i in playlists.indices {
@@ -405,6 +438,9 @@ final class SyncService {
         }
 
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        if merge.canRemoveFile {
+            PlayCountsFile.remove(from: device)
+        }
         try hashIndex.save(to: device)
         try TrackTagStore.save(tagOverrides, to: device)
     }
@@ -420,9 +456,90 @@ final class SyncService {
     ) async throws -> Bool {
         guard device.firmwareMode == .stock else { return false }
         guard let store = try ArtworkDBStore.open(for: device), store.needsRebuild else { return false }
+        let merge = absorbPlayCounts(into: &tracks, device: device)
         await rewriteAllArtwork(tracks: &tracks, store: store, device: device)
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        if merge.canRemoveFile {
+            PlayCountsFile.remove(from: device)
+        }
         return true
+    }
+
+    /// Scrive (o aggiorna) le cover sull’ArtworkDB del dispositivo per i brani indicati.
+    /// Con `includeAlbumMates` aggiorna anche gli altri brani dello stesso album.
+    @discardableResult
+    func pushArtworkToDevice(
+        forTrackIDs ids: Set<UInt32>,
+        includeAlbumMates: Bool = true,
+        preferRemote: Bool = false,
+        tracks: inout [Track],
+        playlists: [Playlist],
+        dbVersion: UInt32,
+        device: iPodDevice
+    ) async throws -> Int {
+        guard device.firmwareMode == .stock, !ids.isEmpty else { return 0 }
+        guard let store = try ArtworkDBStore.open(for: device) else { return 0 }
+
+        var targetIDs = ids
+        if includeAlbumMates {
+            let albums = Set(
+                tracks.filter { ids.contains($0.id) }
+                    .map { CoverArtService.cacheKey(artist: $0.artist, album: $0.album) }
+            )
+            for track in tracks where albums.contains(CoverArtService.cacheKey(artist: track.artist, album: track.album)) {
+                targetIDs.insert(track.id)
+            }
+        }
+
+        if store.needsRebuild {
+            await rewriteAllArtwork(tracks: &tracks, store: store, device: device)
+            try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+            return tracks.filter { $0.hasArtwork == 1 }.count
+        }
+
+        let merge = absorbPlayCounts(into: &tracks, device: device)
+        var updated = 0
+        let policy: ArtworkResolvePolicy = preferRemote ? .preferRemote : .standard
+        for i in tracks.indices where targetIDs.contains(tracks[i].id) {
+            if tracks[i].dbid == 0 { continue }
+            await applyArtwork(
+                to: &tracks[i],
+                store: store,
+                preferredFileURL: tracks[i].resolvedPath,
+                policy: policy
+            )
+            if tracks[i].hasArtwork == 1, tracks[i].mhiiLink != 0 {
+                updated += 1
+            }
+        }
+        guard updated > 0 else { return 0 }
+        try store.save()
+        try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        if merge.canRemoveFile {
+            PlayCountsFile.remove(from: device)
+        }
+        return updated
+    }
+
+    /// Cover mancanti sul device (mhii assente) ma recuperabili da file/rete.
+    @discardableResult
+    func pushMissingArtworkToDevice(
+        tracks: inout [Track],
+        playlists: [Playlist],
+        dbVersion: UInt32,
+        device: iPodDevice
+    ) async throws -> Int {
+        let missing = Set(tracks.filter { $0.dbid != 0 && ($0.mhiiLink == 0 || $0.hasArtwork != 1) }.map(\.id))
+        guard !missing.isEmpty else { return 0 }
+        return try await pushArtworkToDevice(
+            forTrackIDs: missing,
+            includeAlbumMates: false,
+            preferRemote: false,
+            tracks: &tracks,
+            playlists: playlists,
+            dbVersion: dbVersion,
+            device: device
+        )
     }
 
     private func rewriteAllArtwork(tracks: inout [Track], store: ArtworkDBStore, device: iPodDevice) async {
@@ -437,18 +554,28 @@ final class SyncService {
         try? store.save()
     }
 
-    private func applyArtwork(to track: inout Track, store: ArtworkDBStore, preferredFileURL: URL?) async {
+    private func applyArtwork(
+        to track: inout Track,
+        store: ArtworkDBStore,
+        preferredFileURL: URL?,
+        policy: ArtworkResolvePolicy = .standard
+    ) async {
         let artURL = preferredFileURL ?? track.resolvedPath
         guard let artData = await CoverArtService.resolveArtworkData(
             artist: track.artist,
             album: track.album,
-            fileURL: artURL
+            fileURL: artURL,
+            policy: policy,
+            title: track.title
         ) else { return }
         do {
             let mhii = try store.addArtwork(imageData: artData, songDBID: track.dbid)
             track.hasArtwork = 1
             track.artworkCount = 1
             track.mhiiLink = mhii
+            await MainActor.run {
+                ArtworkCache.shared.store(artist: track.artist, album: track.album, data: artData)
+            }
         } catch {
             // Cover sul device opzionale.
         }

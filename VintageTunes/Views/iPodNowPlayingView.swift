@@ -436,7 +436,8 @@ private struct StockNowPlayingScreen: View {
         artwork.request(
             artist: track.displayArtist,
             album: track.displayAlbum,
-            fileURL: track.resolvedPath
+            fileURL: track.resolvedPath,
+            title: track.displayTitle
         )
     }
 
@@ -550,14 +551,16 @@ private struct RockboxNowPlayingScreen: View {
                     artwork.request(
                         artist: track.displayArtist,
                         album: track.displayAlbum,
-                        fileURL: track.resolvedPath
+                        fileURL: track.resolvedPath,
+                        title: track.displayTitle
                     )
                 }
                 .onChange(of: track.id) { _, _ in
                     artwork.request(
                         artist: track.displayArtist,
                         album: track.displayAlbum,
-                        fileURL: track.resolvedPath
+                        fileURL: track.resolvedPath,
+                        title: track.displayTitle
                     )
                 }
             } else {
