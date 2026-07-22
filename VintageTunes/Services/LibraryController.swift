@@ -660,12 +660,8 @@ final class LibraryController: ObservableObject {
             setStatus(.working("Completo metadati mancanti…"))
             await sync.enrichMissingFromOnline(&result.tracks)
             if result.tracks != before {
-                try? sync.savePlaylists(
-                    tracks: result.tracks,
-                    playlists: result.playlists,
-                    dbVersion: result.dbVersion,
-                    device: device
-                )
+                // Salva solo override su disco: NON riscrivere iTunesDB al solo collegamento
+                // (un rewrite automatico ha già confuso il firmware con sezioni playlist duplicate).
                 let beforeByID = Dictionary(uniqueKeysWithValues: before.map { ($0.id, $0) })
                 var overrides = TrackTagStore.load(from: device)
                 for track in result.tracks {
@@ -690,14 +686,7 @@ final class LibraryController: ObservableObject {
             tracks = result.tracks
             playlists = pruneOrphanPlaylistEntries(result.playlists, tracks: result.tracks)
             dbVersion = result.dbVersion
-            if playlists != result.playlists {
-                try? sync.savePlaylists(
-                    tracks: tracks,
-                    playlists: playlists,
-                    dbVersion: dbVersion,
-                    device: device
-                )
-            }
+            // Non auto-persist playlist prune sul device al load.
             prefetchArtwork()
             if selectedPlaylistID == nil {
                 selectedPlaylistID = playlists.first(where: { !$0.isMaster })?.id
