@@ -403,7 +403,7 @@ final class LibraryController: ObservableObject {
         do {
             try TrackTagStore.save(overrides, to: device)
             try sync.savePlaylists(
-                tracks: tracks,
+                tracks: &tracks,
                 playlists: playlists,
                 dbVersion: dbVersion,
                 device: device
@@ -423,14 +423,50 @@ final class LibraryController: ObservableObject {
             artwork.refresh(
                 artist: track.displayArtist,
                 album: track.displayAlbum,
-                fileURL: track.resolvedPath
+                fileURL: track.resolvedPath,
+                title: track.displayTitle
             )
         }
-        setStatus(.success(
-            selected.count == 1
-                ? "Ricarico copertina…"
-                : "Ricarico copertine per \(seen.count) album…"
-        ))
+
+        guard let device = connectedDevice, device.firmwareMode == .stock else {
+            setStatus(.success(
+                selected.count == 1
+                    ? "Ricarico copertina…"
+                    : "Ricarico copertine per \(seen.count) album…"
+            ))
+            return
+        }
+
+        setStatus(.working("Scrivo copertine sull’iPod…"))
+        let targetIDs = Set(selected.map(\.id))
+        let playlistSnapshot = playlists
+        let version = dbVersion
+        Task {
+            do {
+                var localTracks = tracks
+                let updated = try await sync.pushArtworkToDevice(
+                    forTrackIDs: targetIDs,
+                    includeAlbumMates: true,
+                    preferRemote: true,
+                    tracks: &localTracks,
+                    playlists: playlistSnapshot,
+                    dbVersion: version,
+                    device: device
+                )
+                tracks = localTracks
+                if updated > 0 {
+                    setStatus(.success(
+                        updated == 1
+                            ? "Copertina scritta sull’iPod"
+                            : "Copertine scritte sull’iPod (\(updated))"
+                    ))
+                } else {
+                    setStatus(.failure("Copertina trovata in app, ma non scritta sul dispositivo"))
+                }
+            } catch {
+                setStatus(.failure(error.localizedDescription))
+            }
+        }
     }
 
     func beginEditingSelectedTrack() {
@@ -481,7 +517,7 @@ final class LibraryController: ObservableObject {
         do {
             try TrackTagStore.save(overrides, to: device)
             try sync.savePlaylists(
-                tracks: tracks,
+                tracks: &tracks,
                 playlists: playlists,
                 dbVersion: dbVersion,
                 device: device
@@ -575,7 +611,7 @@ final class LibraryController: ObservableObject {
         do {
             try TrackTagStore.save(overrides, to: device)
             try sync.savePlaylists(
-                tracks: tracks,
+                tracks: &tracks,
                 playlists: playlists,
                 dbVersion: dbVersion,
                 device: device
@@ -654,18 +690,47 @@ final class LibraryController: ObservableObject {
         defer { isLoading = false }
         do {
             var result = try sync.loadLibrary(for: device)
+            // Stelle/ascolti fatti sull’iPod vivono in "Play Counts", non nell’iTunesDB.
+            let playMerge = sync.absorbPlayCounts(into: &result.tracks, device: device)
             let before = result.tracks
             await sync.backfillFromFiles(&result.tracks)
             TrackTagStore.apply(TrackTagStore.load(from: device), to: &result.tracks)
             setStatus(.working("Completo metadati mancanti…"))
             await sync.enrichMissingFromOnline(&result.tracks)
             if result.tracks != before {
-                // Salva solo override su disco: NON riscrivere iTunesDB al solo collegamento
-                // (un rewrite automatico ha già confuso il firmware con sezioni playlist duplicate).
+                // Salva override metadati su disco; le stats le gestiamo sotto se fuse da Play Counts.
                 let beforeByID = Dictionary(uniqueKeysWithValues: before.map { ($0.id, $0) })
                 var overrides = TrackTagStore.load(from: device)
                 for track in result.tracks {
                     guard let old = beforeByID[track.id], old != track else { continue }
+                    overrides[track.location] = TrackTagOverride(
+                        title: track.title,
+                        artist: track.artist,
+                        album: track.album,
+                        genre: track.genre,
+                        trackNumber: track.trackNumber,
+                        year: track.year,
+                        rating: track.rating,
+                        playCount: track.playCount,
+                        lastPlayedMacTime: track.lastPlayedMacTime
+                    )
+                }
+                try? TrackTagStore.save(overrides, to: device)
+            }
+            // Dopo il merge, scrivi nell’iTunesDB (come iTunes) e cancella Play Counts.
+            if playMerge.changed, device.firmwareMode == .stock {
+                setStatus(.working("Salvo stelle e ascolti dall’iPod…"))
+                try sync.persistLibrary(
+                    tracks: result.tracks,
+                    playlists: result.playlists,
+                    dbVersion: result.dbVersion,
+                    device: device
+                )
+                if playMerge.canRemoveFile {
+                    PlayCountsFile.remove(from: device)
+                }
+                var overrides = TrackTagStore.load(from: device)
+                for track in result.tracks {
                     overrides[track.location] = TrackTagOverride(
                         title: track.title,
                         artist: track.artist,
@@ -689,6 +754,15 @@ final class LibraryController: ObservableObject {
                     device: device
                 ) {
                     setStatus(.success("Cover riscritte per l'iPod"))
+                }
+                let missing = try await sync.pushMissingArtworkToDevice(
+                    tracks: &result.tracks,
+                    playlists: result.playlists,
+                    dbVersion: result.dbVersion,
+                    device: device
+                )
+                if missing > 0 {
+                    setStatus(.success("Copertine mancanti scritte sull’iPod (\(missing))"))
                 }
             }
             connectedDevice = device
@@ -891,7 +965,8 @@ final class LibraryController: ObservableObject {
                         artData = embedded
                     } else if let remote = await CoverArtService.fetchFromOnline(
                         artist: merged.artist,
-                        album: merged.album
+                        album: merged.album,
+                        title: merged.title
                     ) {
                         artData = remote
                     } else {
@@ -1146,7 +1221,7 @@ final class LibraryController: ObservableObject {
 
     private func persistPlaylists(device: iPodDevice) {
         do {
-            try sync.savePlaylists(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+            try sync.savePlaylists(tracks: &tracks, playlists: playlists, dbVersion: dbVersion, device: device)
             setStatus(.success("Playlist salvate"))
         } catch {
             setStatus(.failure(error.localizedDescription))
