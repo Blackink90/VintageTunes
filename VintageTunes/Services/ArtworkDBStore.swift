@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-/// Device-side album art (ArtworkDB + .ithmb), matching iTunes / libgpod for Video & Classic.
+/// Device-side album art (ArtworkDB + .ithmb), matching Music.app for Video & Classic.
 enum ArtworkDBError: LocalizedError {
     case unsupportedDevice
     case invalidImage
@@ -23,7 +23,8 @@ struct ArtworkThumbFormat: Equatable {
 
     var slotBytes: Int { width * height * 2 }
     var ithmbName: String { String(format: "F%04d_1.ithmb", correlationID) }
-    var ithmbPath: String { ":Artwork:\(ithmbName)" }
+    /// Music.app / Video 5.5G use `:F1028_1.ithmb` (no `Artwork:` prefix).
+    var ithmbPath: String { ":\(ithmbName)" }
 }
 
 enum ArtworkDeviceProfile: Equatable {
@@ -48,13 +49,19 @@ enum ArtworkDeviceProfile: Equatable {
         }
     }
 
+    var correlationIDs: Set<UInt32> { Set(formats.map(\.correlationID)) }
+
     static func detect(for device: iPodDevice) -> ArtworkDeviceProfile? {
         if device.firmwareMode == .rockbox { return nil }
         let hint = device.modelHint.uppercased()
-        if hint.contains("CLASSIC") || hint.contains("MB147") || hint.contains("MB139") || hint.contains("MA446") {
+        // Only explicit Classic model ids / names — never the ambiguous "Classic / Video" fallback.
+        if hint.contains("MB147") || hint.contains("MB139") || hint.contains("MA446") {
             return .classic
         }
-        // Video 5G/5.5G and unknown stock → Video sizes (simulated iPod is MA450 Video).
+        if hint.contains("CLASSIC"), !hint.contains("VIDEO") {
+            return .classic
+        }
+        // Video 5G/5.5G and unknown stock → Video sizes (MA450 etc.).
         return .video5G
     }
 }
@@ -70,6 +77,7 @@ struct ArtworkThumbRef: Equatable {
 struct ArtworkImageEntry: Equatable {
     var id: UInt32
     var songDBID: UInt64
+    var sourceImageBytes: UInt32
     var thumbs: [ArtworkThumbRef]
 }
 
@@ -77,7 +85,9 @@ struct ArtworkImageEntry: Equatable {
 final class ArtworkDBStore {
     private(set) var profile: ArtworkDeviceProfile
     private(set) var images: [ArtworkImageEntry] = []
-    private var nextImageID: UInt32 = 0x40
+    /// True when on-disk ArtworkDB/ithmb do not match this device profile (need full rewrite).
+    private(set) var needsRebuild = false
+    private var nextImageID: UInt32 = 0x64
     private let artworkDir: URL
 
     init(device: iPodDevice, profile: ArtworkDeviceProfile) {
@@ -89,14 +99,52 @@ final class ArtworkDBStore {
 
     static func open(for device: iPodDevice) throws -> ArtworkDBStore? {
         guard let profile = ArtworkDeviceProfile.detect(for: device) else { return nil }
+        Self.ensureModelHintInSysInfo(for: device)
         let store = ArtworkDBStore(device: device, profile: profile)
         try FileManager.default.createDirectory(at: store.artworkDir, withIntermediateDirectories: true)
         if FileManager.default.fileExists(atPath: store.databaseURL.path) {
             try store.load()
+            store.evaluateCompatibility()
         } else {
             store.ensureEmptyIthmbFiles()
+            store.needsRebuild = false
         }
         return store
+    }
+
+    /// After a restore SysInfo is often empty; seed ModelNumStr so future scans stay on Video formats.
+    private static func ensureModelHintInSysInfo(for device: iPodDevice) {
+        let sysInfo = device.controlURL.appendingPathComponent("Device/SysInfo")
+        let existing = (try? String(contentsOf: sysInfo, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard existing.isEmpty else { return }
+        let model: String
+        let gb = Double(device.capacityBytes) / 1_000_000_000
+        if gb >= 70 { model = "MA450" }
+        else if gb >= 50 { model = "MA003" }
+        else { model = "MA477" }
+        try? "ModelNumStr: \(model)\n".write(to: sysInfo, atomically: true, encoding: .utf8)
+    }
+
+    /// Wipe image list + ithmb payloads so covers can be rewritten in the correct format.
+    func beginRebuild() {
+        images.removeAll()
+        nextImageID = 0x64
+        needsRebuild = false
+        let fm = FileManager.default
+        // Remove thumbnails that do not belong to this profile (e.g. Classic files on Video).
+        if let files = try? fm.contentsOfDirectory(at: artworkDir, includingPropertiesForKeys: nil) {
+            let keep = Set(profile.formats.map(\.ithmbName) + ["ArtworkDB"])
+            for url in files where url.lastPathComponent.hasPrefix("F") && url.pathExtension.lowercased() == "ithmb" {
+                if !keep.contains(url.lastPathComponent) {
+                    try? fm.removeItem(at: url)
+                }
+            }
+        }
+        for format in profile.formats {
+            let url = artworkDir.appendingPathComponent(format.ithmbName)
+            fm.createFile(atPath: url.path, contents: Data(), attributes: nil)
+        }
     }
 
     /// Append cover art for a track. Returns mhii id to store in `Track.mhiiLink`.
@@ -136,7 +184,14 @@ final class ArtworkDBStore {
 
         let id = nextImageID
         nextImageID += 1
-        images.append(ArtworkImageEntry(id: id, songDBID: songDBID, thumbs: thumbs))
+        images.append(
+            ArtworkImageEntry(
+                id: id,
+                songDBID: songDBID,
+                sourceImageBytes: UInt32(clamping: imageData.count),
+                thumbs: thumbs
+            )
+        )
         return id
     }
 
@@ -148,11 +203,11 @@ final class ArtworkDBStore {
             try FileManager.default.removeItem(at: databaseURL)
         }
         try FileManager.default.moveItem(at: tmp, to: databaseURL)
-        // Best-effort flush of directory entries on FAT32.
         if let dir = try? FileHandle(forWritingTo: artworkDir) {
             try? dir.synchronize()
             try? dir.close()
         }
+        needsRebuild = false
     }
 
     // MARK: - Load
@@ -162,24 +217,50 @@ final class ArtworkDBStore {
         guard data.count >= 12, String(bytes: data[0..<4], encoding: .ascii) == "mhfd" else {
             throw ArtworkDBError.writeFailed("ArtworkDB non valido")
         }
-        nextImageID = max(readU32(data, 28), 0x40)
+        nextImageID = max(readU32(data, 28), 0x64)
         images.removeAll()
 
         var offset = Int(readU32(data, 4))
         let end = min(Int(readU32(data, 8)), data.count)
+        var seenFileFormats = Set<UInt32>()
         while offset + 12 <= end {
             let magic = String(bytes: data[offset..<(offset + 4)], encoding: .ascii) ?? ""
+            let headerLen = Int(readU32(data, offset + 4))
             let total = Int(readU32(data, offset + 8))
             guard total >= 12, offset + total <= data.count else { break }
-            if magic == "mhsd", readU32(data, offset + 12) == 1 {
-                parseImageList(data, start: offset + Int(readU32(data, offset + 4)), end: offset + total)
+            if magic == "mhsd" {
+                let type = readU32(data, offset + 12)
+                let contentStart = offset + headerLen
+                let contentEnd = offset + total
+                if type == 1 {
+                    parseImageList(data, start: contentStart, end: contentEnd)
+                } else if type == 3 {
+                    seenFileFormats.formUnion(parseFileListIDs(data, start: contentStart, end: contentEnd))
+                }
+                // Music.app uses mhsd header length 0x60; short headers are from older VT builds.
+                if headerLen < 0x60 {
+                    needsRebuild = true
+                }
             }
             offset += total
         }
         if let maxID = images.map(\.id).max() {
             nextImageID = max(nextImageID, maxID &+ 1)
         }
+        if !seenFileFormats.isEmpty, seenFileFormats != profile.correlationIDs {
+            needsRebuild = true
+        }
         ensureEmptyIthmbFiles()
+    }
+
+    private func evaluateCompatibility() {
+        let allowed = profile.correlationIDs
+        for image in images {
+            for thumb in image.thumbs where !allowed.contains(thumb.correlationID) {
+                needsRebuild = true
+                return
+            }
+        }
     }
 
     private func parseImageList(_ data: Data, start: Int, end: Int) {
@@ -194,6 +275,7 @@ final class ArtworkDBStore {
 
             let id = readU32(data, offset + 16)
             let songDBID = readU64(data, offset + 20)
+            let sourceBytes = headerLen > 52 ? readU32(data, offset + 48) : 0
             var thumbs: [ArtworkThumbRef] = []
 
             var child = offset + headerLen
@@ -203,7 +285,6 @@ final class ArtworkDBStore {
                 let cTotal = Int(readU32(data, child + 8))
                 guard cTotal >= 12, child + cTotal <= data.count else { break }
                 if cm == "mhod", readU16(data, child + 12) == 2 {
-                    // type-2 container → mhni
                     let mhniOffset = child + Int(readU32(data, child + 4))
                     if mhniOffset + 0x4c <= child + cTotal,
                        String(bytes: data[mhniOffset..<(mhniOffset + 4)], encoding: .ascii) == "mhni" {
@@ -221,9 +302,33 @@ final class ArtworkDBStore {
                 child += cTotal
             }
 
-            images.append(ArtworkImageEntry(id: id, songDBID: songDBID, thumbs: thumbs))
+            images.append(
+                ArtworkImageEntry(
+                    id: id,
+                    songDBID: songDBID,
+                    sourceImageBytes: sourceBytes,
+                    thumbs: thumbs
+                )
+            )
             offset += total
         }
+    }
+
+    private func parseFileListIDs(_ data: Data, start: Int, end: Int) -> Set<UInt32> {
+        guard start + 12 <= end, String(bytes: data[start..<(start + 4)], encoding: .ascii) == "mhlf" else {
+            return []
+        }
+        var ids = Set<UInt32>()
+        var offset = start + Int(readU32(data, start + 4))
+        while offset + 20 <= end {
+            let magic = String(bytes: data[offset..<(offset + 4)], encoding: .ascii) ?? ""
+            guard magic == "mhif" else { break }
+            let total = Int(readU32(data, offset + 8))
+            guard total >= 20, offset + total <= data.count else { break }
+            ids.insert(readU32(data, offset + 16))
+            offset += total
+        }
+        return ids
     }
 
     private func ensureEmptyIthmbFiles() {
@@ -236,7 +341,7 @@ final class ArtworkDBStore {
         }
     }
 
-    // MARK: - Build ArtworkDB
+    // MARK: - Build ArtworkDB (Music.app / Video 5.5G layout)
 
     private func buildDatabase() -> Data {
         let imageList = buildImageList()
@@ -257,7 +362,7 @@ final class ArtworkDBStore {
         writeFourCC(&file, at: 0, "mhfd")
         writeU32(&file, at: 4, UInt32(headerLen))
         writeU32(&file, at: 8, UInt32(headerLen + body.count))
-        writeU32(&file, at: 16, 2) // required by iTunes 7+
+        writeU32(&file, at: 16, 6) // Music.app on Video 5.5G
         writeU32(&file, at: 20, 3) // child mhsd count
         writeU32(&file, at: 28, nextImageID)
         file.append(body)
@@ -266,12 +371,13 @@ final class ArtworkDBStore {
     }
 
     private func wrapMHSD(type: UInt32, child: Data) -> Data {
-        let headerLen = 0x10
-        var data = Data()
-        appendFourCC(&data, "mhsd")
-        appendU32(&data, UInt32(headerLen))
-        appendU32(&data, UInt32(headerLen + child.count))
-        appendU32(&data, type)
+        // Music.app uses 0x60-byte mhsd headers (not the minimal 0x10).
+        let headerLen = 0x60
+        var data = Data(count: headerLen)
+        writeFourCC(&data, at: 0, "mhsd")
+        writeU32(&data, at: 4, UInt32(headerLen))
+        writeU32(&data, at: 8, UInt32(headerLen + child.count))
+        writeU32(&data, at: 12, type)
         data.append(child)
         return data
     }
@@ -329,14 +435,22 @@ final class ArtworkDBStore {
         for thumb in image.thumbs {
             children.append(buildThumbnailMHOD(thumb))
         }
+        children.append(buildEmptyMHAF())
+
         let headerLen = 0x98
         var header = Data(count: headerLen)
         writeFourCC(&header, at: 0, "mhii")
         writeU32(&header, at: 4, UInt32(headerLen))
         writeU32(&header, at: 8, UInt32(headerLen + children.count))
-        writeU32(&header, at: 12, UInt32(image.thumbs.count))
+        writeU32(&header, at: 12, UInt32(image.thumbs.count + 1)) // thumbs + mhaf
         writeU32(&header, at: 16, image.id)
         writeU64(&header, at: 20, image.songDBID)
+        writeU32(&header, at: 48, image.sourceImageBytes)
+        writeU32(&header, at: 56, 1)
+        writeU32(&header, at: 60, 1)
+        // Music.app writes quiet-NaN floats here (likely unused colour averages).
+        writeU32(&header, at: 76, 0x7FF8_0000)
+        writeU32(&header, at: 84, 0x7FF8_0000)
         header.append(children)
         return header
     }
@@ -354,8 +468,7 @@ final class ArtworkDBStore {
     }
 
     private func buildMHNI(_ thumb: ArtworkThumbRef) -> Data {
-        let path = String(format: ":Artwork:F%04d_1.ithmb", thumb.correlationID)
-        let pathMHOD = buildArtworkStringMHOD(type: 3, string: path)
+        let pathMHOD = buildArtworkStringMHOD(type: 3, string: String(format: ":F%04d_1.ithmb", thumb.correlationID))
         let headerLen = 0x4c
         var header = Data(count: headerLen)
         writeFourCC(&header, at: 0, "mhni")
@@ -372,21 +485,36 @@ final class ArtworkDBStore {
         return header
     }
 
+    /// Empty album-face payload required by Music.app (mhod type 6 → mhaf).
+    private func buildEmptyMHAF() -> Data {
+        let mhafLen = 0x60
+        var mhaf = Data(count: mhafLen)
+        writeFourCC(&mhaf, at: 0, "mhaf")
+        writeU32(&mhaf, at: 4, UInt32(mhafLen))
+        writeU32(&mhaf, at: 8, 0x3c)
+
+        let headerLen = 0x18
+        var data = Data(count: headerLen)
+        writeFourCC(&data, at: 0, "mhod")
+        writeU32(&data, at: 4, UInt32(headerLen))
+        writeU32(&data, at: 8, UInt32(headerLen + mhaf.count))
+        writeU16(&data, at: 12, 6)
+        data.append(mhaf)
+        return data
+    }
+
     private func buildArtworkStringMHOD(type: UInt16, string: String) -> Data {
         var stringBytes = Data()
         for unit in string.utf16 {
             appendU16(&stringBytes, unit)
         }
-        let contentHeader = 12
-        let rawTotal = 0x18 + contentHeader + stringBytes.count
-        let padding = (4 - (rawTotal % 4)) % 4
-        let total = rawTotal + padding
+        // Layout matches Music.app ArtworkDB strings: length@0x18, encoding@0x1c, payload@0x24.
+        let total = 0x24 + stringBytes.count
         var data = Data(count: total)
         writeFourCC(&data, at: 0, "mhod")
         writeU32(&data, at: 4, 0x18)
         writeU32(&data, at: 8, UInt32(total))
         writeU16(&data, at: 12, type)
-        data[15] = UInt8(padding)
         writeU32(&data, at: 0x18, UInt32(stringBytes.count))
         writeU32(&data, at: 0x1c, 2) // UTF-16LE
         data.replaceSubrange(0x24..<(0x24 + stringBytes.count), with: stringBytes)
@@ -415,7 +543,6 @@ final class ArtworkDBStore {
         if let ctx = NSGraphicsContext(bitmapImageRep: rep) {
             NSGraphicsContext.current = ctx
             ctx.imageInterpolation = .high
-            // Letterbox into square slot.
             let src = image.size
             let scale = min(CGFloat(width) / max(src.width, 1), CGFloat(height) / max(src.height, 1))
             let drawW = src.width * scale
@@ -448,7 +575,7 @@ final class ArtworkDBStore {
         return out
     }
 
-    // MARK: - Binary helpers (local to avoid fighting iTunesDB writer privates)
+    // MARK: - Binary helpers
 
     private func writeFourCC(_ data: inout Data, at offset: Int, _ value: String) {
         let chars = Array(value.utf8.prefix(4))

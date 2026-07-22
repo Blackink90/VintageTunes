@@ -44,14 +44,8 @@ final class SyncService {
                 for i in parsed.tracks.indices {
                     parsed.tracks[i].contentHash = hashIndex.byLocation[parsed.tracks[i].location]
                 }
-                if PlayCountsFile.merge(into: &parsed.tracks, device: device) {
-                    try? persist(
-                        tracks: parsed.tracks,
-                        playlists: parsed.playlists,
-                        dbVersion: parsed.dbVersion,
-                        device: device
-                    )
-                }
+                // Solo merge in memoria: non riscrivere iTunesDB al collegamento.
+                _ = PlayCountsFile.merge(into: &parsed.tracks, device: device)
                 return (parsed.tracks, parsed.playlists, parsed.dbVersion)
             }
             stockSession = iTunesDBSessionState.emptyNewDatabase
@@ -105,6 +99,7 @@ final class SyncService {
         ensureMusicFolders(on: device)
 
         let artworkStore = try? ArtworkDBStore.open(for: device)
+        let artworkNeedsRebuild = artworkStore?.needsRebuild == true
         var nextDBID = max(tracks.map(\.dbid).filter { $0 > 0 }.max() ?? 0, 1)
 
         for (index, meta) in audioItems.enumerated() {
@@ -144,14 +139,26 @@ final class SyncService {
             let dbid = nextDBID
 
             let location: String
+            var onDeviceURL: URL?
             switch device.firmwareMode {
             case .stock:
                 location = try copyStock(file: meta.url, device: device, trackID: trackID)
+                onDeviceURL = resolveLocation(location, device: device)
             case .rockbox:
                 location = try copyRockbox(file: meta.url, meta: meta, device: device)
+                onDeviceURL = resolveLocation(location, device: device)
             }
 
             hashIndex.set(location: location, hash: fileHash)
+
+            let actualSize: UInt32
+            if let onDeviceURL,
+               let attrs = try? FileManager.default.attributesOfItem(atPath: onDeviceURL.path),
+               let fileSize = attrs[.size] as? NSNumber {
+                actualSize = UInt32(clamping: fileSize.intValue)
+            } else {
+                actualSize = meta.sizeBytes
+            }
 
             var track = Track(
                 id: trackID,
@@ -161,36 +168,24 @@ final class SyncService {
                 genre: meta.genre,
                 location: location,
                 durationMs: meta.durationMs,
-                sizeBytes: meta.sizeBytes,
+                sizeBytes: actualSize,
                 trackNumber: meta.trackNumber,
                 year: meta.year,
-                bitrate: meta.bitrate,
-                sampleRate: meta.sampleRate,
+                bitrate: meta.bitrate == 0 ? 192 : min(meta.bitrate, 320),
+                sampleRate: meta.sampleRate == 0 ? 44100 : meta.sampleRate,
                 mediaType: 1,
                 dbid: dbid,
                 hasArtwork: 2,
                 artworkCount: 0,
                 mhiiLink: 0,
                 contentHash: fileHash,
-                resolvedPath: resolveLocation(location, device: device)
+                resolvedPath: onDeviceURL
             )
 
-            if device.firmwareMode == .stock, let store = artworkStore {
-                let artURL = track.resolvedPath ?? meta.url
-                if let artData = await CoverArtService.resolveArtworkData(
-                    artist: track.artist,
-                    album: track.album,
-                    fileURL: artURL
-                ) {
-                    do {
-                        let mhii = try store.addArtwork(imageData: artData, songDBID: dbid)
-                        track.hasArtwork = 1
-                        track.artworkCount = 1
-                        track.mhiiLink = mhii
-                    } catch {
-                        // Cover sul device opzionale: l'import audio non fallisce.
-                    }
-                }
+            // Cover: se ArtworkDB è già ok le aggiungiamo qui; in caso di rebuild
+            // le riscriviamo tutte insieme dopo l'import (formato Music.app).
+            if device.firmwareMode == .stock, let store = artworkStore, !artworkNeedsRebuild {
+                await applyArtwork(to: &track, store: store, preferredFileURL: meta.url)
             }
 
             tracks.append(track)
@@ -205,8 +200,18 @@ final class SyncService {
             }
         }
 
-        if let store = artworkStore {
-            try? store.save()
+        if device.firmwareMode == .stock, let store = artworkStore {
+            if artworkNeedsRebuild {
+                progress(SyncProgress(fraction: 0.9, message: "Riscrivo cover (formato iPod)…"))
+                await rewriteAllArtwork(tracks: &tracks, store: store, device: device)
+            } else {
+                try? store.save()
+            }
+        }
+
+        // Master sempre allineata a tutte le tracce: evita brani in mhlt ma assenti dai menu iPod.
+        if let masterIndex = playlists.firstIndex(where: \.isMaster) {
+            playlists[masterIndex].trackIDs = tracks.map(\.id)
         }
 
         progress(SyncProgress(fraction: 0.95, message: "Aggiorno database…"))
@@ -406,6 +411,49 @@ final class SyncService {
 
     // MARK: - Persistence
 
+    /// Rebuild device ArtworkDB when it was written with the wrong profile/paths (e.g. Classic thumbs on Video).
+    func repairArtworkIfNeeded(
+        tracks: inout [Track],
+        playlists: [Playlist],
+        dbVersion: UInt32,
+        device: iPodDevice
+    ) async throws -> Bool {
+        guard device.firmwareMode == .stock else { return false }
+        guard let store = try ArtworkDBStore.open(for: device), store.needsRebuild else { return false }
+        await rewriteAllArtwork(tracks: &tracks, store: store, device: device)
+        try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        return true
+    }
+
+    private func rewriteAllArtwork(tracks: inout [Track], store: ArtworkDBStore, device: iPodDevice) async {
+        store.beginRebuild()
+        for i in tracks.indices {
+            tracks[i].hasArtwork = 2
+            tracks[i].artworkCount = 0
+            tracks[i].mhiiLink = 0
+            if tracks[i].dbid == 0 { continue }
+            await applyArtwork(to: &tracks[i], store: store, preferredFileURL: nil)
+        }
+        try? store.save()
+    }
+
+    private func applyArtwork(to track: inout Track, store: ArtworkDBStore, preferredFileURL: URL?) async {
+        let artURL = preferredFileURL ?? track.resolvedPath
+        guard let artData = await CoverArtService.resolveArtworkData(
+            artist: track.artist,
+            album: track.album,
+            fileURL: artURL
+        ) else { return }
+        do {
+            let mhii = try store.addArtwork(imageData: artData, songDBID: track.dbid)
+            track.hasArtwork = 1
+            track.artworkCount = 1
+            track.mhiiLink = mhii
+        } catch {
+            // Cover sul device opzionale.
+        }
+    }
+
     private func persist(
         tracks: [Track],
         playlists: [Playlist],
@@ -449,6 +497,10 @@ final class SyncService {
                     dbBlob: $0.dbBlob
                 )
             }
+            // Master = unione di tutti gli ID traccia (fonte di verità per i menu stock).
+            if let mi = plistDrafts.firstIndex(where: \.isMaster) {
+                plistDrafts[mi].trackIDs = drafts.map(\.id)
+            }
             // Ensure master first
             plistDrafts.sort { a, b in
                 if a.isMaster != b.isMaster { return a.isMaster && !b.isMaster }
@@ -479,26 +531,68 @@ final class SyncService {
     }
 
     private func copyStock(file: URL, device: iPodDevice, trackID: UInt32) throws -> String {
+        var source = file
+        var prepared: URL?
         let ext = file.pathExtension.lowercased()
-        guard !ext.isEmpty else { throw SyncError.unsupportedFormat(file.lastPathComponent) }
+        if AudioConverter.needsiPodAudioPrep(file) {
+            let ready = try AudioConverter.prepareM4AForiPod(file)
+            prepared = ready
+            source = ready
+        }
+
+        let outExt = source.pathExtension.lowercased().isEmpty ? ext : source.pathExtension.lowercased()
+        guard !outExt.isEmpty else {
+            if let prepared { try? FileManager.default.removeItem(at: prepared) }
+            throw SyncError.unsupportedFormat(file.lastPathComponent)
+        }
+
+        // Stock: solo contenitori riprodotti dal firmware (come Music.app: soprattutto M4A).
+        if device.firmwareMode == .stock, !["mp3", "m4a", "m4b", "wav", "aiff", "aif"].contains(outExt) {
+            if let prepared { try? FileManager.default.removeItem(at: prepared) }
+            throw SyncError.copyFailed("Formato non supportato sull’iPod stock: .\(outExt)")
+        }
 
         let folderIndex = Int(trackID % 50)
         let folderName = String(format: "F%02d", folderIndex)
-        let filename = String(format: "VT%08X.\(ext)", trackID)
-        let dest = device.musicURL
+        // Music.app usa nomi 4 caratteri (es. LHVR.m4a).
+        var filename = OfficialDBFormat.randomMusicFileName(extension: outExt)
+        var dest = device.musicURL
             .appendingPathComponent(folderName, isDirectory: true)
             .appendingPathComponent(filename)
+        var attempts = 0
+        while FileManager.default.fileExists(atPath: dest.path), attempts < 32 {
+            filename = OfficialDBFormat.randomMusicFileName(extension: outExt)
+            dest = device.musicURL
+                .appendingPathComponent(folderName, isDirectory: true)
+                .appendingPathComponent(filename)
+            attempts += 1
+        }
+
+        defer {
+            if let prepared { try? FileManager.default.removeItem(at: prepared) }
+        }
 
         do {
             if FileManager.default.fileExists(atPath: dest.path) {
                 try FileManager.default.removeItem(at: dest)
             }
-            try FileManager.default.copyItem(at: file, to: dest)
+            try FileManager.default.copyItem(at: source, to: dest)
+            clearExtendedAttributes(at: dest)
         } catch {
             throw SyncError.copyFailed(error.localizedDescription)
         }
 
         return ":iPod_Control:Music:\(folderName):\(filename)"
+    }
+
+    private func clearExtendedAttributes(at url: URL) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        process.arguments = ["-c", url.path]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try? process.run()
+        process.waitUntilExit()
     }
 
     private func copyRockbox(file: URL, meta: ImportCandidate, device: iPodDevice) throws -> String {

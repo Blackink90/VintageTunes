@@ -16,7 +16,11 @@ struct PlaylistDBBlob: Equatable, Hashable {
 enum iTunesDBMHSDSlot: Equatable, Hashable {
     case tracks
     case playlists
-    /// Full mhsd chunk including its header (album lists, artist lists, etc.).
+    /// Type-3 mirror of playlists (Music.app writes an identical copy).
+    case podcastPlaylists
+    /// Type-5 smart lists (Musica / Film / …) — firmware stock le usa per il menu Musica.
+    case specialPlaylists
+    /// Full mhsd chunk including its header (album lists, artist lists, type 9, etc.).
     case preserved(Data)
 }
 
@@ -26,6 +30,9 @@ struct iTunesDBSessionState: Equatable {
     var mhsdLayout: [iTunesDBMHSDSlot]
 
     static var emptyNewDatabase: iTunesDBSessionState {
-        iTunesDBSessionState(mhbdHeader: Data(), mhsdLayout: [.tracks, .playlists])
+        iTunesDBSessionState(
+            mhbdHeader: Data(),
+            mhsdLayout: [.tracks, .podcastPlaylists, .playlists, .specialPlaylists]
+        )
     }
 }
