@@ -9,6 +9,9 @@ final class LibraryController: ObservableObject {
     @Published var connectedDevice: iPodDevice?
     @Published var tracks: [Track] = []
     @Published var playlists: [Playlist] = []
+    @Published var photos: [DevicePhoto] = []
+    @Published var photoSelection = Set<UInt32>()
+    @Published var photoAlbumName = "Photo Library"
     @Published var selectedSection: LibrarySection = .songs
     @Published var selectedPlaylistID: UInt64?
     @Published var browseArtist: String?
@@ -215,6 +218,9 @@ final class LibraryController: ObservableObject {
         if section != .playlists {
             selectedPlaylistID = nil
         }
+        if section != .photos {
+            photoSelection.removeAll()
+        }
         selection.removeAll()
         searchText = ""
     }
@@ -302,6 +308,7 @@ final class LibraryController: ObservableObject {
             connectedDevice = nil
             tracks = []
             playlists = []
+            clearPhotosState()
             selection.removeAll()
             clearBrowse()
             artwork.clear()
@@ -314,6 +321,7 @@ final class LibraryController: ObservableObject {
             connectedDevice = nil
             tracks = []
             playlists = []
+            clearPhotosState()
             clearBrowse()
             artwork.clear()
             clearAutoSyncUI()
@@ -840,13 +848,110 @@ final class LibraryController: ObservableObject {
             tracks = result.tracks
             playlists = pruneOrphanPlaylistEntries(result.playlists, tracks: result.tracks)
             dbVersion = result.dbVersion
+            reloadPhotos(from: device)
             // Non auto-persist playlist prune sul device al load.
             prefetchArtwork()
             if selectedPlaylistID == nil {
                 selectedPlaylistID = playlists.first(where: { !$0.isMaster })?.id
             }
+            if selectedSection == .photos, connectedDevice?.supportsPhotos != true {
+                selectSection(.songs)
+            }
             setStatus(.success("Caricate \(result.tracks.count) tracce"))
             checkAutoSync()
+        } catch {
+            setStatus(.failure(error.localizedDescription))
+        }
+    }
+
+    private func clearPhotosState() {
+        photos = []
+        photoSelection.removeAll()
+        photoAlbumName = "Photo Library"
+    }
+
+    private func reloadPhotos(from device: iPodDevice) {
+        guard device.supportsPhotos else {
+            clearPhotosState()
+            return
+        }
+        do {
+            guard let store = try PhotoDBStore.open(for: device) else {
+                clearPhotosState()
+                return
+            }
+            photoAlbumName = store.albumName
+            photos = store.images.map { entry in
+                DevicePhoto(
+                    id: entry.id,
+                    title: "Foto \(entry.id)",
+                    previewJPEG: store.previewJPEGData(for: entry.id)
+                )
+            }
+            photoSelection = photoSelection.filter { id in photos.contains(where: { $0.id == id }) }
+        } catch {
+            clearPhotosState()
+            setStatus(.failure(error.localizedDescription))
+        }
+    }
+
+    func choosePhotosToImport() {
+        guard let device = connectedDevice, device.supportsPhotos else {
+            setStatus(.failure("Foto non disponibili su questo iPod"))
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.image]
+        panel.prompt = "Aggiungi"
+        panel.message = "Scegli una o più foto da copiare sull’iPod"
+        guard panel.runModal() == .OK else { return }
+        importPhotos(urls: panel.urls)
+    }
+
+    func importPhotos(urls: [URL]) {
+        guard let device = connectedDevice, device.supportsPhotos else {
+            setStatus(.failure("Foto non disponibili su questo iPod"))
+            return
+        }
+        Task { @MainActor in
+            do {
+                guard let store = try PhotoDBStore.open(for: device) else {
+                    setStatus(.failure("Foto non supportate su questo modello"))
+                    return
+                }
+                var added = 0
+                for url in urls {
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    guard let data = try? Data(contentsOf: url), !data.isEmpty else { continue }
+                    setStatus(.working("Aggiungo foto \(added + 1)…"))
+                    _ = try store.addPhoto(imageData: data)
+                    added += 1
+                }
+                reloadPhotos(from: device)
+                if added > 0 {
+                    setStatus(.success(added == 1 ? "Aggiunta 1 foto" : "Aggiunte \(added) foto"))
+                } else {
+                    setStatus(.failure("Nessuna immagine valida"))
+                }
+            } catch {
+                setStatus(.failure(error.localizedDescription))
+            }
+        }
+    }
+
+    func deleteSelectedPhotos() {
+        guard let device = connectedDevice, device.supportsPhotos, !photoSelection.isEmpty else { return }
+        let ids = photoSelection
+        do {
+            guard let store = try PhotoDBStore.open(for: device) else { return }
+            try store.deletePhotos(ids: ids)
+            photoSelection.removeAll()
+            reloadPhotos(from: device)
+            setStatus(.success(ids.count == 1 ? "Eliminata 1 foto" : "Eliminate \(ids.count) foto"))
         } catch {
             setStatus(.failure(error.localizedDescription))
         }
@@ -1320,6 +1425,7 @@ final class LibraryController: ObservableObject {
                 connectedDevice = nil
                 tracks = []
                 playlists = []
+                clearPhotosState()
                 clearBrowse()
                 artwork.clear()
                 clearAutoSyncUI()
