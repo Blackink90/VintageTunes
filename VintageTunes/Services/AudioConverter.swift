@@ -110,7 +110,7 @@ enum AudioConverter {
 
         if ["m4a", "m4b", "mp4", "aac"].contains(ext) {
             progress?("Ottimizzo \(source.lastPathComponent) per iPod…")
-            if remuxFaststart(from: source, to: dest) {
+            if isiPodFriendlyAAC(source), remuxFaststart(from: source, to: dest) {
                 return dest
             }
             try? fm.removeItem(at: dest)
@@ -121,24 +121,59 @@ enum AudioConverter {
         return dest
     }
 
+    /// Solo remux se già AAC-LC ~44.1/48 kHz (altrimenti ri-encodiamo).
+    private static func isiPodFriendlyAAC(_ url: URL) -> Bool {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/afinfo")
+        proc.arguments = [url.path]
+        let out = Pipe()
+        proc.standardOutput = out
+        proc.standardError = Pipe()
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+        } catch {
+            return false
+        }
+        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .lowercased() ?? ""
+        guard text.contains("aac") || text.contains("mpeg-4 aac") || text.contains("m4a") else {
+            return false
+        }
+        if text.contains("96000") || text.contains("88200") || text.contains("192000") {
+            return false
+        }
+        return true
+    }
+
     private static func encodeAAC(from source: URL, to dest: URL, bitrate: String) throws {
         let afconvert = URL(fileURLWithPath: "/usr/bin/afconvert")
         guard FileManager.default.isExecutableFile(atPath: afconvert.path) else {
             throw AudioConversionError.afconvertMissing
         }
-        let process = Process()
-        process.executableURL = afconvert
-        process.arguments = [source.path, dest.path, "-d", "aac", "-f", "m4af", "-b", bitrate]
-        let errPipe = Pipe()
-        process.standardError = errPipe
-        process.standardOutput = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        let errText = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: dest.path) else {
-            throw AudioConversionError.failed(errText.isEmpty ? "Conversione AAC fallita" : errText)
+        // Preferisci 44.1 kHz stereo; se fallisce (es. sorgente particolare), riprova senza -c.
+        let attempts: [[String]] = [
+            [source.path, dest.path, "-d", "aac@44100", "-f", "m4af", "-b", bitrate, "-c", "2"],
+            [source.path, dest.path, "-d", "aac@44100", "-f", "m4af", "-b", bitrate]
+        ]
+        var lastError = ""
+        for args in attempts {
+            try? FileManager.default.removeItem(at: dest)
+            let process = Process()
+            process.executableURL = afconvert
+            process.arguments = args
+            let errPipe = Pipe()
+            process.standardError = errPipe
+            process.standardOutput = Pipe()
+            try process.run()
+            process.waitUntilExit()
+            lastError = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if process.terminationStatus == 0, FileManager.default.fileExists(atPath: dest.path) {
+                return
+            }
         }
+        throw AudioConversionError.failed(lastError.isEmpty ? "Conversione AAC fallita" : lastError)
     }
 
     private static func encodeMP3(from source: URL, to dest: URL, bitrate: String) throws {

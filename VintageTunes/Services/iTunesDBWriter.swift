@@ -349,8 +349,28 @@ struct iTunesDBWriter {
         if headerLen > 178 {
             header[178] = 2 // mark_unplayed style seen in official DB
         }
+        // Gapless: niente residui del template Music.app (sample count di un’altra traccia
+        // faceva tagliare il brano sull’iPod). Sample count allineato a durata × rate;
+        // flag gapless a 0 → il firmware usa soprattutto durationMs.
+        if headerLen > 204 {
+            writeU32(&header, at: 184, 0) // pregap
+            let sampleCount: UInt64
+            if track.durationMs > 0 {
+                sampleCount = UInt64(track.durationMs) * UInt64(rate) / 1000
+            } else {
+                sampleCount = 0
+            }
+            writeU64(&header, at: 188, sampleCount)
+            writeU32(&header, at: 196, 0) // unk25
+            writeU32(&header, at: 200, 0) // postgap
+        }
         if headerLen > 212 {
             writeU32(&header, at: 208, track.mediaType == 0 ? 1 : track.mediaType)
+        }
+        if headerLen > 260 {
+            writeU32(&header, at: 248, 0) // gaplessData
+            writeU16(&header, at: 256, 0) // gaplessTrackFlag
+            writeU16(&header, at: 258, 0) // gaplessAlbumFlag
         }
         if headerLen > 356 {
             writeU32(&header, at: 352, track.mhiiLink)

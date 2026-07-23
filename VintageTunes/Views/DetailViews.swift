@@ -173,6 +173,15 @@ struct TrackTableView: View {
                             }
                         }
                     }
+                    if library.selectedSection == .playlists,
+                       let pid = library.selectedPlaylistID,
+                       let current = library.playlists.first(where: { $0.id == pid }),
+                       !current.isMaster {
+                        Button("Rimuovi dalla playlist") {
+                            library.selection = Set(ids)
+                            library.removeSelectionFromCurrentPlaylist()
+                        }
+                    }
                     Button("Elimina dall'iPod", role: .destructive) {
                         library.selection = Set(ids)
                         library.deleteSelectedTracks()
@@ -800,11 +809,9 @@ struct DropImportView: View {
             .tint(VTTheme.amber)
             .disabled(library.connectedDevice == nil)
 
-            if library.selectedSection == .playlists || library.selectedPlaylistID != nil {
-                Text("Le nuove tracce possono essere aggiunte anche alla playlist selezionata.")
-                    .font(.custom("Avenir Next", size: 12))
-                    .foregroundStyle(VTTheme.textSecondary)
-            }
+            Text("Le tracce finiscono nella libreria; per una playlist usa «Aggiungi a playlist».")
+                .font(.custom("Avenir Next", size: 12))
+                .foregroundStyle(VTTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(32)
@@ -977,9 +984,10 @@ struct SettingsView: View {
 struct TrackEditSheet: View {
     @EnvironmentObject private var library: LibraryController
     @FocusState private var focusedField: Field?
+    @State private var isLoadingCoverFromURL = false
 
     private enum Field: Hashable {
-        case title, artist, album, genre, trackNumber, year
+        case title, artist, album, genre, trackNumber, year, cover
     }
 
     private var draft: TrackEditDraft? { library.trackEditDraft }
@@ -1065,17 +1073,40 @@ struct TrackEditSheet: View {
 
                     LabeledContent("Copertina") {
                         HStack(alignment: .center, spacing: 12) {
-                            coverPreview(for: draft)
+                            coverThumbnail(for: draft)
                                 .frame(width: 56, height: 56)
                                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .strokeBorder(
+                                            focusedField == .cover ? VTTheme.amber : Color.primary.opacity(0.12),
+                                            lineWidth: focusedField == .cover ? 2.5 : 1
+                                        )
+                                )
+                                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                .focusable()
+                                .focused($focusedField, equals: .cover)
+                                .onTapGesture {
+                                    focusedField = .cover
+                                }
+                                .accessibilityLabel("Copertina")
+                                .accessibilityHint("Seleziona, poi Incolla (⌘V) per un URL immagine")
+                                .onPasteCommand(of: [.url, .text, .plainText]) { providers in
+                                    guard focusedField == .cover else { return }
+                                    handlePasteProviders(providers)
+                                }
 
                             VStack(alignment: .leading, spacing: 6) {
-                                if let name = draft.coverFileName, draft.coverImageData != nil, !draft.removeManualCover {
+                                if isLoadingCoverFromURL {
+                                    Text("Scarico immagine…")
+                                        .font(.custom("Avenir Next", size: 12))
+                                        .foregroundStyle(.secondary)
+                                } else if let name = draft.coverFileName, draft.coverImageData != nil, !draft.removeManualCover {
                                     Text(name)
                                         .font(.custom("Avenir Next", size: 12))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
-                                    Text("Priorità su file e ricerca online")
+                                    Text("Priorità su file e ricerca online · ⌘V con URL")
                                         .font(.custom("Avenir Next", size: 10))
                                         .foregroundStyle(.tertiary)
                                 } else {
@@ -1084,10 +1115,14 @@ struct TrackEditSheet: View {
                                           : "Nessuna copertina personalizzata")
                                         .font(.custom("Avenir Next", size: 12))
                                         .foregroundStyle(.secondary)
+                                    Text("Clic sulla cover, poi ⌘V con URL immagine")
+                                        .font(.custom("Avenir Next", size: 10))
+                                        .foregroundStyle(.tertiary)
                                 }
 
                                 HStack(spacing: 10) {
                                     Button("Scegli file…") {
+                                        focusedField = .cover
                                         pickCoverImage()
                                     }
                                     .buttonStyle(.borderless)
@@ -1132,10 +1167,17 @@ struct TrackEditSheet: View {
         .onAppear {
             focusedField = isMulti ? .artist : .title
         }
+        .onKeyPress(keys: [.init("v")], phases: .down) { press in
+            guard focusedField == .cover, press.modifiers.contains(.command) else {
+                return .ignored
+            }
+            pasteCoverFromClipboard()
+            return .handled
+        }
     }
 
     @ViewBuilder
-    private func coverPreview(for draft: TrackEditDraft) -> some View {
+    private func coverThumbnail(for draft: TrackEditDraft) -> some View {
         if !draft.removeManualCover, let data = draft.coverImageData, let image = NSImage(data: data) {
             Image(nsImage: image)
                 .resizable()
@@ -1150,6 +1192,81 @@ struct TrackEditSheet: View {
         }
     }
 
+    private func pasteCoverFromClipboard() {
+        let pb = NSPasteboard.general
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+           let url = urls.first {
+            Task { await applyCover(from: url) }
+            return
+        }
+        let raw = (pb.string(forType: .URL) ?? pb.string(forType: .string) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
+              ["http", "https", "file"].contains(scheme) else {
+            library.setStatus(.failure("Appunti: nessun URL immagine"))
+            return
+        }
+        Task { await applyCover(from: url) }
+    }
+
+    private func handlePasteProviders(_ providers: [NSItemProvider]) {
+        for provider in providers {
+            if provider.canLoadObject(ofClass: URL.self) {
+                _ = provider.loadObject(ofClass: URL.self) { object, _ in
+                    guard let url = object as? URL else { return }
+                    Task { @MainActor in
+                        await applyCover(from: url)
+                    }
+                }
+                return
+            }
+            if provider.canLoadObject(ofClass: String.self) {
+                _ = provider.loadObject(ofClass: String.self) { object, _ in
+                    guard let raw = (object as? String)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                          let url = URL(string: raw) else { return }
+                    Task { @MainActor in
+                        await applyCover(from: url)
+                    }
+                }
+                return
+            }
+        }
+    }
+
+    @MainActor
+    private func applyCover(from url: URL) async {
+        isLoadingCoverFromURL = true
+        defer { isLoadingCoverFromURL = false }
+
+        do {
+            let data: Data
+            if url.isFileURL {
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                data = try Data(contentsOf: url)
+            } else {
+                let (downloaded, response) = try await URLSession.shared.data(from: url)
+                if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                    library.setStatus(.failure("Download cover fallito (\(http.statusCode))"))
+                    return
+                }
+                data = downloaded
+            }
+            guard !data.isEmpty, NSImage(data: data) != nil else {
+                library.setStatus(.failure("URL non è un’immagine valida"))
+                return
+            }
+            library.trackEditDraft?.coverImageData = data
+            library.trackEditDraft?.coverFileName = url.lastPathComponent.isEmpty ? "Da URL" : url.lastPathComponent
+            library.trackEditDraft?.removeManualCover = false
+            library.trackEditDraft?.coverDidChange = true
+            focusedField = .cover
+        } catch {
+            library.setStatus(.failure("Impossibile caricare l’immagine"))
+        }
+    }
+
     private func pickCoverImage() {
         // NSOpenPanel in un foglio a volte fallisce nello stesso ciclo runloop.
         DispatchQueue.main.async {
@@ -1161,17 +1278,7 @@ struct TrackEditSheet: View {
             panel.prompt = "Scegli"
             panel.message = "Copertina personalizzata (ha priorità su file e online)"
             guard panel.runModal() == .OK, let url = panel.url else { return }
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            guard let data = try? Data(contentsOf: url), !data.isEmpty,
-                  NSImage(data: data) != nil else {
-                library.setStatus(.failure("Immagine non valida"))
-                return
-            }
-            library.trackEditDraft?.coverImageData = data
-            library.trackEditDraft?.coverFileName = url.lastPathComponent
-            library.trackEditDraft?.removeManualCover = false
-            library.trackEditDraft?.coverDidChange = true
+            Task { await applyCover(from: url) }
         }
     }
 

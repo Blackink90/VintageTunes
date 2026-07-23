@@ -129,6 +129,7 @@ enum AudioMetadataReader {
     }
 
     /// Keep tags from `sourceMeta`, point to a new file (e.g. converted M4A).
+    /// Durata/bitrate/sample rate restano del sorgente finché non si chiama `withTechnicalMetadata`.
     static func remapped(_ sourceMeta: ImportCandidate, to newURL: URL) -> ImportCandidate {
         let size = (try? newURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(UInt32.init) ?? sourceMeta.sizeBytes
         return ImportCandidate(
@@ -145,6 +146,49 @@ enum AudioMetadataReader {
             sampleRate: sourceMeta.sampleRate,
             contentHash: sourceMeta.contentHash
         )
+    }
+
+    /// Sovrascrive durata/size/bitrate/sample rate dal file reale (quello che andrà sull’iPod).
+    static func withTechnicalMetadata(_ meta: ImportCandidate, from fileURL: URL) async -> ImportCandidate {
+        let tech = await read(url: fileURL)
+        return ImportCandidate(
+            url: fileURL,
+            title: meta.title,
+            artist: meta.artist,
+            album: meta.album,
+            genre: meta.genre,
+            durationMs: tech.durationMs > 0 ? tech.durationMs : meta.durationMs,
+            sizeBytes: tech.sizeBytes > 0 ? tech.sizeBytes : meta.sizeBytes,
+            trackNumber: meta.trackNumber,
+            year: meta.year,
+            bitrate: tech.bitrate > 0 ? tech.bitrate : meta.bitrate,
+            sampleRate: tech.sampleRate > 0 ? tech.sampleRate : meta.sampleRate,
+            contentHash: meta.contentHash
+        )
+    }
+
+    /// Aggiorna i campi tecnici di una traccia dal file sul dispositivo.
+    @discardableResult
+    static func applyTechnicalMetadata(to track: inout Track, from fileURL: URL) async -> Bool {
+        let tech = await read(url: fileURL)
+        var changed = false
+        if tech.durationMs > 0, tech.durationMs != track.durationMs {
+            track.durationMs = tech.durationMs
+            changed = true
+        }
+        if tech.sizeBytes > 0, tech.sizeBytes != track.sizeBytes {
+            track.sizeBytes = tech.sizeBytes
+            changed = true
+        }
+        if tech.bitrate > 0, tech.bitrate != track.bitrate {
+            track.bitrate = min(tech.bitrate, 320)
+            changed = true
+        }
+        if tech.sampleRate > 0, tech.sampleRate != track.sampleRate {
+            track.sampleRate = tech.sampleRate
+            changed = true
+        }
+        return changed
     }
 
     static func isSupportedAudio(_ url: URL) -> Bool {

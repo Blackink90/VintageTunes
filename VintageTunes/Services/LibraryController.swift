@@ -756,6 +756,9 @@ final class LibraryController: ObservableObject {
             let playMerge = sync.absorbPlayCounts(into: &result.tracks, device: device)
             let before = result.tracks
             await sync.backfillFromFiles(&result.tracks)
+            // Durata/sample rate dal file reale: evita tagli a fine brano sul firmware stock.
+            setStatus(.working("Allineo durate audio…"))
+            let playbackMetaFixed = await sync.reconcilePlaybackMetadata(&result.tracks)
             TrackTagStore.apply(TrackTagStore.load(from: device), to: &result.tracks)
             setStatus(.working("Completo metadati mancanti…"))
             await sync.enrichMissingFromOnline(&result.tracks)
@@ -779,33 +782,37 @@ final class LibraryController: ObservableObject {
                 }
                 try? TrackTagStore.save(overrides, to: device)
             }
-            // Dopo il merge, scrivi nell’iTunesDB (come iTunes) e cancella Play Counts.
-            if playMerge.changed, device.firmwareMode == .stock {
-                setStatus(.working("Salvo stelle e ascolti dall’iPod…"))
+            // Dopo merge ascolti e/o correzione durate, riscrivi iTunesDB.
+            if device.firmwareMode == .stock, playMerge.changed || playbackMetaFixed {
+                setStatus(.working(playMerge.changed
+                    ? "Salvo stelle e ascolti dall’iPod…"
+                    : "Aggiorno durate in iTunesDB…"))
                 try sync.persistLibrary(
                     tracks: result.tracks,
                     playlists: result.playlists,
                     dbVersion: result.dbVersion,
                     device: device
                 )
-                if playMerge.canRemoveFile {
+                if playMerge.changed, playMerge.canRemoveFile {
                     PlayCountsFile.remove(from: device)
                 }
-                var overrides = TrackTagStore.load(from: device)
-                for track in result.tracks {
-                    overrides[track.location] = TrackTagOverride(
-                        title: track.title,
-                        artist: track.artist,
-                        album: track.album,
-                        genre: track.genre,
-                        trackNumber: track.trackNumber,
-                        year: track.year,
-                        rating: track.rating,
-                        playCount: track.playCount,
-                        lastPlayedMacTime: track.lastPlayedMacTime
-                    )
+                if playMerge.changed {
+                    var overrides = TrackTagStore.load(from: device)
+                    for track in result.tracks {
+                        overrides[track.location] = TrackTagOverride(
+                            title: track.title,
+                            artist: track.artist,
+                            album: track.album,
+                            genre: track.genre,
+                            trackNumber: track.trackNumber,
+                            year: track.year,
+                            rating: track.rating,
+                            playCount: track.playCount,
+                            lastPlayedMacTime: track.lastPlayedMacTime
+                        )
+                    }
+                    try? TrackTagStore.save(overrides, to: device)
                 }
-                try? TrackTagStore.save(overrides, to: device)
             }
             if device.firmwareMode == .stock {
                 setStatus(.working("Verifico cover sul dispositivo…"))
@@ -1013,15 +1020,11 @@ final class LibraryController: ObservableObject {
                         Task { @MainActor in self.setStatus(.working(message)) }
                     }
                     try throwIfImportCancelled()
-                    var merged = AudioMetadataReader.remapped(sourceMeta, to: m4a)
-                    if merged.durationMs == 0 {
-                        let m4aMeta = await AudioMetadataReader.read(url: m4a)
-                        if m4aMeta.durationMs > 0 {
-                            merged.durationMs = m4aMeta.durationMs
-                            merged.sizeBytes = m4aMeta.sizeBytes
-                            if m4aMeta.sampleRate > 0 { merged.sampleRate = m4aMeta.sampleRate }
-                        }
-                    }
+                    // Durata/bitrate/sample rate dal M4A reale, non dal FLAC/sorgente.
+                    let merged = await AudioMetadataReader.withTechnicalMetadata(
+                        AudioMetadataReader.remapped(sourceMeta, to: m4a),
+                        from: m4a
+                    )
                     let artData: Data?
                     if let embedded = await CoverArtService.loadEmbeddedData(from: url) {
                         artData = embedded
@@ -1057,17 +1060,14 @@ final class LibraryController: ObservableObject {
             }
 
             setStatus(.working("Preparazione import…"))
-            // Se una playlist utente è selezionata (anche dopo switch di sezione), aggiungi lì.
-            let playlistTarget = selectedPlaylistID.flatMap { pid in
-                playlists.first(where: { $0.id == pid && !$0.isMaster })?.id
-            }
+            // Solo libreria/master: le playlist utente si aggiornano con «Aggiungi a playlist».
             let result = try await sync.importFiles(
                 items,
                 to: device,
                 existingTracks: tracks,
                 existingPlaylists: playlists,
                 dbVersion: dbVersion,
-                targetPlaylistID: playlistTarget
+                targetPlaylistID: nil
             ) { progress in
                 Task { @MainActor in
                     self.setStatus(.working(progress.message))
@@ -1257,8 +1257,14 @@ final class LibraryController: ObservableObject {
         guard let device = connectedDevice,
               let pid = selectedPlaylistID,
               let idx = playlists.firstIndex(where: { $0.id == pid && !$0.isMaster }) else { return }
+        let before = playlists[idx].trackIDs.count
         playlists[idx].trackIDs.removeAll { selection.contains($0) }
+        let removed = before - playlists[idx].trackIDs.count
+        selection.removeAll()
         persistPlaylists(device: device)
+        if removed > 0 {
+            setStatus(.success(removed == 1 ? "Rimossa 1 traccia dalla playlist" : "Rimosse \(removed) tracce dalla playlist"))
+        }
     }
 
     func deleteSelectedTracks() {
