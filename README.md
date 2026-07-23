@@ -4,7 +4,7 @@ Companion **macOS** per gestire la libreria di un **iPod Classic / Video / nano 
 
 Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce le **foto** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
 
-Versione attuale: **1.1** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.1.0)).
+Versione attuale: **1.2.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.2.0)).
 
 ---
 
@@ -32,9 +32,16 @@ Usando VintageTunes dichiari di aver compreso questi rischi.
 | Altri iPod Classic / Video | Stock | Non verificato in modo sistematico |
 | iPod con **Rockbox** | Rockbox | Supporto parziale / sperimentale |
 
-> **In sintesi:** musica e cover sono tarate su **Video 5.5G** (test approfondito) e **nano 2G** (dump ufficiale); le **foto** solo sul Video. Altri modelli non sono garantiti.
+> **In sintesi:** musica e cover su **Video 5.5G** (test approfondito) e **nano 2G** (cover F1027/F1031 da dump); **foto** solo sul Video. Classic invariato per musica/cover. Altri modelli non sono garantiti.
 
-Requisiti Mac: **macOS 14+**, Xcode per compilare dal sorgente. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
+Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal sorgente. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
+
+---
+
+## Novità in 1.2.0
+
+- Supporto **iPod nano 2G**: musica, playlist, stelle, cover dedicate; niente Foto
+- Fix lista **Canzoni** all’apertura (prima a volte compariva una sola traccia finché non cambiavi sezione)
 
 ---
 
@@ -97,7 +104,7 @@ Note:
 - L’app richiede accesso ai **volumi rimovibili**.
 - Con firma ad-hoc, macOS può chiedere i permessi a ogni avvio; una firma con Apple ID / Team di sviluppo aiuta a mantenerli.
 
-Scarica anche i binari pronti dalle [Releases](https://github.com/Blackink90/VintageTunes/releases) (al primo avvio: tasto destro → **Apri**).
+Scarica i binari pronti dalla [release 1.2.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.2.0) (al primo avvio: tasto destro → **Apri**).
 
 ---
 
