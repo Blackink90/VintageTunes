@@ -2,7 +2,9 @@
 
 Companion **macOS** per gestire la libreria di un **iPod Classic / Video** senza passare da Music.app / iTunes.
 
-Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, e permette di ascoltare i file direttamente dal dispositivo montato.
+Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce le **foto** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
+
+Versione attuale: **1.1** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.1.0)).
 
 ---
 
@@ -11,9 +13,9 @@ Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmwar
 **VintageTunes è software sperimentale, offerto “così com’è”, senza alcuna garanzia.**
 
 - L’uso è **a proprio rischio e pericolo**.
-- Scrivere su un iPod (database, file audio, ArtworkDB) può in rari casi **corrompere la libreria**, richiedere un ripristino o, in scenari estremi, rendere il dispositivo inutilizzabile finché non viene ripristinato.
+- Scrivere su un iPod (database, file audio, ArtworkDB, Photo Database) può in rari casi **corrompere la libreria**, richiedere un ripristino o, in scenari estremi, rendere il dispositivo inutilizzabile finché non viene ripristinato.
 - Gli autori **non sono responsabili** di perdite di dati, danni al dispositivo, al computer o a terzi derivanti dall’uso (o dall’impossibilità di usare) questo programma.
-- **Fai sempre un backup** della volume dell’iPod (o almeno di `iPod_Control`) prima di sincronizzare in massa.
+- **Fai sempre un backup** della volume dell’iPod (o almeno di `iPod_Control` e, se usi le foto, `Photos/`) prima di sincronizzare in massa.
 - Non è un prodotto Apple e non è affiliato ad Apple Inc.
 
 Usando VintageTunes dichiari di aver compreso questi rischi.
@@ -24,7 +26,7 @@ Usando VintageTunes dichiari di aver compreso questi rischi.
 
 | Dispositivo | Firmware | Stato |
 |---|---|---|
-| **iPod Video 5.5G** (es. 80GB MA450) | Stock Apple | **Testato** — target principale |
+| **iPod Video 5.5G** (es. 80GB MA450) | Stock Apple | **Testato** — target principale (musica + foto) |
 | Altri iPod Classic / Video | Stock | Non verificato in modo sistematico |
 | iPod con **Rockbox** | Rockbox | Supporto parziale / sperimentale |
 
@@ -42,6 +44,7 @@ Requisiti Mac: **macOS 14+**, Xcode per compilare dal sorgente. Volume iPod tipi
 - **Converte** formati non supportati dal firmware stock (es. FLAC, OGG, Opus, WAV…) in **M4A AAC** adatto all’iPod
 - **Scrive** tracce in `iPod_Control/Music`, aggiorna **iTunesDB** e (su stock) **ArtworkDB**
 - **Playlist** utente: crea, aggiungi, rimuovi brani (senza eliminarli dall’iPod)
+- **Foto** (solo **iPod Video 5G/5.5G** stock): sezione dedicata in sidebar — elenco, aggiunta (drag & drop o file) ed eliminazione; scrive `Photos/Photo Database` e le thumb in `Photos/Thumbs/` come Music.app
 - **Copertine**: da tag, ricerca online, file locale o incolla URL
 - **Modifica metadati** (titolo, artista, album, genere, traccia, anno, stelle, cover)
 - **Stelle e conteggi** riproduzioni: legge anche il file **Play Counts** scritto dall’iPod
@@ -57,7 +60,8 @@ Requisiti Mac: **macOS 14+**, Xcode per compilare dal sorgente. Volume iPod tipi
 3. Alla prima sessione (o dopo aggiornamenti importanti) l’app può **allineare durate** e riscrivere parti del database — lascia finire le operazioni.
 4. Trascina brani/cartelle sull’area di import, oppure usa **Scegli cartella…**.
 5. Per le playlist: crea dalla sidebar, poi **Aggiungi a playlist** dal menu contestuale; in playlist usa **Rimuovi dalla playlist** (non “Elimina dall’iPod”).
-6. Espelli l’iPod dall’app o da Finder quando hai finito.
+6. Per le **foto** (Video 5.5G): apri **Foto** nella sidebar, aggiungi immagini o eliminale; sul dispositivo compaiono nel menu Foto. Dopo modifiche grosse, espelli e ricollega l’iPod.
+7. Espelli l’iPod dall’app o da Finder quando hai finito.
 
 ### Formati (firmware stock)
 
@@ -67,6 +71,13 @@ Requisiti Mac: **macOS 14+**, Xcode per compilare dal sorgente. Volume iPod tipi
 | FLAC, OGG, Opus, WMA, … | Conversione → **M4A AAC** (tipicamente 256 kbps, 44.1 kHz) |
 
 Rockbox: percorso diverso (es. playlist `.m3u`); il supporto FLAC nativo in-app non è ancora completo.
+
+### Foto (Video 5G / 5.5G)
+
+- La voce **Foto** in sidebar compare solo se il modello è riconosciuto come Video stock.
+- Formati thumb allineati a Music.app: F1036 / F1015 / F1024 (RGB565) e F1019 (UYVY TV-out).
+- Non sincronizza cartelle del Mac né salva JPEG full-resolution in `Full Resolution/` / DCIM (come nel sync “solo thumbs” di Music.app sul 5.5G).
+- Classic, nano e Rockbox: sezione foto **non** disponibile.
 
 ---
 
@@ -83,13 +94,16 @@ Note:
 - L’app richiede accesso ai **volumi rimovibili**.
 - Con firma ad-hoc, macOS può chiedere i permessi a ogni avvio; una firma con Apple ID / Team di sviluppo aiuta a mantenerli.
 
+Scarica anche i binari pronti dalle [Releases](https://github.com/Blackink90/VintageTunes/releases) (al primo avvio: tasto destro → **Apri**).
+
 ---
 
 ## Limiti noti
 
 - Test approfondito solo su **iPod Video 5.5G**.
 - Non sostituisce un backup completo né un ripristino ufficiale Apple.
-- Database e artwork seguono il layout tipico di Music.app sul Video 5.5G; altre generazioni possono differire.
+- Database, artwork e foto seguono il layout tipico di Music.app sul Video 5.5G; altre generazioni possono differire.
+- Foto: solo Video 5G/5.5G; niente Classic/nano, niente originali full-res.
 - Rockbox e Classic più recenti: supporto incompleto o non validato.
 
 ---
