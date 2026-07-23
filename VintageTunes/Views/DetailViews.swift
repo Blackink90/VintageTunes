@@ -16,6 +16,8 @@ struct DetailContainer: View {
                 AlbumsBrowserView()
             case .genres:
                 GenresBrowserView()
+            case .photos:
+                PhotosView()
             case .playlists:
                 PlaylistDetailView()
             case .dropZone:
@@ -747,6 +749,141 @@ struct PlaylistDetailView: View {
                     .frame(maxWidth: 360)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+struct PhotosView: View {
+    @EnvironmentObject private var library: LibraryController
+    @State private var isTargeted = false
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 140, maximum: 200), spacing: 16)
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().opacity(0.2)
+            if library.photos.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 16) {
+                        ForEach(library.photos) { photo in
+                            photoCell(photo)
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+        }
+        .background(Color.clear)
+        .dropDestination(for: URL.self) { urls, _ in
+            library.importPhotos(urls: urls)
+            return true
+        } isTargeted: { targeted in
+            isTargeted = targeted
+        }
+        .toolbar {
+            ToolbarItemGroup {
+                Button("Aggiungi foto…") {
+                    library.choosePhotosToImport()
+                }
+                Button("Elimina", role: .destructive) {
+                    library.deleteSelectedPhotos()
+                }
+                .disabled(library.photoSelection.isEmpty)
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(library.photoAlbumName)
+                    .font(VTTheme.displayFont(size: 24))
+                    .foregroundStyle(VTTheme.textPrimary)
+                Text(library.photos.count == 1 ? "1 foto" : "\(library.photos.count) foto")
+                    .font(.custom("Avenir Next", size: 12))
+                    .foregroundStyle(VTTheme.textSecondary)
+            }
+            Spacer()
+            if isTargeted {
+                Text("Rilascia per aggiungere")
+                    .font(.custom("Avenir Next", size: 12).weight(.semibold))
+                    .foregroundStyle(VTTheme.amber)
+            }
+        }
+        .padding(16)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 42, weight: .light))
+                .foregroundStyle(VTTheme.amber)
+            Text("Nessuna foto sull’iPod")
+                .font(VTTheme.displayFont(size: 22))
+            Text("Trascina immagini qui oppure usa «Aggiungi foto…».\nVisibili nel menu Foto del Video 5G/5.5G.")
+                .font(.custom("Avenir Next", size: 13))
+                .foregroundStyle(VTTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            Button("Aggiungi foto…") {
+                library.choosePhotosToImport()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(VTTheme.amber)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
+    }
+
+    private func photoCell(_ photo: DevicePhoto) -> some View {
+        let selected = library.photoSelection.contains(photo.id)
+        return Button {
+            if library.photoSelection.contains(photo.id) {
+                library.photoSelection.remove(photo.id)
+            } else {
+                library.photoSelection.insert(photo.id)
+            }
+        } label: {
+            VStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(VTTheme.panel)
+                    if let data = photo.previewJPEG, let ns = NSImage(data: data) {
+                        Image(nsImage: ns)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.system(size: 28))
+                            .foregroundStyle(VTTheme.textSecondary)
+                    }
+                }
+                .frame(height: 110)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(selected ? VTTheme.amber : Color.clear, lineWidth: 2)
+                )
+
+                Text(photo.title)
+                    .font(.custom("Avenir Next", size: 11))
+                    .foregroundStyle(VTTheme.textSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Elimina", role: .destructive) {
+                library.photoSelection = [photo.id]
+                library.deleteSelectedPhotos()
+            }
         }
     }
 }

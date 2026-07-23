@@ -47,7 +47,13 @@ struct SidebarView: View {
 
             List {
                 Section {
-                    ForEach(LibrarySection.allCases.filter { $0 != .playlists }) { section in
+                    ForEach(LibrarySection.allCases.filter { section in
+                        if section == .playlists { return false }
+                        if section == .photos {
+                            return library.connectedDevice?.supportsPhotos == true
+                        }
+                        return true
+                    }) { section in
                         sidebarRow(
                             title: section.rawValue,
                             systemImage: section.systemImage,

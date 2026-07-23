@@ -22,6 +22,9 @@ struct iPodDevice: Identifiable, Equatable {
     var databaseURL: URL { iTunesURL.appendingPathComponent("iTunesDB") }
     var rockboxURL: URL { volumeURL.appendingPathComponent(".rockbox") }
 
+    /// Foto (Photo Database) solo su Video 5G/5.5G stock.
+    var supportsPhotos: Bool { PhotoDeviceProfile.detect(for: self) != nil }
+
     var usedBytes: Int64 { max(0, capacityBytes - availableBytes) }
 
     var usedFraction: Double {
@@ -270,6 +273,7 @@ enum LibrarySection: String, CaseIterable, Identifiable {
     case artists = "Artisti"
     case albums = "Album"
     case genres = "Generi"
+    case photos = "Foto"
     case playlists = "Playlist"
     case dropZone = "Aggiungi"
 
@@ -281,10 +285,18 @@ enum LibrarySection: String, CaseIterable, Identifiable {
         case .artists: return "person.2"
         case .albums: return "square.stack"
         case .genres: return "guitars"
+        case .photos: return "photo.on.rectangle"
         case .playlists: return "list.bullet.rectangle"
         case .dropZone: return "plus.circle"
         }
     }
+}
+
+struct DevicePhoto: Identifiable, Equatable, Hashable {
+    let id: UInt32
+    var title: String
+    /// JPEG preview for the Mac UI (decoded from device RGB565 thumb).
+    var previewJPEG: Data?
 }
 
 enum SyncStatus: Equatable {
