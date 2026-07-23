@@ -21,6 +21,8 @@ final class LibraryController: ObservableObject {
     @Published var selection = Set<Track.ID>()
     @Published var syncStatus: SyncStatus = .idle
     @Published var isLoading = false
+    /// Incrementato a ogni sostituzione di `tracks`: forza il refresh della Table macOS (bug SwiftUI).
+    @Published private(set) var tracksListEpoch: UInt64 = 0
     @Published var dbVersion: UInt32 = 0x14
     @Published var pendingImports: [ImportCandidate] = []
     @Published var trackEditDraft: TrackEditDraft?
@@ -306,7 +308,7 @@ final class LibraryController: ObservableObject {
         guard let device = connectedDevice else { return }
         if device.isSimulated {
             connectedDevice = nil
-            tracks = []
+            replaceTracks([])
             playlists = []
             clearPhotosState()
             selection.removeAll()
@@ -319,7 +321,7 @@ final class LibraryController: ObservableObject {
         do {
             try detector.eject(device)
             connectedDevice = nil
-            tracks = []
+            replaceTracks([])
             playlists = []
             clearPhotosState()
             clearBrowse()
@@ -461,7 +463,7 @@ final class LibraryController: ObservableObject {
                     dbVersion: version,
                     device: device
                 )
-                tracks = localTracks
+                replaceTracks(localTracks)
                 if updated > 0 {
                     setStatus(.success(
                         updated == 1
@@ -679,7 +681,7 @@ final class LibraryController: ObservableObject {
                             dbVersion: version,
                             device: device
                         )
-                        tracks = localTracks
+                        replaceTracks(localTracks)
                         setStatus(.success(
                             n > 0
                                 ? (updated == 1
@@ -845,7 +847,7 @@ final class LibraryController: ObservableObject {
             connectedDevice = device
             artwork.clear()
             clearBrowse()
-            tracks = result.tracks
+            replaceTracks(result.tracks)
             playlists = pruneOrphanPlaylistEntries(result.playlists, tracks: result.tracks)
             dbVersion = result.dbVersion
             reloadPhotos(from: device)
@@ -1179,7 +1181,7 @@ final class LibraryController: ObservableObject {
                 }
             }
             try throwIfImportCancelled()
-            tracks = result.tracks
+            replaceTracks(result.tracks)
             playlists = result.playlists
             dbVersion = result.dbVersion
             let converted = tempFiles.count
@@ -1310,6 +1312,7 @@ final class LibraryController: ObservableObject {
                 persistNow: true
             )
             if removed > 0 {
+                tracksListEpoch &+= 1
                 if let playingID = playback.nowPlaying?.id,
                    !tracks.contains(where: { $0.id == playingID }) {
                     playback.stop()
@@ -1385,6 +1388,7 @@ final class LibraryController: ObservableObject {
                 dbVersion: dbVersion,
                 device: device
             )
+            tracksListEpoch &+= 1
             selection.removeAll()
             setStatus(.success("Tracce rimosse dall'iPod"))
         } catch {
@@ -1399,6 +1403,12 @@ final class LibraryController: ObservableObject {
         } catch {
             setStatus(.failure(error.localizedDescription))
         }
+    }
+
+    /// Sostituisce la libreria in memoria e invalida la Table (non usare `tracks =` diretto per replace).
+    private func replaceTracks(_ newTracks: [Track]) {
+        tracks = newTracks
+        tracksListEpoch &+= 1
     }
 
     private func pruneOrphanPlaylistEntries(_ playlists: [Playlist], tracks: [Track]) -> [Playlist] {
@@ -1423,7 +1433,7 @@ final class LibraryController: ObservableObject {
                 connectedDevice = updated
             } else {
                 connectedDevice = nil
-                tracks = []
+                replaceTracks([])
                 playlists = []
                 clearPhotosState()
                 clearBrowse()

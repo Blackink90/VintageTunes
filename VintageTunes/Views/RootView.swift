@@ -11,8 +11,14 @@ struct RootView: View {
             ZStack {
                 VTTheme.background
 
-                if library.connectedDevice == nil && !library.isLoading {
-                    EmptyDeviceView()
+                if library.connectedDevice == nil {
+                    // Non montare la Table durante il load: su macOS resta “bloccata”
+                    // con poche righe finché non si cambia sezione.
+                    if library.isLoading {
+                        LoadingDeviceView()
+                    } else {
+                        EmptyDeviceView()
+                    }
                 } else {
                     NavigationSplitView {
                         SidebarView()
@@ -208,6 +214,23 @@ struct EmptyDeviceView: View {
 
             Text("La demo crea un iPod virtuale sul Mac con 5 brani di prova.")
                 .font(.custom("Avenir Next", size: 11))
+                .foregroundStyle(VTTheme.textSecondary)
+        }
+        .padding(40)
+    }
+}
+
+struct LoadingDeviceView: View {
+    var body: some View {
+        VStack(spacing: 18) {
+            ProgressView()
+                .controlSize(.large)
+                .tint(VTTheme.amber)
+            Text("Carico la libreria dall’iPod…")
+                .font(.custom("Avenir Next", size: 15).weight(.semibold))
+                .foregroundStyle(VTTheme.textPrimary)
+            Text("Metadati, copertine e database — un momento.")
+                .font(.custom("Avenir Next", size: 12))
                 .foregroundStyle(VTTheme.textSecondary)
         }
         .padding(40)

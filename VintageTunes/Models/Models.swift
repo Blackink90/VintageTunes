@@ -25,6 +25,12 @@ struct iPodDevice: Identifiable, Equatable {
     /// Foto (Photo Database) solo su Video 5G/5.5G stock.
     var supportsPhotos: Bool { PhotoDeviceProfile.detect(for: self) != nil }
 
+    /// Famiglia nano 1G/2G (cover F1027/F1031, iTunesDB tipicamente 0x74).
+    var isNanoFamily: Bool {
+        let hint = modelHint.uppercased()
+        return hint.contains("NANO")
+    }
+
     var usedBytes: Int64 { max(0, capacityBytes - availableBytes) }
 
     var usedFraction: Double {

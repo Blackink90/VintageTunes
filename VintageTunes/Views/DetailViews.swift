@@ -118,6 +118,7 @@ struct TrackTableView: View {
                     TableRow(track)
                 }
             }
+            .id(library.tracksListEpoch)
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .scrollContentBackground(.hidden)
             .background(VTTheme.tableBackground)

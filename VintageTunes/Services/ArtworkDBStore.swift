@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-/// Device-side album art (ArtworkDB + .ithmb), matching Music.app for Video & Classic.
+/// Device-side album art (ArtworkDB + .ithmb), matching Music.app for Video, Classic & nano 2G.
 enum ArtworkDBError: LocalizedError {
     case unsupportedDevice
     case invalidImage
@@ -32,6 +32,8 @@ enum ArtworkDeviceProfile: Equatable {
     case video5G
     /// iPod Classic 6G/6.5G/7G — RGB565 (libgpod tables).
     case classic
+    /// iPod nano 1G / 2G — RGB565 (F1027 / F1031).
+    case nano2
 
     var formats: [ArtworkThumbFormat] {
         switch self {
@@ -45,6 +47,11 @@ enum ArtworkDeviceProfile: Equatable {
                 ArtworkThumbFormat(correlationID: 1061, width: 56, height: 56),
                 ArtworkThumbFormat(correlationID: 1055, width: 128, height: 128),
                 ArtworkThumbFormat(correlationID: 1060, width: 320, height: 320)
+            ]
+        case .nano2:
+            return [
+                ArtworkThumbFormat(correlationID: 1027, width: 100, height: 100),
+                ArtworkThumbFormat(correlationID: 1031, width: 42, height: 42)
             ]
         }
     }
@@ -61,7 +68,11 @@ enum ArtworkDeviceProfile: Equatable {
         if hint.contains("CLASSIC"), !hint.contains("VIDEO") {
             return .classic
         }
-        // Video 5G/5.5G and unknown stock → Video sizes (MA450 etc.).
+        // Nano 1G/2G prima del fallback Video (SysInfo spesso vuoto).
+        if hint.contains("NANO") {
+            return .nano2
+        }
+        // Video 5G/5.5G e unknown stock → Video sizes (MA450 etc.).
         return .video5G
     }
 }
@@ -99,7 +110,10 @@ final class ArtworkDBStore {
 
     static func open(for device: iPodDevice) throws -> ArtworkDBStore? {
         guard let profile = ArtworkDeviceProfile.detect(for: device) else { return nil }
-        Self.ensureModelHintInSysInfo(for: device)
+        // Seed SysInfo solo per Video: mai MA450 su un nano (rompe le cover).
+        if profile == .video5G {
+            Self.ensureModelHintInSysInfo(for: device)
+        }
         let store = ArtworkDBStore(device: device, profile: profile)
         try FileManager.default.createDirectory(at: store.artworkDir, withIntermediateDirectories: true)
         if FileManager.default.fileExists(atPath: store.databaseURL.path) {
@@ -113,6 +127,7 @@ final class ArtworkDBStore {
     }
 
     /// After a restore SysInfo is often empty; seed ModelNumStr so future scans stay on Video formats.
+    /// Chiamare solo per profilo `.video5G`.
     private static func ensureModelHintInSysInfo(for device: iPodDevice) {
         let sysInfo = device.controlURL.appendingPathComponent("Device/SysInfo")
         let existing = (try? String(contentsOf: sysInfo, encoding: .utf8))?

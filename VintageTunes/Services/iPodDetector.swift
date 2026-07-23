@@ -214,9 +214,38 @@ final class iPodDetector: ObservableObject {
                 }
             }
         }
-        // Prefer Video sizing when SysInfo is missing/empty (common after restore).
-        // Do not return a string containing "CLASSIC" — ArtworkDB would pick Classic thumbs.
-        return "iPod Video"
+        // SysInfo vuoto (tipico nano): snifare Artwork/*.ithmb prima del fallback Video.
+        switch sniffArtworkFamily(controlURL: controlURL) {
+        case .nano2: return "iPod nano 2G"
+        case .video: return "iPod Video"
+        case .classic: return "iPod Classic"
+        case .unknown:
+            // Restore Video senza SysInfo — non usare "CLASSIC" (rompe ArtworkDB).
+            return "iPod Video"
+        }
+    }
+
+    private enum ArtworkFamilyHint {
+        case nano2, video, classic, unknown
+    }
+
+    /// Rileva famiglia dai file thumb già presenti sul volume.
+    private static func sniffArtworkFamily(controlURL: URL) -> ArtworkFamilyHint {
+        let artwork = controlURL.appendingPathComponent("Artwork", isDirectory: true)
+        guard let files = try? FileManager.default.contentsOfDirectory(at: artwork, includingPropertiesForKeys: nil) else {
+            return .unknown
+        }
+        let names = Set(files.map { $0.lastPathComponent.uppercased() })
+        let hasNano = names.contains(where: { $0.hasPrefix("F1027_") || $0.hasPrefix("F1031_") })
+        let hasVideo = names.contains(where: { $0.hasPrefix("F1028_") || $0.hasPrefix("F1029_") })
+        let hasClassic = names.contains(where: {
+            $0.hasPrefix("F1061_") || $0.hasPrefix("F1055_") || $0.hasPrefix("F1060_")
+        })
+        // Classic esplicito prima; poi nano (non confondere con Video).
+        if hasClassic, !hasVideo, !hasNano { return .classic }
+        if hasNano { return .nano2 }
+        if hasVideo { return .video }
+        return .unknown
     }
 
     private static func mapModel(_ raw: String) -> String {
@@ -228,6 +257,12 @@ final class iPodDetector: ObservableObject {
         if value.contains("MA450") || value.contains("MA448") { return "iPod Video 5.5G (80GB)" }
         if value.contains("MA446") { return "iPod Classic 6G" }
         if value.contains("MB147") || value.contains("MB139") { return "iPod Classic 6.5G / 7G" }
+        // iPod nano 1G / 2G (part number tipici)
+        if value.contains("MA004") || value.contains("MA005") || value.contains("MA099")
+            || value.contains("MA107") || value.contains("MA350") || value.contains("MA352") {
+            return "iPod nano 2G"
+        }
+        if value.contains("NANO") { return "iPod nano 2G" }
         return raw
     }
 }
