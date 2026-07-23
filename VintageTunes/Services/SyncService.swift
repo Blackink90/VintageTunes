@@ -48,7 +48,9 @@ final class SyncService {
                 return (parsed.tracks, parsed.playlists, parsed.dbVersion)
             }
             stockSession = iTunesDBSessionState.emptyNewDatabase
-            return ([], [Playlist(id: 1, name: "Libreria", isMaster: true, trackIDs: [])], 0x14)
+            // Nano: mhbd 0x74; Video/Classic nuovi: preferred 0x75.
+            let version: UInt32 = device.isNanoFamily ? 0x74 : OfficialDBFormat.preferredVersion
+            return ([], [Playlist(id: 1, name: "Libreria", isMaster: true, trackIDs: [])], version)
         }
     }
 
@@ -724,13 +726,24 @@ final class SyncService {
             try writer.write(
                 tracks: drafts,
                 playlists: plistDrafts,
-                dbVersion: dbVersion == 0 ? 0x14 : dbVersion,
+                dbVersion: resolvedDBVersion(dbVersion, device: device),
                 session: stockSession,
                 to: device.databaseURL
             )
         case .rockbox:
             try writeRockboxPlaylists(playlists, tracks: tracks, device: device)
         }
+    }
+
+    private func resolvedDBVersion(_ dbVersion: UInt32, device: iPodDevice) -> UInt32 {
+        if dbVersion == 0 {
+            return device.isNanoFamily ? 0x74 : OfficialDBFormat.preferredVersion
+        }
+        // Evita di “promuovere” un nano a 0x75 se qualcuno passa 0x14 legacy.
+        if device.isNanoFamily, dbVersion < 0x74 {
+            return 0x74
+        }
+        return dbVersion
     }
 
     // MARK: - Stock copy

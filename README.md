@@ -1,6 +1,6 @@
 # VintageTunes
 
-Companion **macOS** per gestire la libreria di un **iPod Classic / Video** senza passare da Music.app / iTunes.
+Companion **macOS** per gestire la libreria di un **iPod Classic / Video / nano 2G** senza passare da Music.app / iTunes.
 
 Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce le **foto** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
 
@@ -27,10 +27,12 @@ Usando VintageTunes dichiari di aver compreso questi rischi.
 | Dispositivo | Firmware | Stato |
 |---|---|---|
 | **iPod Video 5.5G** (es. 80GB MA450) | Stock Apple | **Testato** — target principale (musica + foto) |
+| **iPod nano 2G** | Stock Apple | Musica / playlist / stelle / cover (F1027·F1031); **niente** sezione Foto |
+| iPod Classic 6G+ | Stock | Musica / cover Classic (invariato) |
 | Altri iPod Classic / Video | Stock | Non verificato in modo sistematico |
 | iPod con **Rockbox** | Rockbox | Supporto parziale / sperimentale |
 
-> **In sintesi:** l’app è stata sviluppata e provata in modo concreto solo su **iPod 5.5G (Video)**. Altri modelli possono funzionare, ma non sono garantiti.
+> **In sintesi:** musica e cover sono tarate su **Video 5.5G** (test approfondito) e **nano 2G** (dump ufficiale); le **foto** solo sul Video. Altri modelli non sono garantiti.
 
 Requisiti Mac: **macOS 14+**, Xcode per compilare dal sorgente. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
 
@@ -44,8 +46,8 @@ Requisiti Mac: **macOS 14+**, Xcode per compilare dal sorgente. Volume iPod tipi
 - **Converte** formati non supportati dal firmware stock (es. FLAC, OGG, Opus, WAV…) in **M4A AAC** adatto all’iPod
 - **Scrive** tracce in `iPod_Control/Music`, aggiorna **iTunesDB** e (su stock) **ArtworkDB**
 - **Playlist** utente: crea, aggiungi, rimuovi brani (senza eliminarli dall’iPod)
+- **Copertine**: da tag, ricerca online, file locale o incolla URL; sull’iPod scrive ArtworkDB (Video F1028/F1029, Classic F1061/…, **nano 2G F1027/F1031**)
 - **Foto** (solo **iPod Video 5G/5.5G** stock): sezione dedicata in sidebar — elenco, aggiunta (drag & drop o file) ed eliminazione; scrive `Photos/Photo Database` e le thumb in `Photos/Thumbs/` come Music.app
-- **Copertine**: da tag, ricerca online, file locale o incolla URL
 - **Modifica metadati** (titolo, artista, album, genere, traccia, anno, stelle, cover)
 - **Stelle e conteggi** riproduzioni: legge anche il file **Play Counts** scritto dall’iPod
 - **Riproduzione sul Mac** dei file presenti sul dispositivo (anteprima)
@@ -78,6 +80,7 @@ Rockbox: percorso diverso (es. playlist `.m3u`); il supporto FLAC nativo in-app 
 - Formati thumb allineati a Music.app: F1036 / F1015 / F1024 (RGB565) e F1019 (UYVY TV-out).
 - Non sincronizza cartelle del Mac né salva JPEG full-resolution in `Full Resolution/` / DCIM (come nel sync “solo thumbs” di Music.app sul 5.5G).
 - Classic, nano e Rockbox: sezione foto **non** disponibile.
+- **nano 2G**: stessa gestione musica/playlist/stelle del Video; cover con thumb dedicate (non usa i formati Video).
 
 ---
 
@@ -100,11 +103,11 @@ Scarica anche i binari pronti dalle [Releases](https://github.com/Blackink90/Vin
 
 ## Limiti noti
 
-- Test approfondito solo su **iPod Video 5.5G**.
+- Test approfondito su **iPod Video 5.5G**; nano 2G supportato per musica/cover da dump di riferimento.
 - Non sostituisce un backup completo né un ripristino ufficiale Apple.
-- Database, artwork e foto seguono il layout tipico di Music.app sul Video 5.5G; altre generazioni possono differire.
+- Database, artwork e foto seguono i layout Music.app per famiglia (Video / Classic / nano); altre generazioni possono differire.
 - Foto: solo Video 5G/5.5G; niente Classic/nano, niente originali full-res.
-- Rockbox e Classic più recenti: supporto incompleto o non validato.
+- Rockbox e Classic più recenti oltre al profilo già gestito: supporto incompleto o non validato.
 
 ---
 

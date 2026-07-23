@@ -295,7 +295,7 @@ enum CoverArtService {
     // MARK: - MusicBrainz / Cover Art Archive
 
     private static let musicBrainzUserAgent =
-        "VintageTunes/1.1 (https://github.com/Blackink90/VintageTunes)"
+        "VintageTunes/1.2 (https://github.com/Blackink90/VintageTunes)"
 
     /// Fallback per album assenti da iTunes (es. edizioni regionali come 4ever Hilary Duff).
     static func fetchFromMusicBrainz(artist: String, album: String) async -> Data? {

@@ -48,10 +48,11 @@ enum PhotoDeviceProfile: Equatable {
 
     var correlationIDs: Set<UInt32> { Set(formats.map(\.correlationID)) }
 
-    /// Solo Video 5G/5.5G stock (Classic / Rockbox / altri = nil).
+    /// Solo Video 5G/5.5G stock (Classic / nano / Rockbox = nil).
     static func detect(for device: iPodDevice) -> PhotoDeviceProfile? {
         guard device.firmwareMode == .stock else { return nil }
         let hint = device.modelHint.uppercased()
+        if hint.contains("NANO") { return nil }
         if hint.contains("CLASSIC"), !hint.contains("VIDEO") { return nil }
         if hint.contains("MB147") || hint.contains("MB139") || hint.contains("MA446") { return nil }
         let video = hint.contains("VIDEO")
