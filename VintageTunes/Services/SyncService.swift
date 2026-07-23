@@ -181,6 +181,12 @@ final class SyncService {
                 resolvedPath: onDeviceURL
             )
 
+            // Sempre i metadati tecnici del file *sull’iPod* (dopo prep/conversione).
+            if let onDeviceURL {
+                await AudioMetadataReader.applyTechnicalMetadata(to: &track, from: onDeviceURL)
+                if track.sizeBytes == 0 { track.sizeBytes = actualSize }
+            }
+
             // Cover: se ArtworkDB è già ok le aggiungiamo qui; in caso di rebuild
             // le riscriviamo tutte insieme dopo l'import (formato Music.app).
             if device.firmwareMode == .stock, let store = artworkStore, !artworkNeedsRebuild {
@@ -251,6 +257,20 @@ final class SyncService {
     func backfillMissingMetadata(_ tracks: inout [Track]) async {
         await backfillFromFiles(&tracks)
         await enrichMissingFromOnline(&tracks)
+    }
+
+    /// Allinea durata/size/bitrate/sample rate ai file sul dispositivo.
+    /// Ritorna true se almeno una traccia è cambiata (serve riscrivere iTunesDB).
+    func reconcilePlaybackMetadata(_ tracks: inout [Track]) async -> Bool {
+        var changed = false
+        for i in tracks.indices {
+            guard let path = tracks[i].resolvedPath,
+                  FileManager.default.fileExists(atPath: path.path) else { continue }
+            if await AudioMetadataReader.applyTechnicalMetadata(to: &tracks[i], from: path) {
+                changed = true
+            }
+        }
+        return changed
     }
 
     /// Completa solo da tag presenti nel file audio.
