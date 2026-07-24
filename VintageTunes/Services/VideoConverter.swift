@@ -112,15 +112,10 @@ enum VideoFileCollector {
 
 enum VideoMetadataReader {
     static func read(url: URL) async -> ImportCandidate {
-        let asset = AVURLAsset(url: url)
-        let durationMs: UInt32
-        do {
-            let duration = try await asset.load(.duration)
-            let ms = CMTimeGetSeconds(duration) * 1000
-            durationMs = ms.isFinite && ms > 0 ? UInt32(clamping: Int(ms.rounded())) : 0
-        } catch {
-            durationMs = 0
-        }
+        let durationSeconds = await VideoDurationProbe.seconds(for: url) ?? 0
+        let durationMs: UInt32 = durationSeconds > 0
+            ? UInt32(clamping: Int((durationSeconds * 1000).rounded()))
+            : 0
 
         let sizeBytes: UInt32
         if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
@@ -147,6 +142,67 @@ enum VideoMetadataReader {
     }
 }
 
+/// Durata video: AVFoundation spesso fallisce su webm/mkv → fallback ffprobe.
+enum VideoDurationProbe {
+    static func seconds(for url: URL) async -> Double? {
+        if let av = await avFoundationSeconds(url), av > 0.5 { return av }
+        if let ff = ffprobeSeconds(url), ff > 0.5 { return ff }
+        return nil
+    }
+
+    private static func avFoundationSeconds(_ url: URL) async -> Double? {
+        let asset = AVURLAsset(url: url)
+        do {
+            let duration = try await asset.load(.duration)
+            let seconds = CMTimeGetSeconds(duration)
+            return seconds.isFinite && seconds > 0 ? seconds : nil
+        } catch {
+            return nil
+        }
+    }
+
+    static func ffprobeSeconds(_ url: URL) -> Double? {
+        guard let bin = ffprobeBinary() else { return nil }
+        let process = Process()
+        process.executableURL = bin
+        process.arguments = [
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            url.path
+        ]
+        let out = Pipe()
+        process.standardOutput = out
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+        guard process.terminationStatus == 0 else { return nil }
+        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard let seconds = Double(text), seconds.isFinite, seconds > 0 else { return nil }
+        return seconds
+    }
+
+    private static func ffprobeBinary() -> URL? {
+        var candidates = [
+            "/opt/homebrew/bin/ffprobe",
+            "/usr/local/bin/ffprobe"
+        ]
+        if let ffmpeg = VideoConverter.ffmpegBinaryPath() {
+            let sibling = ffmpeg.deletingLastPathComponent().appendingPathComponent("ffprobe")
+            candidates.insert(sibling.path, at: 0)
+        }
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
+        return nil
+    }
+}
+
 enum VideoConverter {
     static var convertedFolderURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -157,11 +213,13 @@ enum VideoConverter {
     }
 
     /// Sempre ricodifica in .m4v iPod-safe (evita file non riprodotti dal firmware).
+    /// `progress` riceve frazione 0…1 e un messaggio (es. percentuale / fase).
     static func convertForiPod(
         _ source: URL,
         profile: iPodVideoEncodeProfile,
         preferredName: String? = nil,
-        progress: ((String) -> Void)? = nil
+        durationSeconds: Double? = nil,
+        progress: (@Sendable (Double, String) -> Void)? = nil
     ) async throws -> URL {
         guard let bin = ffmpegBinary() else {
             throw VideoConversionError.ffmpegMissing
@@ -176,12 +234,19 @@ enum VideoConverter {
         let archive = convertedFolderURL.appendingPathComponent("\(baseName).m4v")
         try? fm.removeItem(at: archive)
 
-        progress?("Converto \(source.lastPathComponent) → video iPod…")
+        let totalSeconds: Double
+        if let durationSeconds, durationSeconds > 0.5 {
+            totalSeconds = durationSeconds
+        } else {
+            totalSeconds = await VideoDurationProbe.seconds(for: source) ?? 0
+        }
+
+        let label = source.lastPathComponent
+        progress?(0, "Converto \(label) → video iPod…")
 
         let scale = "scale=\(profile.maxWidth):\(profile.maxHeight):force_original_aspect_ratio=decrease"
         let pad = "pad=\(profile.maxWidth):\(profile.maxHeight):(ow-iw)/2:(oh-ih)/2"
         let vf = "\(scale),\(pad),setsar=1"
-        // Baseline LC: 1 ref, no B-frames, no CABAC (chipset 5G).
         let x264Params: String = {
             switch profile {
             case .video5G:
@@ -191,10 +256,20 @@ enum VideoConverter {
             }
         }()
 
+        // File di progress: su pipe stdout ffmpeg spesso bufferizza e arriva tutto a fine encode.
+        let progressFile = fm.temporaryDirectory
+            .appendingPathComponent("VintageTunesVideo", isDirectory: true)
+            .appendingPathComponent("\(UUID().uuidString).progress")
+        try fm.createDirectory(at: progressFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? fm.removeItem(at: progressFile)
+        try Data().write(to: progressFile)
+
         let process = Process()
         process.executableURL = bin
         process.arguments = [
             "-y",
+            "-hide_banner",
+            "-nostats",
             "-i", source.path,
             "-map", "0:v:0",
             "-map", "0:a:0?",
@@ -213,6 +288,8 @@ enum VideoConverter {
             "-ar", "44100",
             "-ac", "2",
             "-movflags", "+faststart",
+            "-progress", progressFile.path,
+            "-stats_period", "0.25",
             "-f", "ipod",
             archive.path
         ]
@@ -220,32 +297,119 @@ enum VideoConverter {
         let errPipe = Pipe()
         process.standardError = errPipe
         process.standardOutput = Pipe()
+
         try process.run()
 
-        // Attendi in background così possiamo propagare cancel.
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                process.waitUntilExit()
-                if process.terminationStatus == 0, FileManager.default.fileExists(atPath: archive.path) {
-                    cont.resume()
-                } else {
-                    let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    let tail = err.split(separator: "\n").suffix(4).joined(separator: " ")
-                    cont.resume(throwing: VideoConversionError.failed(
-                        tail.isEmpty ? "Conversione video fallita" : tail
-                    ))
+        let readProgress = Task.detached(priority: .utility) {
+            var lastReported = -1
+            var lastSize = 0
+            while !Task.isCancelled {
+                if let data = try? Data(contentsOf: progressFile), !data.isEmpty {
+                    if data.count != lastSize || process.isRunning {
+                        lastSize = data.count
+                        let text = String(data: data, encoding: .utf8) ?? ""
+                        if let elapsed = Self.latestProgressSeconds(from: text) {
+                            if totalSeconds > 0 {
+                                let fraction = min(0.99, max(0, elapsed / totalSeconds))
+                                let pct = Int((fraction * 100).rounded())
+                                if pct != lastReported {
+                                    lastReported = pct
+                                    progress?(fraction, "Conversione \(label) · \(pct)%")
+                                }
+                            } else {
+                                // Durata sconosciuta: avanza la barra in modo blando e mostra tempo elaborato.
+                                let soft = min(0.92, log1p(elapsed) / log1p(elapsed + 90))
+                                let pct = Int((soft * 100).rounded())
+                                if pct != lastReported {
+                                    lastReported = pct
+                                    let clock = Self.formatClock(elapsed)
+                                    progress?(soft, "Conversione \(label) · \(clock)")
+                                }
+                            }
+                        }
+                        if text.contains("progress=end"), lastReported < 100 {
+                            lastReported = 100
+                            progress?(1, "Conversione \(label) · 100%")
+                        }
+                    }
                 }
+                if !process.isRunning { break }
+                try? await Task.sleep(nanoseconds: 100_000_000)
             }
         }
+
+        do {
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        process.waitUntilExit()
+                        // Ultimo poll dopo exit.
+                        Thread.sleep(forTimeInterval: 0.05)
+                        readProgress.cancel()
+                        if process.terminationStatus == 0,
+                           FileManager.default.fileExists(atPath: archive.path) {
+                            cont.resume()
+                        } else if process.terminationReason == .uncaughtSignal {
+                            cont.resume(throwing: VideoConversionError.cancelled)
+                        } else {
+                            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            let tail = err.split(separator: "\n").suffix(4).joined(separator: " ")
+                            cont.resume(throwing: VideoConversionError.failed(
+                                tail.isEmpty ? "Conversione video fallita" : String(tail)
+                            ))
+                        }
+                    }
+                }
+            } onCancel: {
+                if process.isRunning {
+                    process.terminate()
+                }
+            }
+        } catch {
+            readProgress.cancel()
+            if process.isRunning { process.terminate() }
+            try? fm.removeItem(at: progressFile)
+            throw error
+        }
+
+        try? fm.removeItem(at: progressFile)
+        try Task.checkCancellation()
 
         let tempDir = fm.temporaryDirectory.appendingPathComponent("VintageTunesVideo", isDirectory: true)
         try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let dest = tempDir.appendingPathComponent("\(UUID().uuidString).m4v")
         try? fm.removeItem(at: dest)
         try fm.copyItem(at: archive, to: dest)
+        progress?(1, "Conversione \(label) · 100%")
         return dest
     }
+
+    /// Ultimo `out_time_us` / `out_time_ms` dal file `-progress`.
+    private static func latestProgressSeconds(from text: String) -> Double? {
+        var best: Double?
+        for line in text.split(whereSeparator: \.isNewline) {
+            let s = String(line)
+            if s.hasPrefix("out_time_us=") {
+                let raw = String(s.dropFirst("out_time_us=".count))
+                if let us = Double(raw), us >= 0 { best = us / 1_000_000 }
+            } else if s.hasPrefix("out_time_ms=") {
+                let raw = String(s.dropFirst("out_time_ms=".count))
+                if let ms = Double(raw), ms >= 0 { best = ms / 1_000_000 }
+            }
+        }
+        return best
+    }
+
+    private static func formatClock(_ seconds: Double) -> String {
+        let total = max(0, Int(seconds.rounded()))
+        let m = total / 60
+        let s = total % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
+    /// Esposto per trovare `ffprobe` accanto a `ffmpeg`.
+    static func ffmpegBinaryPath() -> URL? { ffmpegBinary() }
 
     private static func ffmpegBinary() -> URL? {
         for path in ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]

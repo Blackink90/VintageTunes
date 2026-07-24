@@ -75,7 +75,7 @@ struct RootView: View {
             if case .idle = library.syncStatus {
                 EmptyView()
             } else {
-                StatusBanner(status: library.syncStatus) {
+                StatusBanner(status: library.syncStatus, progress: library.workingProgress) {
                     library.cancelImport()
                 }
                     .padding(.horizontal, 16)
@@ -84,6 +84,7 @@ struct RootView: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: library.syncStatus)
+        .animation(.linear(duration: 0.12), value: library.workingProgress)
         .overlay {
             if library.showiPodPreview, library.playback.nowPlaying != nil {
                 ZStack {
@@ -126,54 +127,69 @@ struct RootView: View {
 
 struct StatusBanner: View {
     let status: SyncStatus
+    var progress: Double? = nil
     var onCancel: (() -> Void)? = nil
 
     var body: some View {
-        HStack(spacing: 10) {
-            Group {
-                switch status {
-                case .idle:
-                    EmptyView()
-                case .working:
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(.white)
-                case .success:
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(VTTheme.lcdGreen)
-                case .failure:
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(VTTheme.amber)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Group {
+                    switch status {
+                    case .idle:
+                        EmptyView()
+                    case .working:
+                        if progress == nil {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "film")
+                                .foregroundStyle(VTTheme.amber)
+                        }
+                    case .success:
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(VTTheme.lcdGreen)
+                    case .failure:
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(VTTheme.amber)
+                    }
+                }
+
+                Text(message)
+                    .font(.custom("Avenir Next", size: 13).weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if case .working = status, let onCancel {
+                    Button("Annulla") {
+                        onCancel()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.custom("Avenir Next", size: 12).weight(.bold))
+                    .foregroundStyle(VTTheme.amber)
+                    .padding(.leading, 4)
+                    .help("Interrompi import / conversione")
                 }
             }
 
-            Text(message)
-                .font(.custom("Avenir Next", size: 13).weight(.semibold))
-                .foregroundStyle(.white)
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if case .working = status, let onCancel {
-                Button("Annulla") {
-                    onCancel()
-                }
-                .buttonStyle(.plain)
-                .font(.custom("Avenir Next", size: 12).weight(.bold))
-                .foregroundStyle(VTTheme.amber)
-                .padding(.leading, 4)
-                .help("Interrompi import / conversione")
+            if case .working = status, let progress {
+                ProgressView(value: min(1, max(0, progress)))
+                    .progressViewStyle(.linear)
+                    .tint(VTTheme.amber)
+                    .frame(maxWidth: .infinity)
             }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
         .frame(maxWidth: 560)
         .background(
-            Capsule(style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(bannerColor)
                 .shadow(color: .black.opacity(0.45), radius: 12, y: 4)
         )
         .overlay(
-            Capsule(style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(Color.white.opacity(0.14), lineWidth: 1)
         )
     }

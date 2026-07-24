@@ -42,6 +42,7 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 
 - Sezione **Video** (Film) su iPod Video / Classic stock
 - Drag & drop: conversione H.264/AAC → `.m4v` iPod-safe e scrittura in iTunesDB (`mediaType` Film)
+- Barra di progresso durante la conversione video (durata anche via **ffprobe**, utile per webm/mkv)
 - Feedback **Espulsione in corso…** e conferma prima di eliminare brani dall’iPod
 - Cleanup On-The-Go vuote / nome normalizzato in sidebar
 
@@ -64,7 +65,7 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 - **Sfoglia** Canzoni, Artisti, Album, Generi, Playlist, Video, Foto
 - **Importa** file o cartelle (drag & drop o selezione cartella)
 - **Converte** formati non supportati dal firmware stock (es. FLAC, OGG, Opus, WAV…) in **M4A AAC** adatto all’iPod
-- **Video**: converte con ffmpeg in H.264 Baseline + AAC e li marca come Film in iTunesDB
+- **Video**: converte con ffmpeg in H.264 Baseline + AAC (barra di progresso in app; serve anche **ffprobe**) e li marca come Film in iTunesDB
 - **Scrive** tracce in `iPod_Control/Music`, aggiorna **iTunesDB** e (su stock) **ArtworkDB**
 - **Playlist** utente: crea, aggiungi, rimuovi brani (senza eliminarli dall’iPod)
 - **Copertine**: da tag, ricerca online, file locale o incolla URL; sull’iPod scrive ArtworkDB (Video F1028/F1029, Classic F1061/…, **nano 2G F1027/F1031**)
@@ -80,7 +81,7 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 
 1. Collega l’iPod e attendi che macOS lo monti.
 2. Apri VintageTunes: dovrebbe comparire il dispositivo nella sidebar.
-3. Alla prima sessione (o dopo aggiornamenti importanti) l’app può **allineare durate** e riscrivere parti del database — lascia finire le operazioni.
+3. Alla prima sessione l’app completa metadati mancanti e cover se serve — lascia finire le operazioni. Le durate dei file si aggiornano in **import** (non viene più riscandita tutta la libreria a ogni collegamento).
 4. Trascina brani/cartelle sull’area di import, oppure usa **Scegli cartella…**.
 5. Per le playlist: crea dalla sidebar, poi **Aggiungi a playlist** dal menu contestuale; in playlist usa **Rimuovi dalla playlist** (non “Elimina dall’iPod”).
 6. Per le **foto** (Video 5.5G): apri **Foto** nella sidebar, aggiungi immagini o eliminale; sul dispositivo compaiono nel menu Foto. Dopo modifiche grosse, espelli e ricollega l’iPod.

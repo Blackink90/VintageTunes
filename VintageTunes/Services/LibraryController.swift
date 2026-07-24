@@ -20,6 +20,8 @@ final class LibraryController: ObservableObject {
     @Published var searchText = ""
     @Published var selection = Set<Track.ID>()
     @Published var syncStatus: SyncStatus = .idle
+    /// Frazione 0…1 per operazioni lunghe (es. conversione video); `nil` = solo spinner.
+    @Published var workingProgress: Double? = nil
     @Published var isLoading = false
     /// Espulsione volume in corso (mostra feedback UI).
     @Published var isEjecting = false
@@ -53,9 +55,15 @@ final class LibraryController: ObservableObject {
     }
 
     /// Aggiorna lo stato UI; success/failure spariscono da soli dopo pochi secondi.
-    func setStatus(_ status: SyncStatus) {
+    func setStatus(_ status: SyncStatus, progress: Double? = nil) {
         statusDismissTask?.cancel()
         syncStatus = status
+        switch status {
+        case .working:
+            workingProgress = progress
+        case .idle, .success, .failure:
+            workingProgress = nil
+        }
         switch status {
         case .success, .failure:
             let captured = status
@@ -65,6 +73,7 @@ final class LibraryController: ObservableObject {
                 if self.syncStatus == captured {
                     withAnimation(.easeOut(duration: 0.25)) {
                         self.syncStatus = .idle
+                        self.workingProgress = nil
                     }
                 }
             }
@@ -1222,6 +1231,7 @@ final class LibraryController: ObservableObject {
         importTask?.cancel()
         importTask = nil
         releaseImportSecurityRoots()
+        workingProgress = nil
         if !silent {
             setStatus(.success("Import annullato"))
             finishImportAndMaybeAutoSync()
@@ -1364,15 +1374,20 @@ final class LibraryController: ObservableObject {
                 }
 
                 try throwIfImportCancelled()
-                setStatus(.working("Conversione \(index + 1)/\(files.count): \(url.lastPathComponent)"))
+                setStatus(.working("Conversione \(index + 1)/\(files.count): \(url.lastPathComponent)"), progress: 0)
+                let durationSeconds = meta.durationMs > 0 ? Double(meta.durationMs) / 1000.0 : nil
                 let m4v = try await VideoConverter.convertForiPod(
                     url,
                     profile: profile,
-                    preferredName: meta.title
-                ) { message in
-                    Task { @MainActor in self.setStatus(.working(message)) }
+                    preferredName: meta.title,
+                    durationSeconds: durationSeconds
+                ) { fraction, message in
+                    Task { @MainActor in
+                        self.setStatus(.working(message), progress: fraction)
+                    }
                 }
                 try throwIfImportCancelled()
+                setStatus(.working("Conversione \(index + 1)/\(files.count) completata"), progress: 1)
 
                 var converted = await VideoMetadataReader.read(url: m4v)
                 converted.title = meta.title
@@ -1395,7 +1410,7 @@ final class LibraryController: ObservableObject {
                 return
             }
 
-            setStatus(.working("Copio video sull’iPod…"))
+            setStatus(.working("Copio video sull’iPod…"), progress: nil)
             let result = try await sync.importVideoFiles(
                 items,
                 to: device,
@@ -1404,7 +1419,7 @@ final class LibraryController: ObservableObject {
                 dbVersion: dbVersion
             ) { progress in
                 Task { @MainActor in
-                    self.setStatus(.working(progress.message))
+                    self.setStatus(.working(progress.message), progress: progress.fraction)
                 }
             }
             try throwIfImportCancelled()
