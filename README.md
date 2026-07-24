@@ -27,12 +27,12 @@ Usando VintageTunes dichiari di aver compreso questi rischi.
 | Dispositivo | Firmware | Stato |
 |---|---|---|
 | **iPod Video 5.5G** (es. 80GB MA450) | Stock Apple | **Testato** — target principale (musica + foto + video sperimentale) |
-| **iPod nano 2G** | Stock Apple | Musica / playlist / stelle / cover (F1027·F1031); **niente** Foto / Video |
+| **iPod nano 2G** | Stock Apple | Supporto musica/cover da dump; **nessun test su dispositivo reale**; niente Foto / Video |
 | iPod Classic 6G+ | Stock | Musica / cover Classic; Video sperimentale |
 | Altri iPod Classic / Video | Stock | Non verificato in modo sistematico |
 | iPod con **Rockbox** | Rockbox | Supporto parziale / sperimentale |
 
-> **In sintesi:** musica e cover su **Video 5.5G** (test approfondito) e **nano 2G** (cover F1027/F1031 da dump); **foto** e **video** sul Video. Classic: musica/cover + video sperimentale. Altri modelli non sono garantiti.
+> **In sintesi:** musica e cover su **Video 5.5G** (test approfondito); **nano 2G** supportato da dump di riferimento, **senza test su dispositivi reali**; **foto** e **video** sul Video. Classic: musica/cover + video sperimentale. Altri modelli non sono garantiti.
 
 Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal sorgente. Per i video serve anche **ffmpeg**. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
 
@@ -47,13 +47,13 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 
 ## Novità in 1.3.0
 
-- **Cache locale** della libreria: al riconnetto lista e cover partono subito se l’iPod non è cambiato
+- **Cache locale** della libreria: alla riconnessione, lista e cover partono subito se l’iPod non è cambiato
 - Fingerprint su iTunesDB/ArtworkDB: sync da altro Mac invalida la cache e la ricostruisce
 - Import/delete/playlist aggiornano iPod e cache insieme
 
 ## Novità in 1.2.0
 
-- Supporto **iPod nano 2G**: musica, playlist, stelle, cover dedicate; niente Foto
+- Supporto **iPod nano 2G**: musica, playlist, stelle, cover dedicate (da dump; senza test su dispositivi reali); niente Foto
 - Fix lista **Canzoni** all’apertura (prima a volte compariva una sola traccia finché non cambiavi sezione)
 
 ---
@@ -103,7 +103,7 @@ Rockbox: percorso diverso (es. playlist `.m3u`); il supporto FLAC nativo in-app 
 - Formati thumb allineati a Music.app: F1036 / F1015 / F1024 (RGB565) e F1019 (UYVY TV-out).
 - Non sincronizza cartelle del Mac né salva JPEG full-resolution in `Full Resolution/` / DCIM (come nel sync “solo thumbs” di Music.app sul 5.5G).
 - Classic, nano e Rockbox: sezione foto **non** disponibile.
-- **nano 2G**: stessa gestione musica/playlist/stelle del Video; cover con thumb dedicate (non usa i formati Video).
+- **nano 2G**: stessa gestione musica/playlist/stelle del Video; cover con thumb dedicate (non usa i formati Video). **Nessun test su dispositivo reale** (solo dump di riferimento).
 
 ---
 
@@ -126,7 +126,7 @@ Scarica i binari pronti dalla [release 1.4.0](https://github.com/Blackink90/Vint
 
 ## Limiti noti
 
-- Test approfondito su **iPod Video 5.5G**; nano 2G supportato per musica/cover da dump di riferimento.
+- Test approfondito su **iPod Video 5.5G**. **nano 2G**: nessun test su dispositivi reali (solo dump di riferimento per musica/cover).
 - Non sostituisce un backup completo né un ripristino ufficiale Apple.
 - Database, artwork e foto seguono i layout Music.app per famiglia (Video / Classic / nano); altre generazioni possono differire.
 - Foto: solo Video 5G/5.5G; niente Classic/nano, niente originali full-res.
