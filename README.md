@@ -4,7 +4,7 @@ Companion **macOS** per gestire la libreria di un **iPod Classic / Video / nano 
 
 Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce le **foto** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
 
-Versione attuale: **1.2.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.2.0)).
+Versione attuale: **1.3.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.3.0)).
 
 ---
 
@@ -37,6 +37,12 @@ Usando VintageTunes dichiari di aver compreso questi rischi.
 Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal sorgente. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
 
 ---
+
+## Novità in 1.3.0
+
+- **Cache locale** della libreria: al riconnetto lista e cover partono subito se l’iPod non è cambiato
+- Fingerprint su iTunesDB/ArtworkDB: sync da altro Mac invalida la cache e la ricostruisce
+- Import/delete/playlist aggiornano iPod e cache insieme
 
 ## Novità in 1.2.0
 
@@ -104,7 +110,7 @@ Note:
 - L’app richiede accesso ai **volumi rimovibili**.
 - Con firma ad-hoc, macOS può chiedere i permessi a ogni avvio; una firma con Apple ID / Team di sviluppo aiuta a mantenerli.
 
-Scarica i binari pronti dalla [release 1.2.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.2.0) (al primo avvio: tasto destro → **Apri**).
+Scarica i binari pronti dalla [release 1.3.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.3.0) (al primo avvio: tasto destro → **Apri**).
 
 ---
 

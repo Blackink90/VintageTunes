@@ -78,11 +78,19 @@ final class ArtworkCache: ObservableObject {
 
     /// Forza il salvataggio in cache UI di una cover già nota (es. dopo import).
     func store(artist: String, album: String, data: Data) {
-        let k = key(artist: artist, album: album)
-        failed.remove(k)
+        let cacheKey = key(artist: artist, album: album)
+        failed.remove(cacheKey)
         if let image = NSImage(data: data) {
-            images[k] = image.resized(maxPixel: 256)
+            images[cacheKey] = image.resized(maxPixel: 256)
             CoverArtService.saveToDisk(data: data, artist: artist, album: album)
+        }
+    }
+
+    /// Inserisce una JPEG dalla cache device (chiave = nome file CoverArtService.cacheKey).
+    func storeCachedJPEG(data: Data, cacheFileName: String) {
+        failed.remove(cacheFileName)
+        if let image = NSImage(data: data) {
+            images[cacheFileName] = image.resized(maxPixel: 256)
         }
     }
 
@@ -295,7 +303,7 @@ enum CoverArtService {
     // MARK: - MusicBrainz / Cover Art Archive
 
     private static let musicBrainzUserAgent =
-        "VintageTunes/1.2 (https://github.com/Blackink90/VintageTunes)"
+        "VintageTunes/1.3 (https://github.com/Blackink90/VintageTunes)"
 
     /// Fallback per album assenti da iTunes (es. edizioni regionali come 4ever Hilary Duff).
     static func fetchFromMusicBrainz(artist: String, album: String) async -> Data? {

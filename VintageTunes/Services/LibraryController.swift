@@ -425,6 +425,7 @@ final class LibraryController: ObservableObject {
                 dbVersion: dbVersion,
                 device: device
             )
+            refreshLibraryCache(for: device)
         } catch {
             setStatus(.failure(error.localizedDescription))
         }
@@ -471,6 +472,7 @@ final class LibraryController: ObservableObject {
                     device: device
                 )
                 replaceTracks(localTracks)
+                refreshLibraryCache(for: device)
                 if updated > 0 {
                     setStatus(.success(
                         updated == 1
@@ -539,6 +541,7 @@ final class LibraryController: ObservableObject {
                 dbVersion: dbVersion,
                 device: device
             )
+            refreshLibraryCache(for: device)
             setStatus(.success(
                 updated == 1
                     ? (stars == 0 ? "Valutazione rimossa" : "Valutazione: \(stars) ★")
@@ -657,6 +660,7 @@ final class LibraryController: ObservableObject {
                 dbVersion: dbVersion,
                 device: device
             )
+            refreshLibraryCache(for: device)
             let coverData = draft.coverDidChange && !draft.removeManualCover ? draft.coverImageData : nil
             let coverIDs = coverTargets
             trackEditDraft = nil
@@ -689,6 +693,7 @@ final class LibraryController: ObservableObject {
                             device: device
                         )
                         replaceTracks(localTracks)
+                        refreshLibraryCache(for: device)
                         setStatus(.success(
                             n > 0
                                 ? (updated == 1
@@ -768,6 +773,48 @@ final class LibraryController: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
+            // Cache hit: fingerprint dei DB sul volume = snapshot Mac → UI istantanea.
+            if !device.isSimulated,
+               let fingerprint = try? LibraryCacheStore.fingerprint(for: device),
+               var cached = LibraryCacheStore.loadIfMatching(device: device, fingerprint: fingerprint) {
+                setStatus(.working("Carico dalla cache locale…"))
+                sync.adoptSession(cached.session)
+                let playMerge = sync.absorbPlayCounts(into: &cached.tracks, device: device)
+                if device.firmwareMode == .stock, playMerge.changed {
+                    try sync.persistLibrary(
+                        tracks: cached.tracks,
+                        playlists: cached.playlists,
+                        dbVersion: cached.dbVersion,
+                        device: device
+                    )
+                    if playMerge.canRemoveFile {
+                        PlayCountsFile.remove(from: device)
+                    }
+                }
+                connectedDevice = device
+                artwork.clear()
+                LibraryCacheStore.warmArtwork(deviceID: device.id, into: artwork)
+                clearBrowse()
+                replaceTracks(cached.tracks)
+                playlists = pruneOrphanPlaylistEntries(cached.playlists, tracks: cached.tracks)
+                dbVersion = cached.dbVersion
+                reloadPhotos(from: device)
+                if selectedPlaylistID == nil {
+                    selectedPlaylistID = playlists.first(where: { !$0.isMaster })?.id
+                }
+                if selectedSection == .photos, connectedDevice?.supportsPhotos != true {
+                    selectSection(.songs)
+                }
+                if playMerge.changed {
+                    refreshLibraryCache(for: device)
+                } else {
+                    LibraryCacheStore.writeFingerprintToDevice(fingerprint, device: device)
+                }
+                setStatus(.success("Caricate \(cached.tracks.count) tracce (cache)"))
+                checkAutoSync()
+                return
+            }
+
             var result = try sync.loadLibrary(for: device)
             // Stelle/ascolti fatti sull’iPod vivono in "Play Counts", non nell’iTunesDB.
             let playMerge = sync.absorbPlayCounts(into: &result.tracks, device: device)
@@ -861,10 +908,37 @@ final class LibraryController: ObservableObject {
             if selectedSection == .photos, connectedDevice?.supportsPhotos != true {
                 selectSection(.songs)
             }
+            // Dopo prefetch, cattura cover + snapshot per il prossimo collegamento.
+            refreshLibraryCache(for: device)
+            // Cattura cover di nuovo dopo un breve delay: prefetch è async.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                guard self.connectedDevice?.id == device.id else { return }
+                LibraryCacheStore.captureCovers(deviceID: device.id, tracks: self.tracks, artwork: self.artwork)
+            }
             setStatus(.success("Caricate \(result.tracks.count) tracce"))
             checkAutoSync()
         } catch {
             setStatus(.failure(error.localizedDescription))
+        }
+    }
+
+    /// Aggiorna snapshot Mac + fingerprint sul volume (dopo load miss o mutazioni).
+    private func refreshLibraryCache(for device: iPodDevice) {
+        guard !device.isSimulated else { return }
+        do {
+            let fingerprint = try LibraryCacheStore.fingerprint(for: device)
+            try LibraryCacheStore.save(
+                device: device,
+                fingerprint: fingerprint,
+                tracks: tracks,
+                playlists: playlists,
+                dbVersion: dbVersion,
+                session: sync.currentSession
+            )
+            LibraryCacheStore.captureCovers(deviceID: device.id, tracks: tracks, artwork: artwork)
+        } catch {
+            // Cache best-effort: non bloccare l’uso dell’iPod.
         }
     }
 
@@ -1195,6 +1269,7 @@ final class LibraryController: ObservableObject {
             setStatus(.success(parts.isEmpty ? "Nessuna nuova traccia da aggiungere" : parts.joined(separator: " · ")))
             selectSection(.songs)
             prefetchArtwork()
+            refreshLibraryCache(for: device)
         } catch is CancellationError {
             if importCancelled {
                 setStatus(.success("Import annullato"))
@@ -1319,6 +1394,7 @@ final class LibraryController: ObservableObject {
                    !tracks.contains(where: { $0.id == playingID }) {
                     playback.stop()
                 }
+                refreshLibraryCache(for: device)
                 setStatus(.success("Rimossi \(removed) duplicati"))
             } else if !silentIfNone {
                 setStatus(.success("Nessun duplicato trovato"))
@@ -1392,6 +1468,7 @@ final class LibraryController: ObservableObject {
             )
             tracksListEpoch &+= 1
             selection.removeAll()
+            refreshLibraryCache(for: device)
             setStatus(.success("Tracce rimosse dall'iPod"))
         } catch {
             setStatus(.failure(error.localizedDescription))
@@ -1401,6 +1478,7 @@ final class LibraryController: ObservableObject {
     private func persistPlaylists(device: iPodDevice) {
         do {
             try sync.savePlaylists(tracks: &tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+            refreshLibraryCache(for: device)
             setStatus(.success("Playlist salvate"))
         } catch {
             setStatus(.failure(error.localizedDescription))

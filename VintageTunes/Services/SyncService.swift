@@ -27,6 +27,14 @@ final class SyncService {
     /// Opaque iTunesDB sections preserved between load and persist (stock only).
     private var stockSession: iTunesDBSessionState?
 
+    /// Sessione iTunesDB corrente (per cache locale).
+    var currentSession: iTunesDBSessionState? { stockSession }
+
+    /// Ripristina la sessione da cache senza ri-parsare l’iTunesDB.
+    func adoptSession(_ session: iTunesDBSessionState?) {
+        stockSession = session
+    }
+
     func loadLibrary(for device: iPodDevice) throws -> (tracks: [Track], playlists: [Playlist], dbVersion: UInt32) {
         let hashIndex = TrackHashIndex.load(from: device)
         switch device.firmwareMode {
