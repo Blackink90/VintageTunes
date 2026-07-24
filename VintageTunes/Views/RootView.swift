@@ -11,7 +11,9 @@ struct RootView: View {
             ZStack {
                 VTTheme.background
 
-                if library.connectedDevice == nil {
+                if library.isEjecting {
+                    EjectingDeviceView()
+                } else if library.connectedDevice == nil {
                     // Non montare la Table durante il load: su macOS resta “bloccata”
                     // con poche righe finché non si cambia sezione.
                     if library.isLoading {
@@ -38,6 +40,23 @@ struct RootView: View {
         .preferredColorScheme(settings.appearanceMode.preferredColorScheme)
         .tint(VTTheme.amber)
         .onAppear { library.start(settings: settings) }
+        .confirmationDialog(
+            deleteTracksDialogTitle,
+            isPresented: Binding(
+                get: { library.pendingTrackDeleteCount != nil },
+                set: { if !$0 { library.cancelPendingTrackDelete() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Elimina", role: .destructive) {
+                library.confirmPendingTrackDelete()
+            }
+            Button("Annulla", role: .cancel) {
+                library.cancelPendingTrackDelete()
+            }
+        } message: {
+            Text(deleteTracksDialogMessage)
+        }
         .sheet(isPresented: Binding(
             get: { library.trackEditDraft != nil },
             set: { if !$0 { library.cancelTrackEdit() } }
@@ -83,6 +102,19 @@ struct RootView: View {
             }
         }
         .animation(.spring(response: 0.38, dampingFraction: 0.86), value: library.showiPodPreview)
+    }
+
+    private var deleteTracksDialogTitle: String {
+        let n = library.pendingTrackDeleteCount ?? 0
+        return n == 1 ? "Eliminare 1 canzone?" : "Eliminare \(n) canzoni?"
+    }
+
+    private var deleteTracksDialogMessage: String {
+        let n = library.pendingTrackDeleteCount ?? 0
+        if n == 1 {
+            return "Sei veramente sicuro di eliminare definitivamente 1 canzone dall’iPod? L’operazione non si può annullare."
+        }
+        return "Sei veramente sicuro di eliminare definitivamente \(n) canzoni dall’iPod? L’operazione non si può annullare."
     }
 
     private var bottomBannerPadding: CGFloat {
@@ -234,6 +266,27 @@ struct LoadingDeviceView: View {
                 .foregroundStyle(VTTheme.textSecondary)
         }
         .padding(40)
+    }
+}
+
+struct EjectingDeviceView: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .controlSize(.large)
+                .tint(VTTheme.amber)
+                .scaleEffect(1.15)
+            Text("Espulsione in corso…")
+                .font(VTTheme.displayFont(size: 26))
+                .foregroundStyle(VTTheme.textPrimary)
+            Text("Attendi che il volume venga smontato in sicurezza.")
+                .font(.custom("Avenir Next", size: 14))
+                .foregroundStyle(VTTheme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
+        .background(VTTheme.background)
     }
 }
 

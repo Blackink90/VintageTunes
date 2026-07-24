@@ -21,7 +21,7 @@ struct SidebarView: View {
                     sidebarActionButton(
                         systemImage: "eject",
                         help: "Espelli",
-                        disabled: library.connectedDevice == nil
+                        disabled: library.connectedDevice == nil || library.isEjecting
                     ) {
                         library.eject()
                     }
@@ -69,10 +69,10 @@ struct SidebarView: View {
                 }
 
                 Section {
-                    ForEach(library.playlists.filter { !$0.isMaster }) { playlist in
+                    ForEach(library.sidebarPlaylists) { playlist in
                         let count = playlist.resolvedSongCount(using: library.tracks)
                         sidebarRow(
-                            title: playlist.name,
+                            title: playlist.displayName,
                             systemImage: "music.note.list",
                             badge: count > 0 ? "\(count)" : nil,
                             selected: library.selectedSection == .playlists && library.selectedPlaylistID == playlist.id

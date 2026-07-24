@@ -238,6 +238,28 @@ struct Playlist: Identifiable, Hashable {
         return trackIDs.filter { known.contains($0) }.count
     }
 
+    /// Playlist On-The-Go creata dal firmware (eventualmente numerata).
+    var isOnTheGo: Bool {
+        let normalized = name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+        if normalized == "on-the-go" { return true }
+        // "on-the-go-1", "on-the-go1"
+        guard normalized.hasPrefix("on-the-go") else { return false }
+        let suffix = normalized.dropFirst("on-the-go".count)
+        if suffix.isEmpty { return true }
+        if suffix.first == "-" {
+            return suffix.dropFirst().allSatisfy(\.isNumber) && !suffix.dropFirst().isEmpty
+        }
+        return suffix.allSatisfy(\.isNumber)
+    }
+
+    /// Nome in UI: On-The-Go senza numerazione.
+    var displayName: String {
+        isOnTheGo ? "On-The-Go" : name
+    }
+
     static func == (lhs: Playlist, rhs: Playlist) -> Bool {
         lhs.id == rhs.id
             && lhs.name == rhs.name

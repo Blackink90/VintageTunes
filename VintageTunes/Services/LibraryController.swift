@@ -21,6 +21,10 @@ final class LibraryController: ObservableObject {
     @Published var selection = Set<Track.ID>()
     @Published var syncStatus: SyncStatus = .idle
     @Published var isLoading = false
+    /// Espulsione volume in corso (mostra feedback UI).
+    @Published var isEjecting = false
+    /// Conteggio brani in attesa di conferma eliminazione; `nil` = nessun dialogo.
+    @Published var pendingTrackDeleteCount: Int? = nil
     /// Incrementato a ogni sostituzione di `tracks`: forza il refresh della Table macOS (bug SwiftUI).
     @Published private(set) var tracksListEpoch: UInt64 = 0
     @Published var dbVersion: UInt32 = 0x14
@@ -100,6 +104,17 @@ final class LibraryController: ObservableObject {
                 || $0.album.localizedCaseInsensitiveContains(q)
                 || $0.genre.localizedCaseInsensitiveContains(q)
                 || ($0.year != 0 && "\($0.year)".contains(q))
+        }
+    }
+
+    /// Playlist utente in sidebar: niente master, niente On-The-Go vuote.
+    var sidebarPlaylists: [Playlist] {
+        playlists.filter { playlist in
+            guard !playlist.isMaster else { return false }
+            if playlist.isOnTheGo, playlist.resolvedSongCount(using: tracks) == 0 {
+                return false
+            }
+            return true
         }
     }
 
@@ -312,7 +327,7 @@ final class LibraryController: ObservableObject {
 
     func eject() {
         playback.stop()
-        guard let device = connectedDevice else { return }
+        guard let device = connectedDevice, !isEjecting else { return }
         if device.isSimulated {
             connectedDevice = nil
             replaceTracks([])
@@ -325,18 +340,30 @@ final class LibraryController: ObservableObject {
             setStatus(.success("Demo disconnessa"))
             return
         }
-        do {
-            try detector.eject(device)
-            connectedDevice = nil
-            replaceTracks([])
-            playlists = []
-            clearPhotosState()
-            clearBrowse()
-            artwork.clear()
-            clearAutoSyncUI()
-            setStatus(.success("iPod espulso"))
-        } catch {
-            setStatus(.failure(error.localizedDescription))
+
+        isEjecting = true
+        setStatus(.working("Espulsione in corso…"))
+        Task { @MainActor in
+            // Due yield: ridisegna rotella + testo prima dell’unmount (può bloccare il main).
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            do {
+                try detector.eject(device)
+                connectedDevice = nil
+                replaceTracks([])
+                playlists = []
+                clearPhotosState()
+                clearBrowse()
+                artwork.clear()
+                clearAutoSyncUI()
+                selection.removeAll()
+                setStatus(.success("iPod espulso"))
+            } catch {
+                setStatus(.failure(error.localizedDescription))
+            }
+            // Breve pausa così si legge ancora il messaggio prima dello empty state.
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            isEjecting = false
         }
     }
 
@@ -817,7 +844,7 @@ final class LibraryController: ObservableObject {
                 dbVersion = cached.dbVersion
                 reloadPhotos(from: device)
                 if selectedPlaylistID == nil {
-                    selectedPlaylistID = playlists.first(where: { !$0.isMaster })?.id
+                    selectedPlaylistID = sidebarPlaylists.first?.id
                 }
                 if selectedSection == .photos, connectedDevice?.supportsPhotos != true {
                     selectSection(.songs)
@@ -828,6 +855,7 @@ final class LibraryController: ObservableObject {
                     LibraryCacheStore.writeFingerprintToDevice(fingerprint, device: device)
                 }
                 syncMasterPlaylistName(with: device)
+                cleanupEmptyOnTheGoPlaylists(on: device)
                 setStatus(.success("Caricate \(cached.tracks.count) tracce (cache)"))
                 checkAutoSync()
                 return
@@ -921,7 +949,7 @@ final class LibraryController: ObservableObject {
             // Non auto-persist playlist prune sul device al load.
             prefetchArtwork()
             if selectedPlaylistID == nil {
-                selectedPlaylistID = playlists.first(where: { !$0.isMaster })?.id
+                selectedPlaylistID = sidebarPlaylists.first?.id
             }
             if selectedSection == .photos, connectedDevice?.supportsPhotos != true {
                 selectSection(.songs)
@@ -935,6 +963,7 @@ final class LibraryController: ObservableObject {
                 LibraryCacheStore.captureCovers(deviceID: device.id, tracks: self.tracks, artwork: self.artwork)
             }
             syncMasterPlaylistName(with: device)
+            cleanupEmptyOnTheGoPlaylists(on: device)
             setStatus(.success("Caricate \(result.tracks.count) tracce"))
             checkAutoSync()
         } catch {
@@ -959,6 +988,54 @@ final class LibraryController: ObservableObject {
             refreshLibraryCache(for: device)
         } catch {
             // Best-effort: il rename volume resta comunque valido in Finder.
+        }
+    }
+
+    /// Rimuove On-The-Go vuote dall’iTunesDB e normalizza il nome a «On-The-Go».
+    private func cleanupEmptyOnTheGoPlaylists(on device: iPodDevice) {
+        guard device.firmwareMode == .stock else { return }
+
+        let before = playlists
+        playlists.removeAll { playlist in
+            !playlist.isMaster
+                && playlist.isOnTheGo
+                && playlist.resolvedSongCount(using: tracks) == 0
+        }
+        var renamed = false
+        for i in playlists.indices where playlists[i].isOnTheGo && playlists[i].name != "On-The-Go" {
+            playlists[i].name = "On-The-Go"
+            renamed = true
+        }
+
+        if let pid = selectedPlaylistID, !playlists.contains(where: { $0.id == pid }) {
+            selectedPlaylistID = sidebarPlaylists.first?.id
+            if selectedPlaylistID == nil, selectedSection == .playlists {
+                selectSection(.songs)
+            }
+        }
+
+        let removed = before.count != playlists.count
+        guard removed || renamed else { return }
+
+        do {
+            try sync.savePlaylists(
+                tracks: &tracks,
+                playlists: playlists,
+                dbVersion: dbVersion,
+                device: device
+            )
+            refreshLibraryCache(for: device)
+            if removed {
+                let n = before.count - playlists.count
+                setStatus(.success(
+                    n == 1
+                        ? "Rimossa On-The-Go vuota"
+                        : "Rimosse \(n) On-The-Go vuote"
+                ))
+            }
+        } catch {
+            // Ripristina in memoria se la scrittura fallisce.
+            playlists = before
         }
     }
 
@@ -1462,7 +1539,7 @@ final class LibraryController: ObservableObject {
         guard let device = connectedDevice else { return }
         playlists.removeAll { $0.id == id && !$0.isMaster }
         if selectedPlaylistID == id {
-            selectedPlaylistID = playlists.first(where: { !$0.isMaster })?.id
+            selectedPlaylistID = sidebarPlaylists.first?.id
         }
         persistPlaylists(device: device)
     }
@@ -1492,11 +1569,27 @@ final class LibraryController: ObservableObject {
         }
     }
 
+    /// Chiede conferma prima di eliminare i brani selezionati dall’iPod.
+    func requestDeleteSelectedTracks() {
+        guard connectedDevice != nil, !selection.isEmpty else { return }
+        pendingTrackDeleteCount = selection.count
+    }
+
+    func cancelPendingTrackDelete() {
+        pendingTrackDeleteCount = nil
+    }
+
+    func confirmPendingTrackDelete() {
+        pendingTrackDeleteCount = nil
+        deleteSelectedTracks()
+    }
+
     func deleteSelectedTracks() {
         guard let device = connectedDevice, !selection.isEmpty else { return }
         if let playingID = playback.nowPlaying?.id, selection.contains(playingID) {
             playback.stop()
         }
+        let count = selection.count
         do {
             try sync.deleteTracks(
                 ids: selection,
@@ -1508,7 +1601,9 @@ final class LibraryController: ObservableObject {
             tracksListEpoch &+= 1
             selection.removeAll()
             refreshLibraryCache(for: device)
-            setStatus(.success("Tracce rimosse dall'iPod"))
+            setStatus(.success(
+                count == 1 ? "Eliminata 1 canzone dall’iPod" : "Eliminate \(count) canzoni dall’iPod"
+            ))
         } catch {
             setStatus(.failure(error.localizedDescription))
         }
@@ -1540,6 +1635,10 @@ final class LibraryController: ObservableObject {
     }
 
     private func handleDevices(_ devices: [iPodDevice]) {
+        // Durante l’espulsione lo smontaggio arriva qui: non azzerare UI/status
+        // (altrimenti sparisce “Espulsione in corso…” e resta solo grigio).
+        if isEjecting { return }
+
         if let current = connectedDevice {
             if current.isSimulated {
                 if let real = devices.first(where: { !$0.isSimulated }) {

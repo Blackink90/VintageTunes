@@ -177,8 +177,8 @@ struct TrackTableView: View {
                         library.revealSelectedTracksInFinder()
                     }
                     Menu("Aggiungi a playlist") {
-                        ForEach(library.playlists.filter { !$0.isMaster }) { playlist in
-                            Button(playlist.name) {
+                        ForEach(library.sidebarPlaylists) { playlist in
+                            Button(playlist.displayName) {
                                 library.selection = Set(ids)
                                 library.addSelectionToPlaylist(playlist.id)
                             }
@@ -195,7 +195,7 @@ struct TrackTableView: View {
                     }
                     Button("Elimina dall'iPod", role: .destructive) {
                         library.selection = Set(ids)
-                        library.deleteSelectedTracks()
+                        library.requestDeleteSelectedTracks()
                     }
                 }
             }
@@ -758,7 +758,7 @@ struct PlaylistDetailView: View {
 
     var body: some View {
         if let playlist {
-            TrackTableView(title: playlist.name)
+            TrackTableView(title: playlist.displayName)
                 .toolbar {
                     ToolbarItemGroup {
                         Button("Rimuovi dalla playlist") {
