@@ -262,7 +262,7 @@ final class SyncService {
     }
 
     /// Allinea durata/size/bitrate/sample rate ai file sul dispositivo.
-    /// Ritorna true se almeno una traccia è cambiata (serve riscrivere iTunesDB).
+    /// Usato in import / riparazione mirata — non a ogni load (troppo lento su librerie grandi).
     func reconcilePlaybackMetadata(_ tracks: inout [Track]) async -> Bool {
         var changed = false
         for i in tracks.indices {

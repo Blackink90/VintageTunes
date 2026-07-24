@@ -102,12 +102,31 @@ struct SidebarView: View {
                         .help("Nuova playlist")
                     }
                 }
+
+                // Area vuota sotto le voci: tap → deseleziona brani (totali in barra).
+                Section {
+                    Color.clear
+                        .frame(minHeight: 280)
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            library.clearListSelection()
+                        }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .accessibilityHidden(true)
+                }
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
             .listRowSeparator(.hidden)
         }
         .background(VTTheme.panel)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            library.clearListSelection()
+        }
         .alert("Nuova playlist", isPresented: $showingNewPlaylist) {
             TextField("Nome", text: $newPlaylistName)
             Button("Crea") {

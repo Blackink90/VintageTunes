@@ -24,7 +24,13 @@ struct DetailContainer: View {
                 DropImportView()
             }
         }
-        .background(Color.clear)
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    library.clearListSelection()
+                }
+        }
     }
 }
 
@@ -123,7 +129,9 @@ struct TrackTableView: View {
             .scrollContentBackground(.hidden)
             .background(VTTheme.tableBackground)
             .foregroundStyle(VTTheme.textPrimary)
-            .onNativeTableDoubleClick { row in
+            .onNativeTableDoubleClick(onEmptyClick: {
+                library.clearListSelection()
+            }) { row in
                 // Preferisci la selezione (ID): l’indice riga della NSTableView può non allinearsi a filteredTracks.
                 if let id = library.selection.first,
                    let track = library.filteredTracks.first(where: { $0.id == id })
@@ -203,6 +211,11 @@ struct TrackTableView: View {
                 }
                 return .ignored
             }
+            .onKeyPress(.escape) {
+                if library.selection.isEmpty { return .ignored }
+                library.clearListSelection()
+                return .handled
+            }
         }
     }
 
@@ -227,12 +240,23 @@ struct TrackTableView: View {
                     .font(.custom("Avenir Next", size: 12))
                     .foregroundStyle(VTTheme.textSecondary)
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                library.clearListSelection()
+            }
             Spacer()
             TextField("Cerca", text: $library.searchText)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 220)
         }
         .padding(16)
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    library.clearListSelection()
+                }
+        }
     }
 }
 
@@ -577,6 +601,12 @@ struct AlbumGridView: View {
                     }
                 }
                 .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { library.clearListSelection() }
             }
         }
     }

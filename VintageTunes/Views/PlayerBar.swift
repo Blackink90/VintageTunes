@@ -32,6 +32,15 @@ struct LibraryStatsBar: View {
                             .frame(height: 1)
                     }
             )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                library.clearListSelection()
+            }
+            .help(
+                library.selection.isEmpty
+                    ? "Totali della lista corrente"
+                    : "Clic per deselezionare e vedere i totali"
+            )
         }
     }
 
@@ -99,14 +108,16 @@ struct PlayerBar: View {
                 .help("Stop")
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(track.displayTitle)
-                        .font(.custom("Avenir Next", size: 13).weight(.semibold))
-                        .foregroundStyle(VTTheme.textPrimary)
-                        .lineLimit(1)
-                    Text(track.displayArtist)
-                        .font(.custom("Avenir Next", size: 11))
-                        .foregroundStyle(VTTheme.textSecondary)
-                        .lineLimit(1)
+                    MarqueeText(
+                        text: track.displayTitle,
+                        font: .custom("Avenir Next", size: 13).weight(.semibold),
+                        color: VTTheme.textPrimary
+                    )
+                    MarqueeText(
+                        text: track.displayArtist,
+                        font: .custom("Avenir Next", size: 11),
+                        color: VTTheme.textSecondary
+                    )
 
                     GeometryReader { geo in
                         PlaybackScrubber(
@@ -119,6 +130,8 @@ struct PlayerBar: View {
                     .frame(height: 10)
                     .padding(.top, 2)
                 }
+                .frame(minWidth: 100, maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
 
                 let liveStars = library.tracks.first(where: { $0.id == track.id })?.starRating ?? track.starRating
                 let livePlays = library.tracks.first(where: { $0.id == track.id })?.playCount ?? track.playCount
@@ -190,6 +203,136 @@ struct PlayerBar: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Marquee (titolo / artista lunghi)
+
+/// Scorre il testo solo se non entra nella larghezza disponibile.
+private struct MarqueeText: View {
+    let text: String
+    var font: Font
+    var color: Color
+    /// Punti al secondo durante lo scorrimento.
+    var speed: CGFloat = 32
+    var gap: CGFloat = 40
+    var leadPause: Double = 1.35
+    var trailPause: Double = 0.85
+
+    @State private var textWidth: CGFloat = 0
+    @State private var containerWidth: CGFloat = 0
+    @State private var offset: CGFloat = 0
+    @State private var runID = UUID()
+
+    private var needsScroll: Bool {
+        textWidth > containerWidth + 0.5 && containerWidth > 0 && textWidth > 0
+    }
+
+    var body: some View {
+        // Altezza dalla riga statica; overlay scorre se serve.
+        Text(text)
+            .font(font)
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .opacity(0)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .leading) {
+                GeometryReader { geo in
+                    let width = geo.size.width
+                    ZStack(alignment: .leading) {
+                        measureLabel
+                        HStack(spacing: gap) {
+                            visibleLabel
+                            if needsScroll {
+                                visibleLabel
+                            }
+                        }
+                        .offset(x: offset)
+                    }
+                    .frame(width: width, alignment: .leading)
+                    .clipped()
+                    .onAppear {
+                        containerWidth = width
+                        restartLoop()
+                    }
+                    .onChange(of: width) { _, newWidth in
+                        containerWidth = newWidth
+                        restartLoop()
+                    }
+                }
+            }
+            .clipped()
+            .onChange(of: text) { _, _ in
+                offset = 0
+                restartLoop()
+            }
+            .onDisappear {
+                runID = UUID()
+            }
+    }
+
+    private var visibleLabel: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var measureLabel: some View {
+        Text(text)
+            .font(font)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .opacity(0)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(key: MarqueeWidthKey.self, value: proxy.size.width)
+                }
+            )
+            .onPreferenceChange(MarqueeWidthKey.self) { width in
+                textWidth = width
+                restartLoop()
+            }
+    }
+
+    private func restartLoop() {
+        let id = UUID()
+        runID = id
+        offset = 0
+        guard needsScroll else { return }
+
+        let travel = textWidth + gap
+        let duration = Double(travel / max(speed, 1))
+
+        Task { @MainActor in
+            while !Task.isCancelled, runID == id {
+                try? await Task.sleep(nanoseconds: UInt64(leadPause * 1_000_000_000))
+                guard runID == id else { return }
+
+                withAnimation(.linear(duration: duration)) {
+                    offset = -travel
+                }
+                try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+                guard runID == id else { return }
+
+                try? await Task.sleep(nanoseconds: UInt64(trailPause * 1_000_000_000))
+                guard runID == id else { return }
+
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    offset = 0
+                }
+            }
+        }
+    }
+}
+
+private struct MarqueeWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

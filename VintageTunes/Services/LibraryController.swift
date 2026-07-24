@@ -227,6 +227,13 @@ final class LibraryController: ObservableObject {
         searchText = ""
     }
 
+    /// Deseleziona brani (e foto): la barra canzoni/tempo/MB torna sul totale della lista.
+    func clearListSelection() {
+        guard !selection.isEmpty || !photoSelection.isEmpty else { return }
+        selection.removeAll()
+        photoSelection.removeAll()
+    }
+
     func openGenre(_ name: String) {
         browseGenre = name
         browseArtist = nil
@@ -765,10 +772,9 @@ final class LibraryController: ObservableObject {
             // Stelle/ascolti fatti sull’iPod vivono in "Play Counts", non nell’iTunesDB.
             let playMerge = sync.absorbPlayCounts(into: &result.tracks, device: device)
             let before = result.tracks
+            // Solo tag/durata mancanti (file senza metadati): non riscandire tutta la libreria.
+            // Le durate corrette per i tagli a fine brano si allineano in import (applyTechnicalMetadata).
             await sync.backfillFromFiles(&result.tracks)
-            // Durata/sample rate dal file reale: evita tagli a fine brano sul firmware stock.
-            setStatus(.working("Allineo durate audio…"))
-            let playbackMetaFixed = await sync.reconcilePlaybackMetadata(&result.tracks)
             TrackTagStore.apply(TrackTagStore.load(from: device), to: &result.tracks)
             setStatus(.working("Completo metadati mancanti…"))
             await sync.enrichMissingFromOnline(&result.tracks)
@@ -792,37 +798,33 @@ final class LibraryController: ObservableObject {
                 }
                 try? TrackTagStore.save(overrides, to: device)
             }
-            // Dopo merge ascolti e/o correzione durate, riscrivi iTunesDB.
-            if device.firmwareMode == .stock, playMerge.changed || playbackMetaFixed {
-                setStatus(.working(playMerge.changed
-                    ? "Salvo stelle e ascolti dall’iPod…"
-                    : "Aggiorno durate in iTunesDB…"))
+            // Dopo merge ascolti, riscrivi iTunesDB.
+            if device.firmwareMode == .stock, playMerge.changed {
+                setStatus(.working("Salvo stelle e ascolti dall’iPod…"))
                 try sync.persistLibrary(
                     tracks: result.tracks,
                     playlists: result.playlists,
                     dbVersion: result.dbVersion,
                     device: device
                 )
-                if playMerge.changed, playMerge.canRemoveFile {
+                if playMerge.canRemoveFile {
                     PlayCountsFile.remove(from: device)
                 }
-                if playMerge.changed {
-                    var overrides = TrackTagStore.load(from: device)
-                    for track in result.tracks {
-                        overrides[track.location] = TrackTagOverride(
-                            title: track.title,
-                            artist: track.artist,
-                            album: track.album,
-                            genre: track.genre,
-                            trackNumber: track.trackNumber,
-                            year: track.year,
-                            rating: track.rating,
-                            playCount: track.playCount,
-                            lastPlayedMacTime: track.lastPlayedMacTime
-                        )
-                    }
-                    try? TrackTagStore.save(overrides, to: device)
+                var overrides = TrackTagStore.load(from: device)
+                for track in result.tracks {
+                    overrides[track.location] = TrackTagOverride(
+                        title: track.title,
+                        artist: track.artist,
+                        album: track.album,
+                        genre: track.genre,
+                        trackNumber: track.trackNumber,
+                        year: track.year,
+                        rating: track.rating,
+                        playCount: track.playCount,
+                        lastPlayedMacTime: track.lastPlayedMacTime
+                    )
                 }
+                try? TrackTagStore.save(overrides, to: device)
             }
             if device.firmwareMode == .stock {
                 setStatus(.working("Verifico cover sul dispositivo…"))

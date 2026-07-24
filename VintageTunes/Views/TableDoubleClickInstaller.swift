@@ -1,12 +1,14 @@
 import SwiftUI
 import AppKit
 
-/// Collega il doppio-click nativo di `NSTableView` senza rubare il click singolo a SwiftUI `Table`.
+/// Collega doppio-click nativo e click sullo spazio vuoto di `NSTableView`
+/// (deseleziona senza rubare il click singolo sulle righe a SwiftUI `Table`).
 struct TableDoubleClickInstaller: NSViewRepresentable {
     var onDoubleClickRow: (Int) -> Void
+    var onEmptyClick: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onDoubleClickRow: onDoubleClickRow)
+        Coordinator(onDoubleClickRow: onDoubleClickRow, onEmptyClick: onEmptyClick)
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -17,15 +19,25 @@ struct TableDoubleClickInstaller: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {
         context.coordinator.onDoubleClickRow = onDoubleClickRow
+        context.coordinator.onEmptyClick = onEmptyClick
         (nsView as? InstallerView)?.coordinator = context.coordinator
         (nsView as? InstallerView)?.installIfNeeded()
     }
 
     final class Coordinator: NSObject {
         var onDoubleClickRow: (Int) -> Void
+        var onEmptyClick: (() -> Void)?
+        fileprivate var mouseMonitor: Any?
 
-        init(onDoubleClickRow: @escaping (Int) -> Void) {
+        init(onDoubleClickRow: @escaping (Int) -> Void, onEmptyClick: (() -> Void)?) {
             self.onDoubleClickRow = onDoubleClickRow
+            self.onEmptyClick = onEmptyClick
+        }
+
+        deinit {
+            if let mouseMonitor {
+                NSEvent.removeMonitor(mouseMonitor)
+            }
         }
 
         @objc func tableDoubleClicked(_ sender: Any?) {
@@ -56,6 +68,7 @@ struct TableDoubleClickInstaller: NSViewRepresentable {
         private func attach() {
             guard let coordinator, let table = findTableView(from: self) else { return }
             if installedTable === table, table.doubleAction == #selector(Coordinator.tableDoubleClicked(_:)) {
+                ensureEmptyClickMonitor(for: table, coordinator: coordinator)
                 return
             }
 
@@ -64,6 +77,40 @@ struct TableDoubleClickInstaller: NSViewRepresentable {
             originalDoubleAction = table.doubleAction
             table.target = coordinator
             table.doubleAction = #selector(Coordinator.tableDoubleClicked(_:))
+            table.allowsEmptySelection = true
+            ensureEmptyClickMonitor(for: table, coordinator: coordinator)
+        }
+
+        private func ensureEmptyClickMonitor(for table: NSTableView, coordinator: Coordinator) {
+            if coordinator.mouseMonitor != nil { return }
+
+            coordinator.mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak table, weak coordinator] event in
+                guard let table, let coordinator, let window = table.window, event.window === window else {
+                    return event
+                }
+
+                let locationInTable = table.convert(event.locationInWindow, from: nil)
+                // Solo area documento tabella (righe + spazio sotto l’ultima riga), non i bottoni fuori.
+                let hitView = window.contentView?.hitTest(event.locationInWindow)
+                let isInTableHierarchy = hitView.map { view in
+                    var current: NSView? = view
+                    while let node = current {
+                        if node === table || node === table.enclosingScrollView { return true }
+                        current = node.superview
+                    }
+                    return false
+                } ?? false
+
+                guard isInTableHierarchy else { return event }
+
+                let row = table.row(at: locationInTable)
+                if row < 0 {
+                    DispatchQueue.main.async {
+                        coordinator.onEmptyClick?()
+                    }
+                }
+                return event
+            }
         }
 
         private func findTableView(from view: NSView) -> NSTableView? {
@@ -83,7 +130,6 @@ struct TableDoubleClickInstaller: NSViewRepresentable {
             for sub in view.subviews {
                 if let found = deepFind(sub) { return found }
             }
-            // Also search siblings up a bit from enclosing scroll view
             if let scroll = view as? NSScrollView, let doc = scroll.documentView as? NSTableView {
                 return doc
             }
@@ -93,7 +139,15 @@ struct TableDoubleClickInstaller: NSViewRepresentable {
 }
 
 extension View {
-    func onNativeTableDoubleClick(_ action: @escaping (Int) -> Void) -> some View {
-        background(TableDoubleClickInstaller(onDoubleClickRow: action))
+    func onNativeTableDoubleClick(
+        onEmptyClick: (() -> Void)? = nil,
+        _ action: @escaping (Int) -> Void
+    ) -> some View {
+        background(
+            TableDoubleClickInstaller(
+                onDoubleClickRow: action,
+                onEmptyClick: onEmptyClick
+            )
+        )
     }
 }
