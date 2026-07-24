@@ -152,9 +152,9 @@ struct SidebarView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(VTTheme.textPrimary.opacity(disabled ? 0.35 : 0.85))
                 .frame(width: 28, height: 28)
-                .background(VTTheme.controlFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SidebarChromeButtonStyle(disabled: disabled))
         .disabled(disabled)
         .help(help)
     }
@@ -193,6 +193,28 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
         .listRowBackground(Color.clear)
+    }
+}
+
+/// Pulsante chrome sidebar: scala + fill più scuro quando premuto.
+private struct SidebarChromeButtonStyle: ButtonStyle {
+    var disabled: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed && !disabled
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(pressed ? VTTheme.amberSoft : VTTheme.controlFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(VTTheme.panelStroke.opacity(pressed ? 0.9 : 0.35), lineWidth: 1)
+                    )
+            )
+            .scaleEffect(pressed ? 0.90 : 1)
+            .offset(y: pressed ? 0.5 : 0)
+            .opacity(disabled ? 0.55 : 1)
+            .animation(.spring(response: 0.18, dampingFraction: 0.62), value: pressed)
     }
 }
 

@@ -342,36 +342,53 @@ final class LibraryController: ObservableObject {
 
     /// Rinomina l’iPod collegato (etichetta volume, come in iTunes).
     func renameConnectedDevice(to rawName: String) {
-        guard let device = connectedDevice else { return }
+        guard var device = connectedDevice else { return }
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             setStatus(.failure("Il nome non può essere vuoto"))
             return
         }
-        guard name != device.name else { return }
+        // Music.app mostra il nome della playlist master, non solo l’etichetta volume.
+        let masterName = playlists.first(where: \.isMaster)?.name
+        guard name != device.name || masterName != name else { return }
 
         do {
-            if device.isSimulated {
-                try SimulatediPod.rename(to: name)
-                connectedDevice = SimulatediPod.makeDevice(at: SimulatediPod.rootURL)
-            } else {
-                try detector.rename(device, to: name)
-                if let updated = detector.devices.first(where: { $0.id == device.id }) {
-                    connectedDevice = updated
+            if name != device.name {
+                if device.isSimulated {
+                    try SimulatediPod.rename(to: name)
+                    device = SimulatediPod.makeDevice(at: SimulatediPod.rootURL)
                 } else {
-                    connectedDevice = iPodDevice(
-                        id: device.id,
-                        name: name,
-                        volumeURL: device.volumeURL,
-                        capacityBytes: device.capacityBytes,
-                        availableBytes: device.availableBytes,
-                        modelHint: device.modelHint,
-                        firmwareMode: device.firmwareMode,
-                        hasDatabase: device.hasDatabase,
-                        isSimulated: false
-                    )
+                    try detector.rename(device, to: name)
+                    if let updated = detector.devices.first(where: { $0.id == device.id }) {
+                        device = updated
+                    } else {
+                        device = iPodDevice(
+                            id: device.id,
+                            name: name,
+                            volumeURL: device.volumeURL,
+                            capacityBytes: device.capacityBytes,
+                            availableBytes: device.availableBytes,
+                            modelHint: device.modelHint,
+                            firmwareMode: device.firmwareMode,
+                            hasDatabase: device.hasDatabase,
+                            isSimulated: false
+                        )
+                    }
                 }
+                connectedDevice = device
             }
+
+            if let idx = playlists.firstIndex(where: \.isMaster), playlists[idx].name != name {
+                playlists[idx].name = name
+                try sync.savePlaylists(
+                    tracks: &tracks,
+                    playlists: playlists,
+                    dbVersion: dbVersion,
+                    device: device
+                )
+                refreshLibraryCache(for: device)
+            }
+
             setStatus(.success("Rinominato in \"\(name)\""))
         } catch {
             setStatus(.failure(error.localizedDescription))
@@ -810,6 +827,7 @@ final class LibraryController: ObservableObject {
                 } else {
                     LibraryCacheStore.writeFingerprintToDevice(fingerprint, device: device)
                 }
+                syncMasterPlaylistName(with: device)
                 setStatus(.success("Caricate \(cached.tracks.count) tracce (cache)"))
                 checkAutoSync()
                 return
@@ -916,10 +934,31 @@ final class LibraryController: ObservableObject {
                 guard self.connectedDevice?.id == device.id else { return }
                 LibraryCacheStore.captureCovers(deviceID: device.id, tracks: self.tracks, artwork: self.artwork)
             }
+            syncMasterPlaylistName(with: device)
             setStatus(.success("Caricate \(result.tracks.count) tracce"))
             checkAutoSync()
         } catch {
             setStatus(.failure(error.localizedDescription))
+        }
+    }
+
+    /// Music.app usa il nome della playlist master; allinealo all’etichetta volume.
+    private func syncMasterPlaylistName(with device: iPodDevice) {
+        guard device.firmwareMode == .stock,
+              let idx = playlists.firstIndex(where: \.isMaster),
+              playlists[idx].name != device.name,
+              !device.name.isEmpty else { return }
+        playlists[idx].name = device.name
+        do {
+            try sync.savePlaylists(
+                tracks: &tracks,
+                playlists: playlists,
+                dbVersion: dbVersion,
+                device: device
+            )
+            refreshLibraryCache(for: device)
+        } catch {
+            // Best-effort: il rename volume resta comunque valido in Finder.
         }
     }
 
