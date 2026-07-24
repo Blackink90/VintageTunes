@@ -79,21 +79,28 @@ final class LibraryController: ObservableObject {
            let playlist = playlists.first(where: { $0.id == pid }) {
             let map = Dictionary(uniqueKeysWithValues: tracks.map { ($0.id, $0) })
             base = playlist.trackIDs.compactMap { map[$0] }
+        } else if selectedSection == .videos {
+            base = tracks.filter(\.isVideo)
         } else if let album = browseAlbum {
             base = tracks.filter {
-                $0.displayAlbum == album.name && $0.displayArtist == album.artist
+                !$0.isVideo
+                    && $0.displayAlbum == album.name
+                    && $0.displayArtist == album.artist
             }
         } else if let genre = browseGenre {
-            let inGenre = tracks.filter { $0.genreKey?.caseInsensitiveCompare(genre) == .orderedSame }
+            let inGenre = tracks.filter {
+                !$0.isVideo && $0.genreKey?.caseInsensitiveCompare(genre) == .orderedSame
+            }
             if let artist = browseArtist {
                 base = inGenre.filter { $0.displayArtist == artist }
             } else {
                 base = inGenre
             }
         } else if let artist = browseArtist {
-            base = tracks.filter { $0.displayArtist == artist }
+            base = tracks.filter { !$0.isVideo && $0.displayArtist == artist }
         } else {
-            base = tracks
+            // Canzoni / drop zone: solo audio.
+            base = tracks.filter { !$0.isVideo }
         }
 
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -106,6 +113,8 @@ final class LibraryController: ObservableObject {
                 || ($0.year != 0 && "\($0.year)".contains(q))
         }
     }
+
+    var videoTracks: [Track] { tracks.filter(\.isVideo) }
 
     /// Playlist utente in sidebar: niente master, niente On-The-Go vuote.
     var sidebarPlaylists: [Playlist] {
@@ -133,9 +142,11 @@ final class LibraryController: ObservableObject {
     func artists(forGenre genre: String?) -> [(name: String, count: Int)] {
         let source: [Track]
         if let genre {
-            source = tracks.filter { $0.genreKey?.caseInsensitiveCompare(genre) == .orderedSame }
+            source = tracks.filter {
+                !$0.isVideo && $0.genreKey?.caseInsensitiveCompare(genre) == .orderedSame
+            }
         } else {
-            source = tracks
+            source = tracks.filter { !$0.isVideo }
         }
         return Dictionary(grouping: source, by: \.displayArtist)
             .map { (name: $0.key, count: $0.value.count) }
@@ -147,7 +158,7 @@ final class LibraryController: ObservableObject {
     }
 
     var genres: [GenreRef] {
-        Dictionary(grouping: tracks.filter { $0.genreKey != nil }, by: { $0.genreKey! })
+        Dictionary(grouping: tracks.filter { !$0.isVideo && $0.genreKey != nil }, by: { $0.genreKey! })
             .map { name, group in
                 GenreRef(
                     name: name,
@@ -161,9 +172,9 @@ final class LibraryController: ObservableObject {
     func albums(forArtist artist: String?) -> [AlbumRef] {
         let source: [Track]
         if let artist {
-            source = tracks.filter { $0.displayArtist == artist }
+            source = tracks.filter { !$0.isVideo && $0.displayArtist == artist }
         } else {
-            source = tracks
+            source = tracks.filter { !$0.isVideo }
         }
         return Dictionary(grouping: source, by: \.albumKey)
             .map { _, group in
@@ -849,6 +860,9 @@ final class LibraryController: ObservableObject {
                 if selectedSection == .photos, connectedDevice?.supportsPhotos != true {
                     selectSection(.songs)
                 }
+                if selectedSection == .videos, connectedDevice?.supportsVideo != true {
+                    selectSection(.songs)
+                }
                 if playMerge.changed {
                     refreshLibraryCache(for: device)
                 } else {
@@ -952,6 +966,9 @@ final class LibraryController: ObservableObject {
                 selectedPlaylistID = sidebarPlaylists.first?.id
             }
             if selectedSection == .photos, connectedDevice?.supportsPhotos != true {
+                selectSection(.songs)
+            }
+            if selectedSection == .videos, connectedDevice?.supportsVideo != true {
                 selectSection(.songs)
             }
             // Dopo prefetch, cattura cover + snapshot per il prossimo collegamento.
@@ -1161,6 +1178,30 @@ final class LibraryController: ObservableObject {
         }
     }
 
+    func importDroppedVideos(_ urls: [URL]) {
+        cancelImport(silent: true)
+        importCancelled = false
+        importTask = Task { @MainActor in
+            await prepareVideoImport(urls)
+        }
+    }
+
+    func chooseVideosToImport() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
+        panel.allowsOtherFileTypes = true
+        panel.prompt = "Importa"
+        panel.message = "Scegli video da convertire e copiare sull’iPod"
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Movies")
+
+        guard panel.runModal() == .OK else { return }
+        importDroppedVideos(panel.urls)
+    }
+
     func chooseFolderToImport() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
@@ -1250,6 +1291,145 @@ final class LibraryController: ObservableObject {
             releaseImportSecurityRoots()
             setStatus(.failure(error.localizedDescription))
         }
+    }
+
+    private func prepareVideoImport(_ urls: [URL]) async {
+        guard let device = connectedDevice else {
+            setStatus(.failure("Collega un iPod (o avvia la demo) per sincronizzare"))
+            return
+        }
+        guard device.supportsVideo else {
+            setStatus(.failure("Questo iPod non supporta i video"))
+            return
+        }
+        if device.firmwareMode != .stock {
+            setStatus(.failure("Video supportati solo su firmware stock"))
+            return
+        }
+
+        beginImportSecurityAccess(for: urls)
+        setStatus(.working("Cerco file video…"))
+
+        do {
+            try throwIfImportCancelled()
+            let files = VideoFileCollector.collectVideoFiles(from: urls)
+            try throwIfImportCancelled()
+
+            if files.isEmpty {
+                setStatus(.failure("Nessun video trovato (mp4, m4v, mov, mkv, …)"))
+                releaseImportSecurityRoots()
+                return
+            }
+
+            setStatus(.working("Trovati \(files.count) video…"))
+            await runVideoImport(files: files, device: device)
+            releaseImportSecurityRoots()
+        } catch is CancellationError {
+            releaseImportSecurityRoots()
+            if importCancelled {
+                setStatus(.success("Import annullato"))
+            }
+        } catch {
+            releaseImportSecurityRoots()
+            setStatus(.failure(error.localizedDescription))
+        }
+    }
+
+    private func runVideoImport(files: [URL], device: iPodDevice) async {
+        var accessed: [URL] = []
+        for url in files {
+            if url.startAccessingSecurityScopedResource() {
+                accessed.append(url)
+            }
+        }
+        defer { accessed.forEach { $0.stopAccessingSecurityScopedResource() } }
+
+        var items: [ImportCandidate] = []
+        var tempFiles: [URL] = []
+        var skippedBeforeImport = 0
+        let profile = iPodVideoEncodeProfile.detect(for: device)
+
+        do {
+            for (index, url) in files.enumerated() {
+                try throwIfImportCancelled()
+                setStatus(.working("Leggo \(index + 1)/\(files.count): \(url.lastPathComponent)"))
+                var meta = await VideoMetadataReader.read(url: url)
+                meta.contentHash = try? FileHasher.sha256(of: url)
+
+                if let hash = meta.contentHash,
+                   tracks.contains(where: { $0.contentHash == hash })
+                    || tracks.contains(where: { $0.identityKey == meta.identityKey && !$0.title.isEmpty }) {
+                    skippedBeforeImport += 1
+                    continue
+                }
+
+                try throwIfImportCancelled()
+                setStatus(.working("Conversione \(index + 1)/\(files.count): \(url.lastPathComponent)"))
+                let m4v = try await VideoConverter.convertForiPod(
+                    url,
+                    profile: profile,
+                    preferredName: meta.title
+                ) { message in
+                    Task { @MainActor in self.setStatus(.working(message)) }
+                }
+                try throwIfImportCancelled()
+
+                var converted = await VideoMetadataReader.read(url: m4v)
+                converted.title = meta.title
+                converted.artist = meta.artist
+                converted.album = meta.album
+                converted.genre = meta.genre.isEmpty ? "Film" : meta.genre
+                converted.contentHash = meta.contentHash
+                items.append(converted)
+                tempFiles.append(m4v)
+            }
+
+            try throwIfImportCancelled()
+
+            if items.isEmpty {
+                if skippedBeforeImport > 0 {
+                    setStatus(.success("Nessun nuovo video · \(skippedBeforeImport) già presenti"))
+                } else {
+                    setStatus(.failure("Nessun video da trasferire"))
+                }
+                return
+            }
+
+            setStatus(.working("Copio video sull’iPod…"))
+            let result = try await sync.importVideoFiles(
+                items,
+                to: device,
+                existingTracks: tracks,
+                existingPlaylists: playlists,
+                dbVersion: dbVersion
+            ) { progress in
+                Task { @MainActor in
+                    self.setStatus(.working(progress.message))
+                }
+            }
+            try throwIfImportCancelled()
+            replaceTracks(result.tracks)
+            playlists = result.playlists
+            dbVersion = result.dbVersion
+
+            let skipped = result.skippedDuplicates + skippedBeforeImport
+            var parts: [String] = []
+            if result.imported > 0 { parts.append("Aggiunti \(result.imported) video") }
+            if skipped > 0 { parts.append("\(skipped) già presenti") }
+            parts.append("\(tempFiles.count) convertiti in M4V")
+            setStatus(.success(parts.joined(separator: " · ")))
+            selectSection(.videos)
+            refreshLibraryCache(for: device)
+        } catch is CancellationError {
+            if importCancelled {
+                setStatus(.success("Import annullato"))
+            }
+        } catch {
+            setStatus(.failure(error.localizedDescription))
+        }
+
+        tempFiles.forEach { try? FileManager.default.removeItem(at: $0) }
+        finishImportAndMaybeAutoSync()
     }
 
     private func runImport(

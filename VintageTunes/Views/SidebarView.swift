@@ -52,6 +52,9 @@ struct SidebarView: View {
                         if section == .photos {
                             return library.connectedDevice?.supportsPhotos == true
                         }
+                        if section == .videos {
+                            return library.connectedDevice?.supportsVideo == true
+                        }
                         return true
                     }) { section in
                         sidebarRow(

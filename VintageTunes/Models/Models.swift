@@ -25,6 +25,21 @@ struct iPodDevice: Identifiable, Equatable {
     /// Foto (Photo Database) solo su Video 5G/5.5G stock.
     var supportsPhotos: Bool { PhotoDeviceProfile.detect(for: self) != nil }
 
+    /// Film/video in iTunesDB: Video 5G/5.5G e Classic stock (non nano / Rockbox).
+    var supportsVideo: Bool {
+        guard firmwareMode == .stock else { return false }
+        let hint = modelHint.uppercased()
+        if hint.contains("NANO") { return false }
+        if supportsPhotos { return true }
+        if hint.contains("CLASSIC")
+            || hint.contains("MA446")
+            || hint.contains("MB147")
+            || hint.contains("MB139") {
+            return true
+        }
+        return hint.contains("VIDEO")
+    }
+
     /// Famiglia nano 1G/2G (cover F1027/F1031, iTunesDB tipicamente 0x74).
     var isNanoFamily: Bool {
         let hint = modelHint.uppercased()
@@ -79,6 +94,15 @@ struct Track: Identifiable, Hashable {
     var displayGenre: String { genre.isEmpty ? "—" : genre }
     var displayYear: String { year == 0 ? "—" : "\(year)" }
     var displayPlayCount: String { playCount == 0 ? "—" : "\(playCount)" }
+
+    /// libgpod: Movie=0x02, MusicVideo=0x20, TVShow=0x40 (bitflags).
+    var isVideo: Bool {
+        let t = mediaType
+        return (t & 0x02) != 0 || (t & 0x20) != 0 || (t & 0x40) != 0
+    }
+
+    static let mediaTypeAudio: UInt32 = 0x01
+    static let mediaTypeMovie: UInt32 = 0x02
 
     /// Stelle 0…5.
     var starRating: Int { Int(rating) / 20 }
@@ -301,6 +325,7 @@ enum LibrarySection: String, CaseIterable, Identifiable {
     case artists = "Artisti"
     case albums = "Album"
     case genres = "Generi"
+    case videos = "Video"
     case photos = "Foto"
     case playlists = "Playlist"
     case dropZone = "Aggiungi"
@@ -313,6 +338,7 @@ enum LibrarySection: String, CaseIterable, Identifiable {
         case .artists: return "person.2"
         case .albums: return "square.stack"
         case .genres: return "guitars"
+        case .videos: return "film"
         case .photos: return "photo.on.rectangle"
         case .playlists: return "list.bullet.rectangle"
         case .dropZone: return "plus.circle"

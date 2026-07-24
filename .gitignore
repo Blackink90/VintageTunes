@@ -9,3 +9,6 @@ xcuserdata/
 # Local iPod reference dumps (can be large; keep locally)
 backup-ipod/
 iPod_Control_nano_2nd/
+
+# Local source backups before risky features
+backup-code/

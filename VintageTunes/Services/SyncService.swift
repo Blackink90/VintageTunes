@@ -240,6 +240,147 @@ final class SyncService {
         return (tracks, playlists, dbVersion == 0 ? 0x14 : dbVersion, imported, skippedDuplicates)
     }
 
+    /// Import film/video: file già convertiti in .m4v iPod-safe, mediaType Movie.
+    func importVideoFiles(
+        _ items: [ImportCandidate],
+        to device: iPodDevice,
+        existingTracks: [Track],
+        existingPlaylists: [Playlist],
+        dbVersion: UInt32,
+        progress: @escaping (SyncProgress) -> Void
+    ) async throws -> (tracks: [Track], playlists: [Playlist], dbVersion: UInt32, imported: Int, skippedDuplicates: Int) {
+        guard device.firmwareMode == .stock else {
+            throw SyncError.unsupportedFormat("Video supportati solo su firmware stock")
+        }
+        guard device.supportsVideo else {
+            throw SyncError.unsupportedFormat("Questo iPod non supporta i video")
+        }
+
+        var tracks = existingTracks
+        var playlists = existingPlaylists
+        var nextID = (tracks.map(\.id).max() ?? 1000) + 1
+        var imported = 0
+        var skippedDuplicates = 0
+
+        var hashIndex = TrackHashIndex.load(from: device)
+        await ensureHashes(for: &tracks, index: &hashIndex, progress: progress)
+
+        if playlists.isEmpty {
+            playlists.append(Playlist(id: 1, name: "Libreria", isMaster: true, trackIDs: []))
+        }
+        if !playlists.contains(where: \.isMaster) {
+            playlists.insert(Playlist(id: 1, name: "Libreria", isMaster: true, trackIDs: tracks.map(\.id)), at: 0)
+        }
+
+        let videoItems = items.filter {
+            ["m4v", "mp4"].contains($0.url.pathExtension.lowercased())
+        }
+        guard !videoItems.isEmpty else {
+            throw SyncError.unsupportedFormat("nessun video convertito (.m4v)")
+        }
+
+        ensureMusicFolders(on: device)
+        var nextDBID = max(tracks.map(\.dbid).filter { $0 > 0 }.max() ?? 0, 1)
+
+        for (index, meta) in videoItems.enumerated() {
+            try Task.checkCancellation()
+            let step = Double(index) / Double(max(videoItems.count, 1))
+            progress(SyncProgress(fraction: step, message: "Controllo \(meta.url.lastPathComponent)…"))
+
+            let fileHash: String
+            if let known = meta.contentHash, !known.isEmpty {
+                fileHash = known
+            } else {
+                do {
+                    fileHash = try FileHasher.sha256(of: meta.url)
+                } catch {
+                    throw SyncError.copyFailed("Hash fallito: \(error.localizedDescription)")
+                }
+            }
+
+            let identity = meta.identityKey
+            let isDuplicate =
+                hashIndex.contains(hash: fileHash)
+                || tracks.contains(where: { $0.contentHash == fileHash })
+                || tracks.contains(where: { $0.identityKey == identity && !identity.hasPrefix("|") && !$0.title.isEmpty })
+
+            if isDuplicate {
+                skippedDuplicates += 1
+                continue
+            }
+
+            progress(SyncProgress(fraction: step, message: "Importo video \(meta.url.lastPathComponent)…"))
+
+            let trackID = nextID
+            nextID += 1
+            nextDBID += 1
+            let dbid = nextDBID
+
+            let location = try copyStockVideo(file: meta.url, device: device, trackID: trackID)
+            let onDeviceURL = resolveLocation(location, device: device)
+            hashIndex.set(location: location, hash: fileHash)
+
+            let actualSize: UInt32
+            if let onDeviceURL,
+               let attrs = try? FileManager.default.attributesOfItem(atPath: onDeviceURL.path),
+               let fileSize = attrs[.size] as? NSNumber {
+                actualSize = UInt32(clamping: fileSize.intValue)
+            } else {
+                actualSize = meta.sizeBytes
+            }
+
+            var track = Track(
+                id: trackID,
+                title: meta.title,
+                artist: meta.artist.isEmpty ? "Film" : meta.artist,
+                album: meta.album.isEmpty ? "Video" : meta.album,
+                genre: meta.genre.isEmpty ? "Film" : meta.genre,
+                location: location,
+                durationMs: meta.durationMs,
+                sizeBytes: actualSize,
+                trackNumber: meta.trackNumber,
+                year: meta.year,
+                bitrate: meta.bitrate == 0 ? 1500 : meta.bitrate,
+                sampleRate: meta.sampleRate == 0 ? 44100 : meta.sampleRate,
+                mediaType: Track.mediaTypeMovie,
+                dbid: dbid,
+                hasArtwork: 2,
+                artworkCount: 0,
+                mhiiLink: 0,
+                contentHash: fileHash,
+                resolvedPath: onDeviceURL
+            )
+
+            if let onDeviceURL {
+                await AudioMetadataReader.applyTechnicalMetadata(to: &track, from: onDeviceURL)
+                if track.sizeBytes == 0 { track.sizeBytes = actualSize }
+                // Non lasciar sovrascrivere mediaType da metadati audio.
+                track.mediaType = Track.mediaTypeMovie
+            }
+
+            tracks.append(track)
+            imported += 1
+
+            if let masterIndex = playlists.firstIndex(where: \.isMaster) {
+                playlists[masterIndex].trackIDs.append(trackID)
+            }
+        }
+
+        if let masterIndex = playlists.firstIndex(where: \.isMaster) {
+            playlists[masterIndex].trackIDs = tracks.map(\.id)
+        }
+
+        progress(SyncProgress(fraction: 0.95, message: "Aggiorno database…"))
+        let playMerge = absorbPlayCounts(into: &tracks, device: device)
+        try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        if playMerge.changed, playMerge.canRemoveFile {
+            PlayCountsFile.remove(from: device)
+        }
+        try hashIndex.save(to: device)
+        progress(SyncProgress(fraction: 1, message: "Video sincronizzati"))
+        return (tracks, playlists, dbVersion == 0 ? 0x14 : dbVersion, imported, skippedDuplicates)
+    }
+
     private func ensureHashes(
         for tracks: inout [Track],
         index: inout TrackHashIndex,
@@ -821,6 +962,42 @@ final class SyncService {
         return ":iPod_Control:Music:\(folderName):\(filename)"
     }
 
+    /// Copia .m4v/.mp4 video senza prep audio (che stripperebbe il video).
+    private func copyStockVideo(file: URL, device: iPodDevice, trackID: UInt32) throws -> String {
+        let ext = file.pathExtension.lowercased()
+        guard ["m4v", "mp4"].contains(ext) else {
+            throw SyncError.unsupportedFormat(file.lastPathComponent)
+        }
+
+        let folderIndex = Int(trackID % 50)
+        let folderName = String(format: "F%02d", folderIndex)
+        let outExt = ext
+        var filename = OfficialDBFormat.randomMusicFileName(extension: outExt)
+        var dest = device.musicURL
+            .appendingPathComponent(folderName, isDirectory: true)
+            .appendingPathComponent(filename)
+        var attempts = 0
+        while FileManager.default.fileExists(atPath: dest.path), attempts < 32 {
+            filename = OfficialDBFormat.randomMusicFileName(extension: outExt)
+            dest = device.musicURL
+                .appendingPathComponent(folderName, isDirectory: true)
+                .appendingPathComponent(filename)
+            attempts += 1
+        }
+
+        do {
+            if FileManager.default.fileExists(atPath: dest.path) {
+                try FileManager.default.removeItem(at: dest)
+            }
+            try FileManager.default.copyItem(at: file, to: dest)
+            clearExtendedAttributes(at: dest)
+        } catch {
+            throw SyncError.copyFailed(error.localizedDescription)
+        }
+
+        return ":iPod_Control:Music:\(folderName):\(filename)"
+    }
+
     private func clearExtendedAttributes(at url: URL) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
@@ -965,6 +1142,8 @@ final class SyncService {
         switch ext {
         case "mp3": return "MPEG audio file"
         case "m4a", "aac": return "AAC audio file"
+        case "m4v": return "MPEG-4 video file"
+        case "mp4": return "MPEG-4 video file"
         case "wav": return "WAV audio file"
         case "aiff", "aif": return "AIFF audio file"
         default: return "Audio file"

@@ -226,6 +226,7 @@ enum OfficialDBFormat {
     static func filetypeFourCC(for labelOrExt: String) -> String {
         let ext = labelOrExt.lowercased()
         if ext.contains("mpeg") || ext.contains("mp3") { return "MP3 " }
+        if ext.contains("m4v") || ext.contains("video") { return "M4V " }
         if ext.contains("aac") || ext.contains("m4a") || ext.contains("m4p") || ext.contains("alac") { return "M4A " }
         if ext.contains("wav") { return "WAVE" }
         if ext.contains("aiff") || ext.contains("aif") { return "AIFF" }

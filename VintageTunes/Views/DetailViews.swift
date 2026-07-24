@@ -16,6 +16,8 @@ struct DetailContainer: View {
                 AlbumsBrowserView()
             case .genres:
                 GenresBrowserView()
+            case .videos:
+                VideosView()
             case .photos:
                 PhotosView()
             case .playlists:
@@ -146,7 +148,11 @@ struct TrackTableView: View {
                 library.playTrack(track)
             }
             .dropDestination(for: URL.self) { urls, _ in
-                library.importDroppedURLs(urls)
+                if library.selectedSection == .videos {
+                    library.importDroppedVideos(urls)
+                } else {
+                    library.importDroppedURLs(urls)
+                }
                 return true
             }
             .contextMenu(forSelectionType: Track.ID.self) { ids in
@@ -781,6 +787,74 @@ struct PlaylistDetailView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+struct VideosView: View {
+    @EnvironmentObject private var library: LibraryController
+    @State private var isTargeted = false
+
+    var body: some View {
+        Group {
+            if library.videoTracks.isEmpty {
+                emptyState
+            } else {
+                TrackTableView(title: "Video")
+            }
+        }
+        .background(Color.clear)
+        .overlay(alignment: .topTrailing) {
+            if isTargeted {
+                Text("Rilascia per convertire e importare")
+                    .font(.custom("Avenir Next", size: 12).weight(.semibold))
+                    .foregroundStyle(VTTheme.amber)
+                    .padding(16)
+            }
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            library.importDroppedVideos(urls)
+            return true
+        } isTargeted: { targeted in
+            isTargeted = targeted
+        }
+        .toolbar {
+            ToolbarItemGroup {
+                Button("Aggiungi video…") {
+                    library.chooseVideosToImport()
+                }
+                Button("Elimina dall'iPod", role: .destructive) {
+                    library.requestDeleteSelectedTracks()
+                }
+                .disabled(library.selection.isEmpty)
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: "film")
+                .font(.system(size: 42, weight: .light))
+                .foregroundStyle(VTTheme.amber)
+            Text("Nessun video sull’iPod")
+                .font(VTTheme.displayFont(size: 22))
+            Text("Trascina un video qui: verrà convertito in H.264/AAC\ncompatibile con l’iPod Video e salvato come Film.")
+                .font(.custom("Avenir Next", size: 13))
+                .foregroundStyle(VTTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 440)
+            Text("Serve ffmpeg (`brew install ffmpeg`).")
+                .font(.custom("Avenir Next", size: 11))
+                .foregroundStyle(VTTheme.textSecondary.opacity(0.85))
+            Button("Aggiungi video…") {
+                library.chooseVideosToImport()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(VTTheme.amber)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
     }
 }
 
