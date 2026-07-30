@@ -1224,6 +1224,35 @@ struct SettingsView: View {
                 Text("Non supportati: FLAC, OGG, WMA (il 5.5 stock non li riproduce)")
                     .foregroundStyle(.secondary)
             }
+
+            Section("Conversione FLAC") {
+                Picker("Chiedi conversione", selection: $settings.flacConversionAskMode) {
+                    ForEach(FlacConversionAskMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(settings.flacConversionAskMode.helpText)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                if settings.flacConversionAskMode != .never {
+                    Picker("Formato", selection: $settings.flacConversionFormat) {
+                        ForEach(FlacConversionFormat.allCases) { format in
+                            Text(format.title).tag(format)
+                        }
+                    }
+                    Text(
+                        settings.flacConversionAskMode == .always
+                            ? "Usato automaticamente a ogni import FLAC (e altri formati da convertire)."
+                            : "Preferenza suggerita; in modalità «Chiedi» puoi comunque scegliere file per file."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Note") {
                 Text("Su firmware stock, VintageTunes scrive iTunesDB. Prima di modifiche importanti viene creato un backup iTunesDB.vintagebackup. Su Rockbox le playlist sono file .m3u.")
                     .font(.callout)
@@ -1231,7 +1260,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 720)
+        .frame(width: 520, height: 800)
         .onAppear { syncDeviceNameDraft() }
         .onChange(of: library.connectedDevice?.id) { _, _ in syncDeviceNameDraft() }
         .onChange(of: library.connectedDevice?.name) { _, _ in syncDeviceNameDraft() }

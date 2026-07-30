@@ -378,3 +378,27 @@ struct AutoSyncPrompt: Identifiable, Equatable {
     let id = UUID()
     let candidates: [AutoSyncCandidate]
 }
+
+/// Dialogo «Chiedi» durante conversione FLAC (e simili).
+struct PendingFlacConversionAsk: Identifiable, Equatable {
+    let id = UUID()
+    let fileName: String
+    let displayTitle: String
+    let index: Int
+    let total: Int
+
+    var showsBatchScope: Bool { total > 1 }
+
+    var headline: String {
+        if total <= 1 {
+            return "Come convertire questo file?"
+        }
+        return "Come convertire il file \(index) di \(total)?"
+    }
+}
+
+struct FlacConversionAskDecision: Equatable {
+    let format: FlacConversionFormat
+    /// Se true, applica lo stesso formato ai file convertibili rimanenti del batch.
+    let applyToAllRemaining: Bool
+}

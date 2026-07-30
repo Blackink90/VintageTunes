@@ -39,6 +39,56 @@ enum SyncMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Destinazione conversione FLAC / formati non nativi.
+enum FlacConversionFormat: String, CaseIterable, Identifiable {
+    case aac256
+    case alac
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .aac256: return "M4A AAC 256 kbps"
+        case .alac: return "M4A ALAC (lossless)"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .aac256: return "AAC 256"
+        case .alac: return "ALAC"
+        }
+    }
+}
+
+/// Quando chiedere il formato di conversione all’import.
+enum FlacConversionAskMode: String, CaseIterable, Identifiable {
+    case always
+    case ask
+    case never
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .always: return "Sempre"
+        case .ask: return "Chiedi"
+        case .never: return "No"
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .always:
+            return "Converte subito nel formato scelto sotto, senza chiedere."
+        case .ask:
+            return "A ogni import chiede AAC o ALAC. Con più file puoi applicare la scelta a tutti."
+        case .never:
+            return "Converte sempre in M4A AAC 256 kbps, senza chiedere."
+        }
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private static let appearanceKey = "appearanceMode"
@@ -46,6 +96,8 @@ final class AppSettings: ObservableObject {
     private static let syncBookmarkKey = "syncFolderBookmark"
     private static let syncPathKey = "syncFolderDisplayPath"
     private static let dismissedHashesKey = "dismissedSyncHashes"
+    private static let flacFormatKey = "flacConversionFormat"
+    private static let flacAskModeKey = "flacConversionAskMode"
 
     @Published var appearanceMode: AppearanceMode {
         didSet {
@@ -56,6 +108,19 @@ final class AppSettings: ObservableObject {
     @Published var syncMode: SyncMode {
         didSet {
             UserDefaults.standard.set(syncMode.rawValue, forKey: Self.syncModeKey)
+        }
+    }
+
+    /// Formato usato con «Sempre» (e default nel dialogo «Chiedi»).
+    @Published var flacConversionFormat: FlacConversionFormat {
+        didSet {
+            UserDefaults.standard.set(flacConversionFormat.rawValue, forKey: Self.flacFormatKey)
+        }
+    }
+
+    @Published var flacConversionAskMode: FlacConversionAskMode {
+        didSet {
+            UserDefaults.standard.set(flacConversionAskMode.rawValue, forKey: Self.flacAskModeKey)
         }
     }
 
@@ -93,6 +158,12 @@ final class AppSettings: ObservableObject {
 
         let syncRaw = UserDefaults.standard.string(forKey: Self.syncModeKey) ?? SyncMode.manual.rawValue
         syncMode = SyncMode(rawValue: syncRaw) ?? .manual
+
+        let formatRaw = UserDefaults.standard.string(forKey: Self.flacFormatKey) ?? FlacConversionFormat.aac256.rawValue
+        flacConversionFormat = FlacConversionFormat(rawValue: formatRaw) ?? .aac256
+
+        let askRaw = UserDefaults.standard.string(forKey: Self.flacAskModeKey) ?? FlacConversionAskMode.never.rawValue
+        flacConversionAskMode = FlacConversionAskMode(rawValue: askRaw) ?? .never
 
         syncFolderBookmark = UserDefaults.standard.data(forKey: Self.syncBookmarkKey)
         syncFolderDisplayPath = UserDefaults.standard.string(forKey: Self.syncPathKey)

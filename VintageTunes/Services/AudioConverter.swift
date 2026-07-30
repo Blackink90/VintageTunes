@@ -16,7 +16,7 @@ enum AudioConversionError: LocalizedError {
 }
 
 enum AudioConverter {
-    /// Formati da convertire in M4A AAC (come Music.app) prima del sync stock.
+    /// Formati da convertire in M4A (AAC o ALAC) prima del sync stock.
     static let convertibleExtensions: Set<String> = [
         "flac", "ogg", "opus", "wma", "aiff", "aif", "wav", "caf"
     ]
@@ -51,6 +51,7 @@ enum AudioConverter {
     ) async throws -> URL {
         try await convertToM4A(
             source,
+            format: .aac256,
             preferredName: preferredName,
             artist: artist,
             album: album,
@@ -59,9 +60,10 @@ enum AudioConverter {
         )
     }
 
-    /// Converte in M4A AAC (formato usato da Music.app sul Video 5.5G).
+    /// Converte in M4A AAC o ALAC.
     static func convertToM4A(
         _ source: URL,
+        format: FlacConversionFormat = .aac256,
         preferredName: String? = nil,
         artist: String = "",
         album: String = "",
@@ -80,8 +82,14 @@ enum AudioConverter {
         let archive = convertedFolderURL.appendingPathComponent("\(baseName).m4a")
         try? fm.removeItem(at: archive)
 
-        progress?("Converto \(source.lastPathComponent) → M4A…")
-        try encodeAAC(from: source, to: archive, bitrate: iPodAACBitrate)
+        switch format {
+        case .aac256:
+            progress?("Converto \(source.lastPathComponent) → M4A AAC…")
+            try encodeAAC(from: source, to: archive, bitrate: iPodAACBitrate)
+        case .alac:
+            progress?("Converto \(source.lastPathComponent) → M4A ALAC…")
+            try encodeALAC(from: source, to: archive)
+        }
 
         let tempDir = fm.temporaryDirectory.appendingPathComponent("VintageTunesConvert", isDirectory: true)
         try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -109,20 +117,60 @@ enum AudioConverter {
         try? fm.removeItem(at: dest)
 
         if ["m4a", "m4b", "mp4", "aac"].contains(ext) {
-            progress?("Ottimizzo \(source.lastPathComponent) per iPod…")
-            if isiPodFriendlyAAC(source), remuxFaststart(from: source, to: dest) {
+            let kind = probeAudioKind(source)
+            if kind == .alac {
+                progress?("Ottimizzo \(source.lastPathComponent) (ALAC)…")
+                if remuxFaststart(from: source, to: dest) {
+                    return dest
+                }
+                try? fm.removeItem(at: dest)
+                try fm.copyItem(at: source, to: dest)
+                return dest
+            }
+            if kind == .aac, isiPodFriendlyAACSampleRate(source), remuxFaststart(from: source, to: dest) {
+                progress?("Ottimizzo \(source.lastPathComponent) per iPod…")
                 return dest
             }
             try? fm.removeItem(at: dest)
         }
 
-        progress?("Converto \(source.lastPathComponent) → M4A…")
+        progress?("Converto \(source.lastPathComponent) → M4A AAC…")
         try encodeAAC(from: source, to: dest, bitrate: iPodAACBitrate)
         return dest
     }
 
-    /// Solo remux se già AAC-LC ~44.1/48 kHz (altrimenti ri-encodiamo).
-    private static func isiPodFriendlyAAC(_ url: URL) -> Bool {
+    private enum AudioKind {
+        case aac
+        case alac
+        case other
+    }
+
+    private static func probeAudioKind(_ url: URL) -> AudioKind {
+        let text = afinfoText(url)
+        if text.contains("alac") || text.contains("apple lossless") {
+            return .alac
+        }
+        if text.contains("mpeg-4 aac") || text.contains(" aac") || text.contains("aac ")
+            || text.hasPrefix("aac") || text.contains("\naac") {
+            return .aac
+        }
+        // afinfo spesso riporta "format ID: aac ".
+        if text.range(of: #"\baac\b"#, options: .regularExpression) != nil {
+            return .aac
+        }
+        return .other
+    }
+
+    /// Solo remux se già AAC-LC a sample rate iPod-friendly.
+    private static func isiPodFriendlyAACSampleRate(_ url: URL) -> Bool {
+        let text = afinfoText(url)
+        if text.contains("96000") || text.contains("88200") || text.contains("192000") {
+            return false
+        }
+        return true
+    }
+
+    private static func afinfoText(_ url: URL) -> String {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/afinfo")
         proc.arguments = [url.path]
@@ -133,17 +181,10 @@ enum AudioConverter {
             try proc.run()
             proc.waitUntilExit()
         } catch {
-            return false
+            return ""
         }
-        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+        return String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
             .lowercased() ?? ""
-        guard text.contains("aac") || text.contains("mpeg-4 aac") || text.contains("m4a") else {
-            return false
-        }
-        if text.contains("96000") || text.contains("88200") || text.contains("192000") {
-            return false
-        }
-        return true
     }
 
     private static func encodeAAC(from source: URL, to dest: URL, bitrate: String) throws {
@@ -174,6 +215,35 @@ enum AudioConverter {
             }
         }
         throw AudioConversionError.failed(lastError.isEmpty ? "Conversione AAC fallita" : lastError)
+    }
+
+    private static func encodeALAC(from source: URL, to dest: URL) throws {
+        let afconvert = URL(fileURLWithPath: "/usr/bin/afconvert")
+        guard FileManager.default.isExecutableFile(atPath: afconvert.path) else {
+            throw AudioConversionError.afconvertMissing
+        }
+        let attempts: [[String]] = [
+            [source.path, dest.path, "-d", "alac", "-f", "m4af", "-c", "2"],
+            [source.path, dest.path, "-d", "alac", "-f", "m4af"]
+        ]
+        var lastError = ""
+        for args in attempts {
+            try? FileManager.default.removeItem(at: dest)
+            let process = Process()
+            process.executableURL = afconvert
+            process.arguments = args
+            let errPipe = Pipe()
+            process.standardError = errPipe
+            process.standardOutput = Pipe()
+            try process.run()
+            process.waitUntilExit()
+            lastError = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if process.terminationStatus == 0, FileManager.default.fileExists(atPath: dest.path) {
+                return
+            }
+        }
+        throw AudioConversionError.failed(lastError.isEmpty ? "Conversione ALAC fallita" : lastError)
     }
 
     private static func encodeMP3(from source: URL, to dest: URL, bitrate: String) throws {

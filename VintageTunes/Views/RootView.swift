@@ -71,6 +71,14 @@ struct RootView: View {
             AutoSyncConfirmSheet()
                 .environmentObject(library)
         }
+        .sheet(isPresented: Binding(
+            get: { library.pendingFlacConversionAsk != nil },
+            set: { if !$0 { library.cancelFlacConversionAsk() } }
+        )) {
+            FlacConversionAskSheet()
+                .environmentObject(library)
+                .environmentObject(settings)
+        }
         .overlay(alignment: .bottom) {
             if case .idle = library.syncStatus {
                 EmptyView()
@@ -621,5 +629,122 @@ struct AutoSyncConfirmSheet: View {
         }
         .frame(width: 520, height: 480)
         .background(VTTheme.panel)
+    }
+}
+
+struct FlacConversionAskSheet: View {
+    @EnvironmentObject private var library: LibraryController
+    @EnvironmentObject private var settings: AppSettings
+
+    private var prompt: PendingFlacConversionAsk? {
+        library.pendingFlacConversionAsk
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(prompt?.headline ?? "Come convertire questo file?")
+                    .font(VTTheme.displayFont(size: 20))
+                    .foregroundStyle(VTTheme.textPrimary)
+                Text(prompt?.displayTitle ?? "")
+                    .font(.custom("Avenir Next", size: 14).weight(.semibold))
+                    .foregroundStyle(VTTheme.textPrimary)
+                    .lineLimit(2)
+                Text(prompt?.fileName ?? "")
+                    .font(.custom("Avenir Next", size: 12))
+                    .foregroundStyle(VTTheme.textSecondary)
+                    .lineLimit(1)
+            }
+            .padding(20)
+
+            Divider().opacity(0.2)
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Il firmware stock non riproduce i FLAC: scegli il formato M4A.")
+                    .font(.custom("Avenir Next", size: 13))
+                    .foregroundStyle(VTTheme.textSecondary)
+
+                if prompt?.showsBatchScope == true {
+                    Picker("Ambito", selection: $library.flacAskApplyToAll) {
+                        Text("Solo per questo file").tag(false)
+                        Text("Applica a tutti i file").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                VStack(spacing: 10) {
+                    Button {
+                        library.answerFlacConversionAsk(format: .aac256)
+                    } label: {
+                        conversionOptionLabel(
+                            title: FlacConversionFormat.aac256.title,
+                            subtitle: "Più leggero, qualità alta (lossy)",
+                            emphasized: settings.flacConversionFormat == .aac256
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        library.answerFlacConversionAsk(format: .alac)
+                    } label: {
+                        conversionOptionLabel(
+                            title: FlacConversionFormat.alac.title,
+                            subtitle: "Stessa qualità del FLAC, file più grandi",
+                            emphasized: settings.flacConversionFormat == .alac
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(20)
+
+            Spacer(minLength: 0)
+
+            Divider().opacity(0.2)
+
+            HStack {
+                Button("Annulla import") {
+                    library.cancelFlacConversionAsk()
+                }
+                .keyboardShortcut(.cancelAction)
+                Spacer()
+            }
+            .padding(20)
+        }
+        .frame(width: 440, height: prompt?.showsBatchScope == true ? 420 : 360)
+        .background(VTTheme.panel)
+        .interactiveDismissDisabled()
+    }
+
+    private func conversionOptionLabel(title: String, subtitle: String, emphasized: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.custom("Avenir Next", size: 14).weight(.semibold))
+                    .foregroundStyle(VTTheme.textPrimary)
+                Text(subtitle)
+                    .font(.custom("Avenir Next", size: 12))
+                    .foregroundStyle(VTTheme.textSecondary)
+            }
+            Spacer(minLength: 8)
+            if emphasized {
+                Text("Preferito")
+                    .font(.custom("Avenir Next", size: 10).weight(.bold))
+                    .foregroundStyle(VTTheme.amber)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(VTTheme.amberSoft, in: Capsule())
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(VTTheme.amberSoft.opacity(emphasized ? 0.55 : 0.25))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(VTTheme.amber.opacity(emphasized ? 0.55 : 0.2), lineWidth: 1)
+        )
     }
 }

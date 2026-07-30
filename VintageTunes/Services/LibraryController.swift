@@ -29,6 +29,8 @@ final class LibraryController: ObservableObject {
     @Published var pendingTrackDeleteCount: Int? = nil
     /// Manifest letto da .vbk in attesa di conferma ripristino.
     @Published var pendingRestore: PendingVolumeRestore? = nil
+    /// Dialogo conversione FLAC (modalità «Chiedi»).
+    @Published var pendingFlacConversionAsk: PendingFlacConversionAsk? = nil
     /// Incrementato a ogni sostituzione di `tracks`: forza il refresh della Table macOS (bug SwiftUI).
     @Published private(set) var tracksListEpoch: UInt64 = 0
     @Published var dbVersion: UInt32 = 0x14
@@ -52,6 +54,9 @@ final class LibraryController: ObservableObject {
     private var autoSyncTask: Task<Void, Never>?
     private var pendingAutoSyncCheck = false
     private var syncFolderScopedURL: URL?
+    private var flacAskContinuation: CheckedContinuation<FlacConversionAskDecision, Error>?
+    /// Scope UI del foglio «Chiedi» (solo questo / applica a tutti).
+    @Published var flacAskApplyToAll = false
 
     var isImportRunning: Bool {
         if case .working = syncStatus { return true }
@@ -1387,11 +1392,90 @@ final class LibraryController: ObservableObject {
         backupCancelFlag?.value = true
         backupTask?.cancel()
         backupTask = nil
+        failPendingFlacAsk(with: CancellationError())
         releaseImportSecurityRoots()
         workingProgress = nil
         if !silent {
             setStatus(.success("Operazione annullata"))
             finishImportAndMaybeAutoSync()
+        }
+    }
+
+    func answerFlacConversionAsk(format: FlacConversionFormat) {
+        let applyAll = flacAskApplyToAll && (pendingFlacConversionAsk?.showsBatchScope == true)
+        let decision = FlacConversionAskDecision(format: format, applyToAllRemaining: applyAll)
+        pendingFlacConversionAsk = nil
+        flacAskApplyToAll = false
+        let cont = flacAskContinuation
+        flacAskContinuation = nil
+        cont?.resume(returning: decision)
+    }
+
+    func cancelFlacConversionAsk() {
+        guard flacAskContinuation != nil else { return }
+        importCancelled = true
+        failPendingFlacAsk(with: CancellationError())
+    }
+
+    private func failPendingFlacAsk(with error: Error) {
+        pendingFlacConversionAsk = nil
+        flacAskApplyToAll = false
+        let cont = flacAskContinuation
+        flacAskContinuation = nil
+        cont?.resume(throwing: error)
+    }
+
+    private func askFlacConversionFormat(
+        fileName: String,
+        displayTitle: String,
+        index: Int,
+        total: Int
+    ) async throws -> FlacConversionAskDecision {
+        try throwIfImportCancelled()
+        flacAskApplyToAll = false
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<FlacConversionAskDecision, Error>) in
+            flacAskContinuation = cont
+            pendingFlacConversionAsk = PendingFlacConversionAsk(
+                fileName: fileName,
+                displayTitle: displayTitle,
+                index: index,
+                total: total
+            )
+        }
+    }
+
+    /// Risolve il formato di conversione in base a Impostazioni (Sempre / Chiedi / No).
+    private func resolveConversionFormat(
+        for url: URL,
+        displayTitle: String,
+        index: Int,
+        total: Int,
+        batchOverride: inout FlacConversionFormat?
+    ) async throws -> FlacConversionFormat {
+        if let batchOverride { return batchOverride }
+
+        let mode = appSettings?.flacConversionAskMode ?? .never
+        let preferred = appSettings?.flacConversionFormat ?? .aac256
+        let isFlac = url.pathExtension.lowercased() == "flac"
+
+        switch mode {
+        case .never:
+            return .aac256
+        case .always:
+            return preferred
+        case .ask:
+            // Il dialogo è pensato per i FLAC; gli altri formati usano la preferenza senza chiedere.
+            guard isFlac else { return preferred }
+            let decision = try await askFlacConversionFormat(
+                fileName: url.lastPathComponent,
+                displayTitle: displayTitle,
+                index: index,
+                total: total
+            )
+            if decision.applyToAllRemaining {
+                batchOverride = decision.format
+            }
+            return decision.format
         }
     }
 
@@ -1643,6 +1727,7 @@ final class LibraryController: ObservableObject {
             }
 
             if convert {
+                var batchFormatOverride: FlacConversionFormat?
                 for (index, url) in toConvert.enumerated() {
                     try throwIfImportCancelled()
                     setStatus(.working("Leggo tag \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
@@ -1657,13 +1742,25 @@ final class LibraryController: ObservableObject {
                     }
 
                     try throwIfImportCancelled()
-                    setStatus(.working("Conversione \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
                     let niceNameParts = [sourceMeta.artist, sourceMeta.title].filter { !$0.isEmpty }
                     let niceName = niceNameParts.isEmpty
                         ? sourceMeta.title
                         : niceNameParts.joined(separator: " - ")
+                    let displayTitle = niceName.isEmpty ? url.deletingPathExtension().lastPathComponent : niceName
+
+                    let format = try await resolveConversionFormat(
+                        for: url,
+                        displayTitle: displayTitle,
+                        index: index + 1,
+                        total: toConvert.count,
+                        batchOverride: &batchFormatOverride
+                    )
+
+                    try throwIfImportCancelled()
+                    setStatus(.working("Conversione \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
                     let m4a = try await AudioConverter.convertToM4A(
                         url,
+                        format: format,
                         preferredName: niceName,
                         artist: sourceMeta.artist,
                         album: sourceMeta.album
