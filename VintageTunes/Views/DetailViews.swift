@@ -1194,6 +1194,30 @@ struct SettingsView: View {
                     Button("Avvia modalità demo") { library.startDemo() }
                 }
             }
+
+            Section("Backup e ripristino") {
+                Text("Copia tutto il contenuto utente del volume (iPod_Control, Photos, play count, Artwork, preferenze, Rockbox se presente…) e il **nome** dell’iPod in un archivio `.vbk`. Utile prima di sostituire l’hard disk con una SD.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Button("Backup totale…") {
+                    DispatchQueue.main.async {
+                        library.createFullVolumeBackup()
+                    }
+                }
+                .disabled(library.connectedDevice == nil || library.connectedDevice?.isSimulated == true || library.isImportRunning || library.isEjecting)
+
+                Button("Ripristino totale da .vbk…", role: .destructive) {
+                    DispatchQueue.main.async {
+                        library.chooseFullVolumeRestore()
+                    }
+                }
+                .disabled(library.connectedDevice == nil || library.connectedDevice?.isSimulated == true || library.isImportRunning || library.isEjecting)
+
+                Text("Il ripristino cancella il contenuto attuale dell’iPod, lo sostituisce con il backup e ripristina anche il nome del volume (e la playlist master in Music.app). Serve spazio libero sul Mac circa quanto i dati sull’iPod.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Formati audio") {
                 Text("Stock iPod: MP3, M4A/AAC, WAV, AIFF, ALAC")
                     .foregroundStyle(.secondary)
@@ -1207,10 +1231,29 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 620)
+        .frame(width: 520, height: 720)
         .onAppear { syncDeviceNameDraft() }
         .onChange(of: library.connectedDevice?.id) { _, _ in syncDeviceNameDraft() }
         .onChange(of: library.connectedDevice?.name) { _, _ in syncDeviceNameDraft() }
+        .confirmationDialog(
+            "Ripristinare il backup sull’iPod?",
+            isPresented: Binding(
+                get: { library.pendingRestore != nil },
+                set: { if !$0 { library.cancelPendingRestore() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Ripristina (cancella contenuto attuale)", role: .destructive) {
+                library.confirmFullVolumeRestore()
+            }
+            Button("Annulla", role: .cancel) {
+                library.cancelPendingRestore()
+            }
+        } message: {
+            if let pending = library.pendingRestore {
+                Text("Verrà cancellato tutto ciò che c’è ora sul dispositivo e sostituito con:\n\n\(pending.summary)")
+            }
+        }
     }
 
     private func syncDeviceNameDraft() {

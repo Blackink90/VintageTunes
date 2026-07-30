@@ -23,6 +23,7 @@
 		20EF9959F75C42F8BFE88471 /* SimulatediPod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79B5C8BDC8B5449E84303A42 /* SimulatediPod.swift */; };
 		17C9FA098F504BBDAAC63E7E /* AudioConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54569615C3AF45428041F984 /* AudioConverter.swift */; };
 		7E8F9A0B1C2D3E4F5A6B7C8D /* VideoConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F9A0B1C2D3E4F5A6B7C8D9E /* VideoConverter.swift */; };
+		9A0B1C2D3E4F5A6B7C8D9E0F /* iPodVolumeBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B1C2D3E4F5A6B7C8D9E0F1 /* iPodVolumeBackup.swift */; };
 		E1CAA650E31140D3A9B9B240 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 1D8F13BCA73E4948B40C1471 /* AppIcon.icns */; };
 		C5FAA0BD0A744ED486D207FE /* FileHasher.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5774330AADB42CBB19081B3 /* FileHasher.swift */; };
 		D2CA0C86291142D3A67F3926 /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15A024797056498CB53C1C97 /* PlaybackController.swift */; };
@@ -63,6 +64,7 @@
 		79B5C8BDC8B5449E84303A42 /* SimulatediPod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatediPod.swift; sourceTree = "<group>"; };
 		54569615C3AF45428041F984 /* AudioConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioConverter.swift; sourceTree = "<group>"; };
 		8F9A0B1C2D3E4F5A6B7C8D9E /* VideoConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoConverter.swift; sourceTree = "<group>"; };
+		A0B1C2D3E4F5A6B7C8D9E0F1 /* iPodVolumeBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPodVolumeBackup.swift; sourceTree = "<group>"; };
 		1D8F13BCA73E4948B40C1471 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		E5774330AADB42CBB19081B3 /* FileHasher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileHasher.swift; sourceTree = "<group>"; };
 		15A024797056498CB53C1C97 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
@@ -143,6 +145,7 @@
 				79B5C8BDC8B5449E84303A42 /* SimulatediPod.swift */,
 				54569615C3AF45428041F984 /* AudioConverter.swift */,
 				8F9A0B1C2D3E4F5A6B7C8D9E /* VideoConverter.swift */,
+				A0B1C2D3E4F5A6B7C8D9E0F1 /* iPodVolumeBackup.swift */,
 				E5774330AADB42CBB19081B3 /* FileHasher.swift */,
 				15A024797056498CB53C1C97 /* PlaybackController.swift */,
 				E15DDEE9BAFF4F1D936BE110 /* TrackHashIndex.swift */,
@@ -306,6 +309,7 @@
 				20EF9959F75C42F8BFE88471 /* SimulatediPod.swift in Sources */,
 				17C9FA098F504BBDAAC63E7E /* AudioConverter.swift in Sources */,
 				7E8F9A0B1C2D3E4F5A6B7C8D /* VideoConverter.swift in Sources */,
+				9A0B1C2D3E4F5A6B7C8D9E0F /* iPodVolumeBackup.swift in Sources */,
 				C5FAA0BD0A744ED486D207FE /* FileHasher.swift in Sources */,
 				D2CA0C86291142D3A67F3926 /* PlaybackController.swift in Sources */,
 				0AE17B55FB324B6CA0A4079F /* TrackHashIndex.swift in Sources */,
@@ -369,7 +373,7 @@
 				CODE_SIGN_ENTITLEMENTS = VintageTunes/VintageTunes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VintageTunes/Info.plist;
@@ -378,7 +382,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.4.0;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vintagetunes.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -394,7 +398,7 @@
 				CODE_SIGN_ENTITLEMENTS = VintageTunes/VintageTunes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VintageTunes/Info.plist;
@@ -403,7 +407,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.4.0;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vintagetunes.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

@@ -27,6 +27,8 @@ final class LibraryController: ObservableObject {
     @Published var isEjecting = false
     /// Conteggio brani in attesa di conferma eliminazione; `nil` = nessun dialogo.
     @Published var pendingTrackDeleteCount: Int? = nil
+    /// Manifest letto da .vbk in attesa di conferma ripristino.
+    @Published var pendingRestore: PendingVolumeRestore? = nil
     /// Incrementato a ogni sostituzione di `tracks`: forza il refresh della Table macOS (bug SwiftUI).
     @Published private(set) var tracksListEpoch: UInt64 = 0
     @Published var dbVersion: UInt32 = 0x14
@@ -45,6 +47,8 @@ final class LibraryController: ObservableObject {
     private var statusDismissTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
     private var importCancelled = false
+    private var backupTask: Task<Void, Never>?
+    private var backupCancelFlag: BackupCancelFlag?
     private var autoSyncTask: Task<Void, Never>?
     private var pendingAutoSyncCheck = false
     private var syncFolderScopedURL: URL?
@@ -820,6 +824,156 @@ final class LibraryController: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
+    // MARK: - Backup / ripristino totale (.vbk)
+
+    /// Crea un archivio `.vbk` con tutto il contenuto utente del volume.
+    func createFullVolumeBackup() {
+        guard let device = connectedDevice else {
+            setStatus(.failure(iPodBackupError.noDevice.localizedDescription))
+            return
+        }
+        guard !device.isSimulated else {
+            setStatus(.failure(iPodBackupError.simulatedDevice.localizedDescription))
+            return
+        }
+        guard !isEjecting else { return }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [iPodVolumeBackup.utType]
+        panel.nameFieldStringValue = sanitizedBackupName(for: device)
+        panel.message = "Backup totale dell’iPod (musica, video, foto, database, play count, cover…)"
+        panel.prompt = "Salva backup"
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents", isDirectory: true)
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        cancelImport(silent: true)
+        let cancelFlag = BackupCancelFlag()
+        backupCancelFlag = cancelFlag
+        backupTask?.cancel()
+        let deviceSnapshot = device
+        let destURL = url
+        backupTask = Task { @MainActor in
+            setStatus(.working("Backup totale in corso…"), progress: 0)
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try iPodVolumeBackup.createBackup(device: deviceSnapshot, to: destURL) { progress in
+                        Task { @MainActor in
+                            self.setStatus(.working(progress.message), progress: progress.fraction)
+                        }
+                    } isCancelled: {
+                        Task.isCancelled || cancelFlag.value
+                    }
+                }.value
+                try Task.checkCancellation()
+                if cancelFlag.value { throw iPodBackupError.cancelled }
+                setStatus(.success("Backup salvato: \(destURL.lastPathComponent)"), progress: nil)
+                NSWorkspace.shared.activateFileViewerSelecting([destURL])
+            } catch is CancellationError {
+                setStatus(.success("Backup annullato"))
+            } catch let error as iPodBackupError where error == .cancelled {
+                setStatus(.success("Backup annullato"))
+            } catch {
+                setStatus(.failure(error.localizedDescription))
+            }
+            backupTask = nil
+            backupCancelFlag = nil
+        }
+    }
+
+    /// Sceglie un `.vbk` e chiede conferma prima di ripristinare (cancella il contenuto attuale).
+    func chooseFullVolumeRestore() {
+        guard let device = connectedDevice else {
+            setStatus(.failure(iPodBackupError.noDevice.localizedDescription))
+            return
+        }
+        guard !device.isSimulated else {
+            setStatus(.failure(iPodBackupError.simulatedDevice.localizedDescription))
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [iPodVolumeBackup.utType]
+        panel.message = "Scegli un backup VintageTunes (.vbk) da ripristinare sull’iPod"
+        panel.prompt = "Apri"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let manifest = try iPodVolumeBackup.readManifest(from: url)
+            pendingRestore = PendingVolumeRestore(archiveURL: url, manifest: manifest)
+        } catch {
+            setStatus(.failure(error.localizedDescription))
+        }
+    }
+
+    func cancelPendingRestore() {
+        pendingRestore = nil
+    }
+
+    func confirmFullVolumeRestore() {
+        guard let pending = pendingRestore else { return }
+        pendingRestore = nil
+        guard let device = connectedDevice else {
+            setStatus(.failure(iPodBackupError.noDevice.localizedDescription))
+            return
+        }
+        guard !device.isSimulated else {
+            setStatus(.failure(iPodBackupError.simulatedDevice.localizedDescription))
+            return
+        }
+
+        playback.stop()
+        cancelImport(silent: true)
+        let cancelFlag = BackupCancelFlag()
+        backupCancelFlag = cancelFlag
+        backupTask?.cancel()
+        let archive = pending.archiveURL
+        let deviceSnapshot = device
+        backupTask = Task { @MainActor in
+            setStatus(.working("Ripristino totale in corso…"), progress: 0)
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try iPodVolumeBackup.restoreBackup(from: archive, to: deviceSnapshot) { progress in
+                        Task { @MainActor in
+                            self.setStatus(.working(progress.message), progress: progress.fraction)
+                        }
+                    } isCancelled: {
+                        Task.isCancelled || cancelFlag.value
+                    }
+                }.value
+                try Task.checkCancellation()
+                if cancelFlag.value { throw iPodBackupError.cancelled }
+                // Ricarica libreria dal volume ripristinato.
+                await load(device: deviceSnapshot)
+                setStatus(.success("Ripristino completato da \(archive.lastPathComponent)"))
+            } catch is CancellationError {
+                setStatus(.success("Ripristino annullato"))
+            } catch let error as iPodBackupError where error == .cancelled {
+                setStatus(.success("Ripristino annullato"))
+            } catch {
+                setStatus(.failure(error.localizedDescription))
+            }
+            backupTask = nil
+            backupCancelFlag = nil
+        }
+    }
+
+    private func sanitizedBackupName(for device: iPodDevice) -> String {
+        let raw = device.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let invalid = CharacterSet(charactersIn: "/:\\?%*|\"<>")
+        let cleaned = raw.components(separatedBy: invalid).joined(separator: "-")
+        let base = cleaned.isEmpty ? "iPod" : cleaned
+        let stamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        return "\(base)-\(stamp).\(iPodVolumeBackup.fileExtension)"
+    }
+
     func revealSelectedTracksInFinder() {
         let urls = tracks.compactMap { track -> URL? in
             guard selection.contains(track.id) else { return nil }
@@ -1225,15 +1379,18 @@ final class LibraryController: ObservableObject {
         importDroppedURLs(panel.urls)
     }
 
-    /// Interrompe scan/conversione/import in corso.
+    /// Interrompe scan/conversione/import/backup in corso.
     func cancelImport(silent: Bool = false) {
         importCancelled = true
         importTask?.cancel()
         importTask = nil
+        backupCancelFlag?.value = true
+        backupTask?.cancel()
+        backupTask = nil
         releaseImportSecurityRoots()
         workingProgress = nil
         if !silent {
-            setStatus(.success("Import annullato"))
+            setStatus(.success("Operazione annullata"))
             finishImportAndMaybeAutoSync()
         }
     }

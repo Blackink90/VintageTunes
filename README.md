@@ -4,7 +4,7 @@ Companion **macOS** per gestire la libreria di un **iPod Classic / Video / nano 
 
 Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce **foto** e **video** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
 
-Versione attuale: **1.4.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.4.0)).
+Versione attuale: **1.5.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.5.0)).
 
 ---
 
@@ -15,7 +15,7 @@ Versione attuale: **1.4.0** ([release](https://github.com/Blackink90/VintageTune
 - L’uso è **a proprio rischio e pericolo**.
 - Scrivere su un iPod (database, file audio, ArtworkDB, Photo Database) può in rari casi **corrompere la libreria**, richiedere un ripristino o, in scenari estremi, rendere il dispositivo inutilizzabile finché non viene ripristinato.
 - Gli autori **non sono responsabili** di perdite di dati, danni al dispositivo, al computer o a terzi derivanti dall’uso (o dall’impossibilità di usare) questo programma.
-- **Fai sempre un backup** della volume dell’iPod (o almeno di `iPod_Control` e, se usi le foto, `Photos/`) prima di sincronizzare in massa.
+- **Fai sempre un backup** della volume dell’iPod (o almeno di `iPod_Control` e, se usi le foto, `Photos/`) prima di sincronizzare in massa. In Impostazioni puoi creare un **backup totale** `.vbk`.
 - Non è un prodotto Apple e non è affiliato ad Apple Inc.
 
 Usando VintageTunes dichiari di aver compreso questi rischi.
@@ -37,6 +37,11 @@ Usando VintageTunes dichiari di aver compreso questi rischi.
 Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal sorgente. Per i video serve anche **ffmpeg**. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
 
 ---
+
+## Novità in 1.5.0
+
+- **Backup / ripristino totale** in Impostazioni: archivio `.vbk` con tutto il contenuto utente del volume (musica, video, foto, database, play count, Artwork, preferenze, Rockbox se presente) e il **nome** dell’iPod
+- Ideale prima di migrare HDD → SD: ripristino 1:1 dei dati
 
 ## Novità in 1.4.0
 
@@ -70,6 +75,7 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 - **Playlist** utente: crea, aggiungi, rimuovi brani (senza eliminarli dall’iPod)
 - **Copertine**: da tag, ricerca online, file locale o incolla URL; sull’iPod scrive ArtworkDB (Video F1028/F1029, Classic F1061/…, **nano 2G F1027/F1031**)
 - **Foto** (solo **iPod Video 5G/5.5G** stock): sezione dedicata in sidebar — elenco, aggiunta (drag & drop o file) ed eliminazione; scrive `Photos/Photo Database` e le thumb in `Photos/Thumbs/` come Music.app
+- **Backup totale** / **ripristino totale** (`.vbk`) dalle Impostazioni
 - **Modifica metadati** (titolo, artista, album, genere, traccia, anno, stelle, cover)
 - **Stelle e conteggi** riproduzioni: legge anche il file **Play Counts** scritto dall’iPod
 - **Riproduzione sul Mac** dei file presenti sul dispositivo (anteprima)
@@ -86,7 +92,8 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 5. Per le playlist: crea dalla sidebar, poi **Aggiungi a playlist** dal menu contestuale; in playlist usa **Rimuovi dalla playlist** (non “Elimina dall’iPod”).
 6. Per le **foto** (Video 5.5G): apri **Foto** nella sidebar, aggiungi immagini o eliminale; sul dispositivo compaiono nel menu Foto. Dopo modifiche grosse, espelli e ricollega l’iPod.
 7. Per i **video** (Video / Classic): apri **Video**, trascina un file (serve `ffmpeg`); espelli e sul device apri Film/Video.
-8. Espelli l’iPod dall’app o da Finder quando hai finito.
+8. Prima di cambiare disco: Impostazioni → **Backup totale…** (`.vbk`); sulla nuova SD → **Ripristino totale da .vbk…**.
+9. Espelli l’iPod dall’app o da Finder quando hai finito.
 
 ### Formati (firmware stock)
 
@@ -121,7 +128,7 @@ Note:
 - L’app richiede accesso ai **volumi rimovibili**.
 - Con firma ad-hoc, macOS può chiedere i permessi a ogni avvio; una firma con Apple ID / Team di sviluppo aiuta a mantenerli.
 
-Scarica i binari pronti dalla [release 1.4.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.4.0) (al primo avvio: tasto destro → **Apri**).
+Scarica i binari pronti dalla [release 1.5.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.5.0) (al primo avvio: tasto destro → **Apri**).
 
 ---
 
