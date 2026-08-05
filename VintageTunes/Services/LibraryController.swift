@@ -829,6 +829,50 @@ final class LibraryController: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
+    /// Riallinea size/durate da disco, toglie cover embedded enormi (es. La recette), riscrive iTunesDB.
+    func repairLibraryPlaybackMetadata() {
+        guard let device = connectedDevice else {
+            setStatus(.failure("Collega un iPod per riallineare i metadati"))
+            return
+        }
+        guard !isImportRunning, !isEjecting else { return }
+
+        importCancelled = false
+        importTask?.cancel()
+        importTask = Task { @MainActor in
+            setStatus(.working("Riallineamento libreria…"))
+            do {
+                var workingTracks = tracks
+                let result = try await sync.repairPlaybackMetadata(
+                    tracks: &workingTracks,
+                    playlists: playlists,
+                    dbVersion: dbVersion,
+                    device: device
+                ) { message in
+                    Task { @MainActor in
+                        self.setStatus(.working(message))
+                    }
+                }
+                try Task.checkCancellation()
+                replaceTracks(workingTracks)
+                refreshLibraryCache(for: device)
+                var parts: [String] = []
+                if result.metadataFixed > 0 {
+                    parts.append("\(result.metadataFixed) metadati aggiornati")
+                }
+                if result.stripped > 0 {
+                    parts.append("\(result.stripped) cover embedded rimosse")
+                }
+                setStatus(.success(parts.isEmpty ? "Libreria già allineata" : parts.joined(separator: " · ")))
+            } catch is CancellationError {
+                setStatus(.success("Riallineamento annullato"))
+            } catch {
+                setStatus(.failure(error.localizedDescription))
+            }
+            importTask = nil
+        }
+    }
+
     // MARK: - Backup / ripristino totale (.vbk)
 
     /// Crea un archivio `.vbk` con tutto il contenuto utente del volume.

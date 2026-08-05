@@ -284,8 +284,93 @@ enum AudioConverter {
         return process.terminationStatus == 0 && FileManager.default.fileExists(atPath: dest.path)
     }
 
+    /// Se il M4A ha una track video/cover (es. JPEG 2000×2000), remux solo audio.
+    /// Ritorna `true` se il file è stato sostituito.
+    @discardableResult
+    static func stripBloatedEmbeddedArtwork(at url: URL) throws -> Bool {
+        guard hasEmbeddedCoverOrVideoStream(url) else { return false }
+        guard let bin = ffmpegBinary() else {
+            throw AudioConversionError.failed("Serve ffmpeg (brew install ffmpeg) per ripulire le cover embedded.")
+        }
+        let fm = FileManager.default
+        let tempDir = fm.temporaryDirectory.appendingPathComponent("VintageTunesConvert", isDirectory: true)
+        try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let dest = tempDir.appendingPathComponent("\(UUID().uuidString)-nocovr.m4a")
+        try? fm.removeItem(at: dest)
+
+        let process = Process()
+        process.executableURL = bin
+        process.arguments = [
+            "-y", "-i", url.path,
+            "-map", "0:a:0",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            dest.path
+        ]
+        let errPipe = Pipe()
+        process.standardError = errPipe
+        process.standardOutput = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0, fm.fileExists(atPath: dest.path) else {
+            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            throw AudioConversionError.failed(err.isEmpty ? "Pulizia cover embedded fallita" : err)
+        }
+
+        let backup = url.deletingLastPathComponent()
+            .appendingPathComponent(".\(url.deletingPathExtension().lastPathComponent).bak.\(url.pathExtension)")
+        try? fm.removeItem(at: backup)
+        try fm.moveItem(at: url, to: backup)
+        do {
+            try fm.moveItem(at: dest, to: url)
+            try? fm.removeItem(at: backup)
+        } catch {
+            try? fm.moveItem(at: backup, to: url)
+            throw error
+        }
+        return true
+    }
+
+    private static func hasEmbeddedCoverOrVideoStream(_ url: URL) -> Bool {
+        guard let bin = ffprobeBinary() else {
+            // Fallback grezzo: covr atom o file sospettosamente “gonfio” rispetto all’audio.
+            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { return false }
+            return data.range(of: Data("covr".utf8)) != nil
+        }
+        let process = Process()
+        process.executableURL = bin
+        process.arguments = [
+            "-v", "error",
+            "-select_streams", "v",
+            "-show_entries", "stream=codec_type,codec_name,width,height",
+            "-of", "csv=p=0",
+            url.path
+        ]
+        let out = Pipe()
+        process.standardOutput = out
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return false
+        }
+        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !text.isEmpty
+    }
+
     private static func ffmpegBinary() -> URL? {
         for path in ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
+        where FileManager.default.isExecutableFile(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
+        return nil
+    }
+
+    private static func ffprobeBinary() -> URL? {
+        for path in ["/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe"]
         where FileManager.default.isExecutableFile(atPath: path) {
             return URL(fileURLWithPath: path)
         }

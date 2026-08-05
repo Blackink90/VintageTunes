@@ -4,7 +4,7 @@ Companion **macOS** per gestire la libreria di un **iPod Classic / Video / nano 
 
 Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce **foto** e **video** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
 
-Versione attuale: **1.5.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.5.0)).
+Versione attuale: **1.6.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.6.0)).
 
 ---
 
@@ -38,6 +38,12 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 
 ---
 
+## Novità in 1.6.0
+
+- **Impostazioni conversione FLAC**: Sempre / Chiedi / No, e destinazione **AAC 256** o **ALAC** (con “Solo per questo file” / “Applica a tutti”)
+- **Riallinea size/durate e ripulisci M4A…**: ricalcola size e durata dai file, riscrive iTunesDB, toglie JPEG/cover embedded enormi che sul 5.5G possono causare stridii
+- Scrittura iTunesDB: campi **gapless** azzerati (niente residui del template Music.app che tagliavano i brani)
+
 ## Novità in 1.5.0
 
 - **Backup / ripristino totale** in Impostazioni: archivio `.vbk` con tutto il contenuto utente del volume (musica, video, foto, database, play count, Artwork, preferenze, Rockbox se presente) e il **nome** dell’iPod
@@ -69,7 +75,7 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 - **Rileva** l’iPod collegato (o usa un iPod simulato per provare l’interfaccia)
 - **Sfoglia** Canzoni, Artisti, Album, Generi, Playlist, Video, Foto
 - **Importa** file o cartelle (drag & drop o selezione cartella)
-- **Converte** formati non supportati dal firmware stock (es. FLAC, OGG, Opus, WAV…) in **M4A AAC** adatto all’iPod
+- **Converte** formati non supportati dal firmware stock (es. FLAC, OGG, Opus, WAV…) in **M4A AAC** o **ALAC** (impostabile)
 - **Video**: converte con ffmpeg in H.264 Baseline + AAC (barra di progresso in app; serve anche **ffprobe**) e li marca come Film in iTunesDB
 - **Scrive** tracce in `iPod_Control/Music`, aggiorna **iTunesDB** e (su stock) **ArtworkDB**
 - **Playlist** utente: crea, aggiungi, rimuovi brani (senza eliminarli dall’iPod)
@@ -100,7 +106,7 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 | Sul Mac | Sull’iPod stock |
 |---|---|
 | MP3, M4A/AAC, WAV, AIFF, ALAC | Copia / preparazione |
-| FLAC, OGG, Opus, WMA, … | Conversione → **M4A AAC** (tipicamente 256 kbps, 44.1 kHz) |
+| FLAC, OGG, Opus, WMA, … | Conversione → **M4A AAC** (256 kbps) o **ALAC** (Impostazioni) |
 | MP4, M4V, MOV, MKV, … | Conversione → **M4V** H.264/AAC (sezione Video; richiede ffmpeg) |
 
 Rockbox: percorso diverso (es. playlist `.m3u`); il supporto FLAC nativo in-app non è ancora completo.
@@ -128,7 +134,7 @@ Note:
 - L’app richiede accesso ai **volumi rimovibili**.
 - Con firma ad-hoc, macOS può chiedere i permessi a ogni avvio; una firma con Apple ID / Team di sviluppo aiuta a mantenerli.
 
-Scarica i binari pronti dalla [release 1.5.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.5.0) (al primo avvio: tasto destro → **Apri**).
+Scarica i binari pronti dalla [release 1.6.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.6.0) (al primo avvio: tasto destro → **Apri**).
 
 ---
 

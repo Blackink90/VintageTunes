@@ -424,6 +424,73 @@ final class SyncService {
         return changed
     }
 
+    /// Rimuove cover/video embedded enormi dai M4A (il firmware 5.5G può glitchare).
+    /// Le cover restano in ArtworkDB; qui si toglie solo il JPEG dentro il file audio.
+    @discardableResult
+    func stripBloatedEmbeddedArtwork(
+        from tracks: inout [Track],
+        device: iPodDevice,
+        progress: ((String) -> Void)? = nil
+    ) async -> Int {
+        var stripped = 0
+        for i in tracks.indices {
+            let path = tracks[i].resolvedPath ?? resolveLocation(tracks[i].location, device: device)
+            guard let path, FileManager.default.fileExists(atPath: path.path) else { continue }
+            tracks[i].resolvedPath = path
+            let ext = path.pathExtension.lowercased()
+            guard ["m4a", "m4b", "mp4"].contains(ext) else { continue }
+            progress?("Verifico \(path.lastPathComponent)…")
+            do {
+                if try AudioConverter.stripBloatedEmbeddedArtwork(at: path) {
+                    stripped += 1
+                    _ = await AudioMetadataReader.applyTechnicalMetadata(to: &tracks[i], from: path)
+                }
+            } catch {
+                // Non bloccare il resto della riparazione.
+            }
+        }
+        return stripped
+    }
+
+    /// Ripara size/durate da disco e toglie artwork embedded troppo pesanti; riscrive iTunesDB.
+    func repairPlaybackMetadata(
+        tracks: inout [Track],
+        playlists: [Playlist],
+        dbVersion: UInt32,
+        device: iPodDevice,
+        progress: @escaping (String) -> Void
+    ) async throws -> (stripped: Int, metadataFixed: Int) {
+        progress("Tolgo cover embedded troppo grandi…")
+        let stripped = await stripBloatedEmbeddedArtwork(from: &tracks, device: device, progress: progress)
+
+        progress("Riallineo size e durate dai file…")
+        var fixed = 0
+        for i in tracks.indices {
+            let path = tracks[i].resolvedPath ?? resolveLocation(tracks[i].location, device: device)
+            guard let path, FileManager.default.fileExists(atPath: path.path) else { continue }
+            tracks[i].resolvedPath = path
+            var trackChanged = false
+            if await AudioMetadataReader.applyTechnicalMetadata(to: &tracks[i], from: path) {
+                trackChanged = true
+            }
+            // Forza sempre la size dagli attributi file (template Music.app = 9319789).
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: path.path),
+               let fileSize = attrs[.size] as? NSNumber {
+                let size = UInt32(clamping: fileSize.intValue)
+                if size > 0, tracks[i].sizeBytes != size {
+                    tracks[i].sizeBytes = size
+                    trackChanged = true
+                }
+            }
+            if trackChanged { fixed += 1 }
+            progress("Metadati \(i + 1)/\(tracks.count): \(tracks[i].displayTitle)")
+        }
+
+        progress("Aggiorno iTunesDB…")
+        try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+        return (stripped, fixed)
+    }
+
     /// Completa solo da tag presenti nel file audio.
     func backfillFromFiles(_ tracks: inout [Track]) async {
         for i in tracks.indices {

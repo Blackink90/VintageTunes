@@ -1189,6 +1189,13 @@ struct SettingsView: View {
                     }
                     Button("Mostra file convertiti (M4A)") { library.revealConvertedFolder() }
                     Button("Mostra musica sull'iPod") { library.revealMusicFolder() }
+                    Button("Riallinea size/durate e ripulisci M4A…") {
+                        library.repairLibraryPlaybackMetadata()
+                    }
+                    .disabled(library.isImportRunning || library.isEjecting)
+                    Text("Ricalcola size e durata da ogni file sul disco, riscrive iTunesDB e toglie eventuali cover JPEG enormi embedded nei M4A (che sul 5.5G possono causare stridii).")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 } else {
                     Text("Nessun iPod collegato")
                     Button("Avvia modalità demo") { library.startDemo() }
