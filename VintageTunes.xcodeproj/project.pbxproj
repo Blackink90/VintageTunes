@@ -41,6 +41,7 @@
 		D3E4F5A6B7C8091A2B3C4D5E /* ArtworkDBStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F5A6B7C8091A2B3C4D5E6F /* ArtworkDBStore.swift */; };
 		F1A2B3C4D5E6071829A0B1C2 /* PhotoDBStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D5E6071829A0B1C2D3 /* PhotoDBStore.swift */; };
 		A1B2C3D4E5F6071829A0B1C2 /* OfficialDBFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6071829A0B1C2D3 /* OfficialDBFormat.swift */; };
+		C0FFEE01A11B2026C0DE0001 /* iPodUSBReconnect.c in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE01A11B2026C0DE0002 /* iPodUSBReconnect.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -82,6 +83,9 @@
 		E4F5A6B7C8091A2B3C4D5E6F /* ArtworkDBStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkDBStore.swift; sourceTree = "<group>"; };
 		A2B3C4D5E6071829A0B1C2D3 /* PhotoDBStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoDBStore.swift; sourceTree = "<group>"; };
 		B2C3D4E5F6071829A0B1C2D3 /* OfficialDBFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficialDBFormat.swift; sourceTree = "<group>"; };
+		C0FFEE01A11B2026C0DE0002 /* iPodUSBReconnect.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = iPodUSBReconnect.c; sourceTree = "<group>"; };
+		C0FFEE01A11B2026C0DE0003 /* iPodUSBReconnect.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = iPodUSBReconnect.h; sourceTree = "<group>"; };
+		C0FFEE01A11B2026C0DE0004 /* VintageTunes-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "VintageTunes-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -112,6 +116,7 @@
 				5ABBA9960C854AE8A8987FAA /* Resources */,
 				C70E97DC99824E348B9E6421 /* Info.plist */,
 				112D196B999842F88BDE8040 /* VintageTunes.entitlements */,
+				C0FFEE01A11B2026C0DE0004 /* VintageTunes-Bridging-Header.h */,
 			);
 			path = VintageTunes;
 			sourceTree = "<group>";
@@ -159,6 +164,8 @@
 				E4F5A6B7C8091A2B3C4D5E6F /* ArtworkDBStore.swift */,
 				A2B3C4D5E6071829A0B1C2D3 /* PhotoDBStore.swift */,
 				B2C3D4E5F6071829A0B1C2D3 /* OfficialDBFormat.swift */,
+				C0FFEE01A11B2026C0DE0002 /* iPodUSBReconnect.c */,
+				C0FFEE01A11B2026C0DE0003 /* iPodUSBReconnect.h */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -326,6 +333,7 @@
 				D3E4F5A6B7C8091A2B3C4D5E /* ArtworkDBStore.swift in Sources */,
 				F1A2B3C4D5E6071829A0B1C2 /* PhotoDBStore.swift in Sources */,
 				A1B2C3D4E5F6071829A0B1C2 /* OfficialDBFormat.swift in Sources */,
+				C0FFEE01A11B2026C0DE0001 /* iPodUSBReconnect.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -373,7 +381,7 @@
 				CODE_SIGN_ENTITLEMENTS = VintageTunes/VintageTunes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VintageTunes/Info.plist;
@@ -382,10 +390,14 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.6.0;
+				MARKETING_VERSION = 1.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vintagetunes.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "VintageTunes/VintageTunes-Bridging-Header.h";
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/VintageTunes/Services",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -398,7 +410,7 @@
 				CODE_SIGN_ENTITLEMENTS = VintageTunes/VintageTunes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VintageTunes/Info.plist;
@@ -407,10 +419,14 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.6.0;
+				MARKETING_VERSION = 1.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.vintagetunes.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "VintageTunes/VintageTunes-Bridging-Header.h";
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/VintageTunes/Services",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;

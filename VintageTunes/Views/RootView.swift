@@ -660,7 +660,7 @@ struct FlacConversionAskSheet: View {
             Divider().opacity(0.2)
 
             VStack(alignment: .leading, spacing: 14) {
-                Text("Il firmware stock non riproduce i FLAC: scegli il formato M4A.")
+                Text("Il firmware stock non riproduce i FLAC: scegli M4A o MP3. MP3 CBR senza Xing/ID3 (192 o 320).")
                     .font(.custom("Avenir Next", size: 13))
                     .foregroundStyle(VTTheme.textSecondary)
 
@@ -673,27 +673,18 @@ struct FlacConversionAskSheet: View {
                 }
 
                 VStack(spacing: 10) {
-                    Button {
-                        library.answerFlacConversionAsk(format: .aac256)
-                    } label: {
-                        conversionOptionLabel(
-                            title: FlacConversionFormat.aac256.title,
-                            subtitle: "Più leggero, qualità alta (lossy)",
-                            emphasized: settings.flacConversionFormat == .aac256
-                        )
+                    ForEach(FlacConversionFormat.allCases) { format in
+                        Button {
+                            library.answerFlacConversionAsk(format: format)
+                        } label: {
+                            conversionOptionLabel(
+                                title: format.title,
+                                subtitle: format.helpSubtitle,
+                                emphasized: settings.flacConversionFormat == format
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        library.answerFlacConversionAsk(format: .alac)
-                    } label: {
-                        conversionOptionLabel(
-                            title: FlacConversionFormat.alac.title,
-                            subtitle: "Stessa qualità del FLAC, file più grandi",
-                            emphasized: settings.flacConversionFormat == .alac
-                        )
-                    }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(20)
@@ -711,7 +702,7 @@ struct FlacConversionAskSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 440, height: prompt?.showsBatchScope == true ? 420 : 360)
+        .frame(width: 440, height: prompt?.showsBatchScope == true ? 480 : 420)
         .background(VTTheme.panel)
         .interactiveDismissDisabled()
     }

@@ -1187,7 +1187,7 @@ struct SettingsView: View {
                         Button("Azzera demo") { library.startDemo(reset: true) }
                         Button("Mostra cartella demo") { library.revealDemoFolder() }
                     }
-                    Button("Mostra file convertiti (M4A)") { library.revealConvertedFolder() }
+                    Button("Mostra file convertiti") { library.revealConvertedFolder() }
                     Button("Mostra musica sull'iPod") { library.revealMusicFolder() }
                     Button("Riallinea size/durate e ripulisci M4A…") {
                         library.repairLibraryPlaybackMetadata()
@@ -1232,7 +1232,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Conversione FLAC") {
+            Section("Conversione audio") {
                 Picker("Chiedi conversione", selection: $settings.flacConversionAskMode) {
                     ForEach(FlacConversionAskMode.allCases) { mode in
                         Text(mode.title).tag(mode)
@@ -1244,20 +1244,20 @@ struct SettingsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
-                if settings.flacConversionAskMode != .never {
-                    Picker("Formato", selection: $settings.flacConversionFormat) {
-                        ForEach(FlacConversionFormat.allCases) { format in
-                            Text(format.title).tag(format)
-                        }
+                Picker("Formato destinazione", selection: $settings.flacConversionFormat) {
+                    ForEach(FlacConversionFormat.allCases) { format in
+                        Text(format.title).tag(format)
                     }
-                    Text(
-                        settings.flacConversionAskMode == .always
-                            ? "Usato automaticamente a ogni import FLAC (e altri formati da convertire)."
-                            : "Preferenza suggerita; in modalità «Chiedi» puoi comunque scegliere file per file."
-                    )
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
                 }
+                Text(
+                    settings.flacConversionAskMode == .always
+                        ? "Con «Sempre»: usato anche per trasformare M4A↔MP3 all’import. I brani già sull’iPod non vengono toccati."
+                        : settings.flacConversionAskMode == .ask
+                            ? "Preferenza suggerita; in «Chiedi» sui FLAC puoi comunque scegliere file per file. MP3 richiede ffmpeg."
+                            : "Con «No»: formato automatico senza dialogo (solo FLAC/OGG/… → destinazione). MP3 richiede ffmpeg."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
 
             Section("Note") {

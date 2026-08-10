@@ -16,12 +16,15 @@ enum AudioConversionError: LocalizedError {
 }
 
 enum AudioConverter {
-    /// Formati da convertire in M4A (AAC o ALAC) prima del sync stock.
+    /// Formati da convertire prima del sync stock (non riprodotti nativamente).
     static let convertibleExtensions: Set<String> = [
         "flac", "ogg", "opus", "wma", "aiff", "aif", "wav", "caf"
     ]
 
     private static let iPodAACBitrate = "256000"
+    /// Framing grezzo come Vermilion (niente Xing/ID3); bitrate scelto in Impostazioni.
+    private static let iPodMP3Bitrate320 = "320k"
+    private static let iPodMP3Bitrate192 = "192k"
 
     static var convertedFolderURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -35,33 +38,31 @@ enum AudioConverter {
         convertibleExtensions.contains(url.pathExtension.lowercased())
     }
 
-    /// Prep on-device: M4A/AAC → faststart se serve; MP3 → CBR pulito; altro → M4A.
+    /// True se il file è già riproduibile ma non nel contenitore/codec della preferenza (es. M4A con preferenza MP3).
+    static func needsReformat(_ url: URL, to format: FlacConversionFormat) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        switch format {
+        case .mp3192, .mp3320:
+            return ["m4a", "m4b", "mp4", "aac"].contains(ext)
+        case .aac256:
+            return ext == "mp3"
+        case .alac:
+            if ext == "mp3" { return true }
+            if ["m4a", "m4b", "mp4", "aac"].contains(ext) {
+                return probeAudioKind(url) != .alac
+            }
+            return false
+        }
+    }
+
+    /// Prep on-device: remux M4A se serve; MP3 già pronti in pass-through; altro → destinazione tipica AAC.
     static func needsiPodAudioPrep(_ url: URL) -> Bool {
         ["m4a", "m4b", "mp4", "aac", "mp3"].contains(url.pathExtension.lowercased())
             || needsConversion(url)
     }
 
-    static func convertToMP3(
-        _ source: URL,
-        preferredName: String? = nil,
-        artist: String = "",
-        album: String = "",
-        artworkData: Data? = nil,
-        progress: ((String) -> Void)? = nil
-    ) async throws -> URL {
-        try await convertToM4A(
-            source,
-            format: .aac256,
-            preferredName: preferredName,
-            artist: artist,
-            album: album,
-            artworkData: artworkData,
-            progress: progress
-        )
-    }
-
-    /// Converte in M4A AAC o ALAC.
-    static func convertToM4A(
+    /// Converte nella destinazione scelta (M4A AAC / ALAC / MP3 CBR).
+    static func convertForiPod(
         _ source: URL,
         format: FlacConversionFormat = .aac256,
         preferredName: String? = nil,
@@ -79,7 +80,8 @@ enum AudioConverter {
         let baseName = sanitizeFilename(
             preferredName ?? source.deletingPathExtension().lastPathComponent
         )
-        let archive = convertedFolderURL.appendingPathComponent("\(baseName).m4a")
+        let ext = format.fileExtension
+        let archive = convertedFolderURL.appendingPathComponent("\(baseName).\(ext)")
         try? fm.removeItem(at: archive)
 
         switch format {
@@ -89,16 +91,63 @@ enum AudioConverter {
         case .alac:
             progress?("Converto \(source.lastPathComponent) → M4A ALAC…")
             try encodeALAC(from: source, to: archive)
+        case .mp3192:
+            progress?("Converto \(source.lastPathComponent) → MP3 192 CBR…")
+            try encodeMP3(from: source, to: archive, bitrate: iPodMP3Bitrate192)
+        case .mp3320:
+            progress?("Converto \(source.lastPathComponent) → MP3 320 CBR…")
+            try encodeMP3(from: source, to: archive, bitrate: iPodMP3Bitrate320)
         }
 
         let tempDir = fm.temporaryDirectory.appendingPathComponent("VintageTunesConvert", isDirectory: true)
         try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        let dest = tempDir.appendingPathComponent("\(UUID().uuidString).m4a")
+        let dest = tempDir.appendingPathComponent("\(UUID().uuidString).\(ext)")
         try? fm.removeItem(at: dest)
         try fm.copyItem(at: archive, to: dest)
         return dest
     }
 
+    /// Compat: stesso di `convertForiPod`.
+    static func convertToM4A(
+        _ source: URL,
+        format: FlacConversionFormat = .aac256,
+        preferredName: String? = nil,
+        artist: String = "",
+        album: String = "",
+        artworkData: Data? = nil,
+        progress: ((String) -> Void)? = nil
+    ) async throws -> URL {
+        try await convertForiPod(
+            source,
+            format: format,
+            preferredName: preferredName,
+            artist: artist,
+            album: album,
+            artworkData: artworkData,
+            progress: progress
+        )
+    }
+
+    static func convertToMP3(
+        _ source: URL,
+        preferredName: String? = nil,
+        artist: String = "",
+        album: String = "",
+        artworkData: Data? = nil,
+        progress: ((String) -> Void)? = nil
+    ) async throws -> URL {
+        try await convertForiPod(
+            source,
+            format: .mp3320,
+            preferredName: preferredName,
+            artist: artist,
+            album: album,
+            artworkData: artworkData,
+            progress: progress
+        )
+    }
+
+    /// Prep leggero prima della copia sull’iPod. La scelta M4A/MP3 avviene a monte in import.
     static func prepareM4AForiPod(_ source: URL, progress: ((String) -> Void)? = nil) throws -> URL {
         let fm = FileManager.default
         let tempDir = fm.temporaryDirectory.appendingPathComponent("VintageTunesConvert", isDirectory: true)
@@ -106,10 +155,11 @@ enum AudioConverter {
         let ext = source.pathExtension.lowercased()
 
         if ext == "mp3" {
+            // Pass-through: non ri-encodare (evita perdita generazionale). L’MP3 320 nasce in convertForiPod.
             let dest = tempDir.appendingPathComponent("\(UUID().uuidString).mp3")
             try? fm.removeItem(at: dest)
-            progress?("Preparo \(source.lastPathComponent) come MP3…")
-            try encodeMP3(from: source, to: dest, bitrate: "192k")
+            progress?("Copio \(source.lastPathComponent) (MP3)…")
+            try fm.copyItem(at: source, to: dest)
             return dest
         }
 
@@ -154,14 +204,12 @@ enum AudioConverter {
             || text.hasPrefix("aac") || text.contains("\naac") {
             return .aac
         }
-        // afinfo spesso riporta "format ID: aac ".
         if text.range(of: #"\baac\b"#, options: .regularExpression) != nil {
             return .aac
         }
         return .other
     }
 
-    /// Solo remux se già AAC-LC a sample rate iPod-friendly.
     private static func isiPodFriendlyAACSampleRate(_ url: URL) -> Bool {
         let text = afinfoText(url)
         if text.contains("96000") || text.contains("88200") || text.contains("192000") {
@@ -252,10 +300,18 @@ enum AudioConverter {
         }
         let process = Process()
         process.executableURL = bin
+        // Stesso profilo del Vermilion che suona fino in fondo sul 5.5G:
+        // CBR LAME, frame MPEG crudi (niente Xing/ID3). Bitrate da afinfo → iTunesDB.
         process.arguments = [
             "-y", "-i", source.path, "-vn",
-            "-c:a", "libmp3lame", "-b:a", bitrate, "-ar", "44100", "-ac", "2",
-            "-write_xing", "0", "-id3v2_version", "0", "-map_metadata", "-1",
+            "-c:a", "libmp3lame",
+            "-b:a", bitrate,
+            "-compression_level", "0",
+            "-ar", "44100",
+            "-ac", "2",
+            "-write_xing", "0",
+            "-id3v2_version", "0",
+            "-map_metadata", "-1",
             dest.path
         ]
         let errPipe = Pipe()
@@ -264,7 +320,9 @@ enum AudioConverter {
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: dest.path) else {
-            throw AudioConversionError.failed("Conversione MP3 fallita")
+            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            throw AudioConversionError.failed(err.isEmpty ? "Conversione MP3 fallita" : err)
         }
     }
 
@@ -334,7 +392,6 @@ enum AudioConverter {
 
     private static func hasEmbeddedCoverOrVideoStream(_ url: URL) -> Bool {
         guard let bin = ffprobeBinary() else {
-            // Fallback grezzo: covr atom o file sospettosamente “gonfio” rispetto all’audio.
             guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { return false }
             return data.range(of: Data("covr".utf8)) != nil
         }

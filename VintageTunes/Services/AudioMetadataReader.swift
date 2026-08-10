@@ -106,12 +106,22 @@ enum AudioMetadataReader {
             }
         } catch {}
 
-        // afinfo fallback for duration if still missing
+        if let af = afinfoTechnical(url: url) {
+            if durationMs == 0, let d = af.durationMs, d > 0 { durationMs = d }
+            if bitrate == 0, let b = af.bitrateKbps, b > 0 { bitrate = b }
+            if let sr = af.sampleRate, sr > 0 { sampleRate = sr }
+        }
         if durationMs == 0 {
             durationMs = afinfoDurationMs(url: url) ?? 0
         }
 
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(UInt32.init) ?? 0
+
+        // Ultimo fallback bitrate: size / durata (evita il default 256 che sull’iPod taglia gli MP3 320).
+        if bitrate == 0, durationMs > 0, size > 0 {
+            let kbps = UInt32((UInt64(size) * 8) / UInt64(durationMs))
+            if kbps > 0 { bitrate = min(kbps, 320) }
+        }
 
         return ImportCandidate(
             url: url,
@@ -123,8 +133,8 @@ enum AudioMetadataReader {
             sizeBytes: size,
             trackNumber: trackNumber,
             year: year,
-            bitrate: bitrate == 0 ? 256 : bitrate,
-            sampleRate: sampleRate
+            bitrate: bitrate,
+            sampleRate: sampleRate == 0 ? 44100 : sampleRate
         )
     }
 
@@ -142,7 +152,7 @@ enum AudioMetadataReader {
             sizeBytes: size,
             trackNumber: sourceMeta.trackNumber,
             year: sourceMeta.year,
-            bitrate: sourceMeta.bitrate == 0 ? 256 : sourceMeta.bitrate,
+            bitrate: sourceMeta.bitrate,
             sampleRate: sourceMeta.sampleRate,
             contentHash: sourceMeta.contentHash
         )
@@ -280,6 +290,10 @@ enum AudioMetadataReader {
     }
 
     private static func afinfoDurationMs(url: URL) -> UInt32? {
+        afinfoTechnical(url: url)?.durationMs
+    }
+
+    private static func afinfoTechnical(url: URL) -> (durationMs: UInt32?, bitrateKbps: UInt32?, sampleRate: UInt32?)? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/afinfo")
         process.arguments = [url.path]
@@ -292,18 +306,40 @@ enum AudioMetadataReader {
             guard process.terminationStatus == 0 else { return nil }
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             guard let text = String(data: data, encoding: .utf8) else { return nil }
+            var durationMs: UInt32?
+            var bitrateKbps: UInt32?
+            var sampleRate: UInt32?
             for line in text.split(whereSeparator: \.isNewline) {
-                let lower = line.lowercased()
-                guard lower.contains("duration") else { continue }
-                let nums = lower.split(whereSeparator: { !$0.isNumber && $0 != "." && $0 != "," })
-                if let first = nums.first,
-                   let seconds = Double(first.replacingOccurrences(of: ",", with: ".")) {
-                    return UInt32(seconds * 1000)
+                let raw = String(line)
+                let lower = raw.lowercased()
+                if lower.contains("estimated duration") || (lower.contains("duration") && lower.contains("sec")) {
+                    let nums = lower.split(whereSeparator: { !$0.isNumber && $0 != "." && $0 != "," })
+                    if let first = nums.first,
+                       let seconds = Double(first.replacingOccurrences(of: ",", with: ".")) {
+                        durationMs = UInt32(seconds * 1000)
+                    }
+                }
+                if lower.contains("bit rate") {
+                    // "bit rate: 320000 bits per second" oppure "320 kbps"
+                    if let match = lower.range(of: #"(\d+(?:\.\d+)?)\s*bits per second"#, options: .regularExpression) {
+                        let n = Double(lower[match].split(whereSeparator: { !$0.isNumber && $0 != "." }).first.map(String.init) ?? "") ?? 0
+                        if n > 0 { bitrateKbps = UInt32(n / 1000) }
+                    } else if let match = lower.range(of: #"(\d+)\s*kb"#, options: .regularExpression) {
+                        let n = UInt32(lower[match].split(whereSeparator: { !$0.isNumber }).first.map(String.init) ?? "") ?? 0
+                        if n > 0 { bitrateKbps = n }
+                    }
+                }
+                if lower.contains("hz") && (lower.contains("data format") || lower.contains(",")) {
+                    // "2 ch,  44100 Hz, .mp3"
+                    if let match = lower.range(of: #"(\d+)\s*hz"#, options: .regularExpression) {
+                        let n = UInt32(lower[match].split(whereSeparator: { !$0.isNumber }).first.map(String.init) ?? "") ?? 0
+                        if n > 0 { sampleRate = n }
+                    }
                 }
             }
+            return (durationMs, bitrateKbps, sampleRate)
         } catch {
             return nil
         }
-        return nil
     }
 }

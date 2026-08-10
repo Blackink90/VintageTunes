@@ -20,7 +20,7 @@ struct SidebarView: View {
                     }
                     sidebarActionButton(
                         systemImage: "eject",
-                        help: "Espelli",
+                        help: "Espelli (iPod utilizzabile; Cerca dispositivi per ricollegare)",
                         disabled: library.connectedDevice == nil || library.isEjecting
                     ) {
                         library.eject()

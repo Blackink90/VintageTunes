@@ -348,9 +348,18 @@ final class LibraryController: ObservableObject {
     }
 
     func refresh() {
-        detector.scan()
-        if let device = connectedDevice {
-            Task { await load(device: device) }
+        Task { @MainActor in
+            setStatus(.working("Ricollegamento iPod…"))
+            await Task.yield()
+            await detector.scanAndRemountAsync()
+            if let device = connectedDevice {
+                await load(device: device)
+            } else if detector.devices.isEmpty {
+                setStatus(.failure(
+                    "iPod non trovato. Se l’hai espulso resta in carica: riprova «Cerca dispositivi» oppure stacca e ricollega il cavo."
+                ))
+            }
+            // Se un dispositivo è comparso, handleDevices avvia il load e aggiorna lo status.
         }
     }
 
@@ -386,7 +395,7 @@ final class LibraryController: ObservableObject {
                 artwork.clear()
                 clearAutoSyncUI()
                 selection.removeAll()
-                setStatus(.success("iPod espulso"))
+                setStatus(.success("iPod espulso — puoi usarlo. «Cerca dispositivi» per ricollegarlo"))
             } catch {
                 setStatus(.failure(error.localizedDescription))
             }
@@ -1503,12 +1512,10 @@ final class LibraryController: ObservableObject {
         let isFlac = url.pathExtension.lowercased() == "flac"
 
         switch mode {
-        case .never:
-            return .aac256
-        case .always:
+        case .never, .always:
             return preferred
         case .ask:
-            // Il dialogo è pensato per i FLAC; gli altri formati usano la preferenza senza chiedere.
+            // Il dialogo è pensato per i FLAC; gli altri formati (anche M4A↔MP3) usano la preferenza senza chiedere.
             guard isFlac else { return preferred }
             let decision = try await askFlacConversionFormat(
                 fileName: url.lastPathComponent,
@@ -1556,10 +1563,34 @@ final class LibraryController: ObservableObject {
             let files = AudioFileCollector.collectAudioFiles(from: urls)
             try throwIfImportCancelled()
 
-            let ready = files.filter {
+            let readyNative = files.filter {
                 AudioMetadataReader.isSupportedAudio($0) && !AudioConverter.needsConversion($0)
             }
             let convertible = files.filter(AudioConverter.needsConversion)
+
+            // Con «Sempre» / «Chiedi»: anche M4A↔MP3 secondo la preferenza. Con «No»: solo i non nativi → AAC.
+            let mode = appSettings?.flacConversionAskMode ?? .never
+            let preferred = appSettings?.flacConversionFormat ?? .aac256
+            let reformatTarget: FlacConversionFormat? = {
+                switch mode {
+                case .never: return nil
+                case .always, .ask: return preferred
+                }
+            }()
+
+            var ready: [URL] = []
+            var toConvert = convertible
+            if let target = reformatTarget {
+                for url in readyNative {
+                    if AudioConverter.needsReformat(url, to: target) {
+                        toConvert.append(url)
+                    } else {
+                        ready.append(url)
+                    }
+                }
+            } else {
+                ready = readyNative
+            }
 
             if files.isEmpty {
                 setStatus(.failure("Nessun file audio trovato nella selezione (mp3, m4a, flac, wav, …)"))
@@ -1570,11 +1601,11 @@ final class LibraryController: ObservableObject {
             setStatus(.working("Trovati \(files.count) file audio…"))
             try throwIfImportCancelled()
 
-            // FLAC/WAV/… → M4A AAC (come Music.app). MP3/M4A pronti restano in ready.
+            // FLAC/WAV/… (e M4A↔MP3 se impostato) → formato scelto. Il resto resta ready.
             await runImport(
                 ready: ready,
-                toConvert: convertible,
-                convert: !convertible.isEmpty
+                toConvert: toConvert,
+                convert: !toConvert.isEmpty
             )
             releaseImportSecurityRoots()
         } catch is CancellationError {
@@ -1802,7 +1833,7 @@ final class LibraryController: ObservableObject {
 
                     try throwIfImportCancelled()
                     setStatus(.working("Conversione \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
-                    let m4a = try await AudioConverter.convertToM4A(
+                    let converted = try await AudioConverter.convertForiPod(
                         url,
                         format: format,
                         preferredName: niceName,
@@ -1812,10 +1843,10 @@ final class LibraryController: ObservableObject {
                         Task { @MainActor in self.setStatus(.working(message)) }
                     }
                     try throwIfImportCancelled()
-                    // Durata/bitrate/sample rate dal M4A reale, non dal FLAC/sorgente.
+                    // Durata/bitrate/sample rate dal file convertito reale, non dal FLAC/sorgente.
                     let merged = await AudioMetadataReader.withTechnicalMetadata(
-                        AudioMetadataReader.remapped(sourceMeta, to: m4a),
-                        from: m4a
+                        AudioMetadataReader.remapped(sourceMeta, to: converted),
+                        from: converted
                     )
                     let artData: Data?
                     if let embedded = await CoverArtService.loadEmbeddedData(from: url) {
@@ -1835,7 +1866,7 @@ final class LibraryController: ObservableObject {
                         artwork.store(artist: artistName, album: albumName, data: artData)
                     }
                     items.append(merged)
-                    tempFiles.append(m4a)
+                    tempFiles.append(converted)
                 }
             }
 
@@ -1874,7 +1905,7 @@ final class LibraryController: ObservableObject {
             var parts: [String] = []
             if result.imported > 0 { parts.append("Aggiunte \(result.imported)") }
             if skipped > 0 { parts.append("\(skipped) già presenti (saltate)") }
-            if converted > 0 { parts.append("\(converted) convertite in M4A") }
+            if converted > 0 { parts.append("\(converted) convertite") }
             setStatus(.success(parts.isEmpty ? "Nessuna nuova traccia da aggiungere" : parts.joined(separator: " · ")))
             selectSection(.songs)
             prefetchArtwork()

@@ -4,7 +4,7 @@ Companion **macOS** per gestire la libreria di un **iPod Classic / Video / nano 
 
 Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce **foto** e **video** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
 
-Versione attuale: **1.6.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.6.0)).
+Versione attuale: **1.7.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.7.0)).
 
 ---
 
@@ -34,9 +34,15 @@ Usando VintageTunes dichiari di aver compreso questi rischi.
 
 > **In sintesi:** musica e cover su **Video 5.5G** (test approfondito); **nano 2G** supportato da dump di riferimento, **senza test su dispositivi reali**; **foto** e **video** sul Video. Classic: musica/cover + video sperimentale. Altri modelli non sono garantiti.
 
-Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal sorgente. Per i video serve anche **ffmpeg**. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
+Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal sorgente. Per i video e per la conversione **MP3** serve anche **ffmpeg**. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
 
 ---
+
+## Novità in 1.7.0
+
+- **Espulsione + ricollegamento senza staccare il cavo**: dopo Scollega l’iPod torna utilizzabile; **Cerca dispositivi** forza un re-enumerate USB e rimonta il volume
+- **Conversione audio**: destinazione **M4A AAC 256**, **ALAC**, **MP3 192 CBR** o **MP3 320 CBR** (Impostazioni → Conversione audio; MP3 grezzo senza Xing/ID3, richiede ffmpeg)
+- Convivenza M4A/MP3: con «Sempre» puoi anche riformattare all’import; i brani già sull’iPod non vengono toccati
 
 ## Novità in 1.6.0
 
@@ -75,7 +81,8 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 - **Rileva** l’iPod collegato (o usa un iPod simulato per provare l’interfaccia)
 - **Sfoglia** Canzoni, Artisti, Album, Generi, Playlist, Video, Foto
 - **Importa** file o cartelle (drag & drop o selezione cartella)
-- **Converte** formati non supportati dal firmware stock (es. FLAC, OGG, Opus, WAV…) in **M4A AAC** o **ALAC** (impostabile)
+- **Converte** formati non supportati dal firmware stock (es. FLAC, OGG, Opus, WAV…) in **M4A AAC**, **ALAC** o **MP3** 192/320 CBR (impostabile; MP3 richiede ffmpeg)
+- **Ricollega** dopo l’espulsione con **Cerca dispositivi** senza staccare il cavo (re-enumerate USB)
 - **Video**: converte con ffmpeg in H.264 Baseline + AAC (barra di progresso in app; serve anche **ffprobe**) e li marca come Film in iTunesDB
 - **Scrive** tracce in `iPod_Control/Music`, aggiorna **iTunesDB** e (su stock) **ArtworkDB**
 - **Playlist** utente: crea, aggiungi, rimuovi brani (senza eliminarli dall’iPod)
@@ -99,14 +106,14 @@ Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal so
 6. Per le **foto** (Video 5.5G): apri **Foto** nella sidebar, aggiungi immagini o eliminale; sul dispositivo compaiono nel menu Foto. Dopo modifiche grosse, espelli e ricollega l’iPod.
 7. Per i **video** (Video / Classic): apri **Video**, trascina un file (serve `ffmpeg`); espelli e sul device apri Film/Video.
 8. Prima di cambiare disco: Impostazioni → **Backup totale…** (`.vbk`); sulla nuova SD → **Ripristino totale da .vbk…**.
-9. Espelli l’iPod dall’app o da Finder quando hai finito.
+9. **Scollega** dall’app quando hai finito (l’iPod esce da «Non scollegare» ed è utilizzabile). Per lavorare di nuovo senza staccare il cavo: **Cerca dispositivi**.
 
 ### Formati (firmware stock)
 
 | Sul Mac | Sull’iPod stock |
 |---|---|
 | MP3, M4A/AAC, WAV, AIFF, ALAC | Copia / preparazione |
-| FLAC, OGG, Opus, WMA, … | Conversione → **M4A AAC** (256 kbps) o **ALAC** (Impostazioni) |
+| FLAC, OGG, Opus, WMA, … | Conversione → **M4A AAC** (256), **ALAC**, **MP3 192** o **MP3 320** CBR (Impostazioni; MP3 richiede ffmpeg) |
 | MP4, M4V, MOV, MKV, … | Conversione → **M4V** H.264/AAC (sezione Video; richiede ffmpeg) |
 
 Rockbox: percorso diverso (es. playlist `.m3u`); il supporto FLAC nativo in-app non è ancora completo.
@@ -134,7 +141,7 @@ Note:
 - L’app richiede accesso ai **volumi rimovibili**.
 - Con firma ad-hoc, macOS può chiedere i permessi a ogni avvio; una firma con Apple ID / Team di sviluppo aiuta a mantenerli.
 
-Scarica i binari pronti dalla [release 1.6.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.6.0) (al primo avvio: tasto destro → **Apri**).
+Scarica i binari pronti dalla [release 1.7.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.7.0) (al primo avvio: tasto destro → **Apri**).
 
 ---
 

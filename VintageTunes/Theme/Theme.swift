@@ -39,10 +39,12 @@ enum SyncMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// Destinazione conversione FLAC / formati non nativi.
+/// Destinazione conversione FLAC / formati non nativi (e eventuale M4A ↔ MP3).
 enum FlacConversionFormat: String, CaseIterable, Identifiable {
     case aac256
     case alac
+    case mp3192
+    case mp3320
 
     var id: String { rawValue }
 
@@ -50,6 +52,8 @@ enum FlacConversionFormat: String, CaseIterable, Identifiable {
         switch self {
         case .aac256: return "M4A AAC 256 kbps"
         case .alac: return "M4A ALAC (lossless)"
+        case .mp3192: return "MP3 192 kbps CBR"
+        case .mp3320: return "MP3 320 kbps CBR"
         }
     }
 
@@ -57,6 +61,24 @@ enum FlacConversionFormat: String, CaseIterable, Identifiable {
         switch self {
         case .aac256: return "AAC 256"
         case .alac: return "ALAC"
+        case .mp3192: return "MP3 192"
+        case .mp3320: return "MP3 320"
+        }
+    }
+
+    var fileExtension: String {
+        switch self {
+        case .aac256, .alac: return "m4a"
+        case .mp3192, .mp3320: return "mp3"
+        }
+    }
+
+    var helpSubtitle: String {
+        switch self {
+        case .aac256: return "Più leggero, qualità alta (lossy)"
+        case .alac: return "Stessa qualità del FLAC, file più grandi"
+        case .mp3192: return "CBR 192 grezzo (niente Xing/ID3); più compatibile su alcuni brani del 5.5G"
+        case .mp3320: return "CBR 320 grezzo (niente Xing/ID3); qualità alta, profilo collaudato sul 5.5G"
         }
     }
 }
@@ -80,11 +102,11 @@ enum FlacConversionAskMode: String, CaseIterable, Identifiable {
     var helpText: String {
         switch self {
         case .always:
-            return "Converte subito nel formato scelto sotto, senza chiedere."
+            return "Converte subito nel formato scelto sotto (anche M4A↔MP3 se diverso), senza chiedere. I brani già sull’iPod restano com’erano."
         case .ask:
-            return "A ogni import chiede AAC o ALAC. Con più file puoi applicare la scelta a tutti."
+            return "A ogni import FLAC chiede il formato. Con più file puoi applicare la scelta a tutti. M4A/MP3 già compatibili seguono la preferenza sotto."
         case .never:
-            return "Converte sempre in M4A AAC 256 kbps, senza chiedere."
+            return "Converte FLAC/OGG/… nel formato scelto sotto, senza chiedere. MP3 e M4A già pronti restano invariati (possono convivere sull’iPod)."
         }
     }
 }
