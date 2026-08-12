@@ -4,7 +4,7 @@
 
 Import tracks (including FLAC and other non-native formats), prepare them for stock firmware, update **iTunesDB**, playlists and artwork, manage **photos** and **videos** on Video 5.5G, and play files directly from the mounted device.
 
-Current version: **1.8.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.8.0)).
+Current version: **1.9.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.9.0)).
 
 > Italian README: [README.it.md](README.it.md)
 
@@ -73,6 +73,12 @@ Include a **tiny** sample so Photo Database / Movies entries can be studied:
 Thanks — every clean, legal dump helps widen support without putting anyone at legal risk.
 
 ---
+
+## What’s new in 1.9.0
+
+- **Lyrics**: automatic download (LRCLIB) on import and from the context menu; writes **MP3 USLT** / **M4A ©lyr** tags plus the iTunesDB lyrics flag so stock iPods can show them
+- **Manual lyrics**: context menu **Lyrics → Enter Manually…** to paste or type text when automatic search finds nothing
+- Column **Lyrics** (Yes/No) in the track table
 
 ## What’s new in 1.8.0
 
@@ -183,7 +189,7 @@ Notes:
 - The app needs access to **removable volumes**.
 - With ad-hoc signing, macOS may ask for permission on every launch; signing with an Apple ID / development Team helps keep consent.
 
-Download ready binaries from [release 1.8.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.8.0) (first launch: right-click → **Open**).
+Download ready binaries from [release 1.9.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.9.0) (first launch: right-click → **Open**).
 
 ---
 

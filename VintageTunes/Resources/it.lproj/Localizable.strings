@@ -347,6 +347,7 @@
 "status.lyrics_saved_one" = "Testo salvato";
 "status.lyrics_saved_partial" = "Testi salvati per %1$d brani · %2$d non trovati";
 "status.lyrics_embed_failed_many" = "Testi in libreria ma non scritti in %d file audio — sull’iPod non si vedono";
+"status.lyrics_saving" = "Salvo il testo…";
 "status.no_file_to_transfer" = "Nessun file da trasferire";
 "status.no_new_track" = "Nessuna nuova traccia · %d già presenti";
 "status.no_new_video" = "Nessun nuovo video · %d già presenti";
@@ -423,6 +424,9 @@
 "track.delete_from_ipod" = "Elimina dall'iPod";
 "track.download_lyrics" = "Scarica testo";
 "track.edit_info" = "Modifica informazioni…";
+"track.lyrics_enter_manually" = "Inserisci manualmente…";
+"track.lyrics_menu" = "Testo";
+"track.lyrics_search" = "Ricerca automatica";
 "track.play" = "Riproduci";
 "track.rating_menu" = "Valutazione";
 "track.rating_none" = "Nessuna stella";
@@ -432,6 +436,7 @@
 "track.unknown_album" = "Album sconosciuto";
 "track.unknown_artist" = "Artista sconosciuto";
 "track.untitled" = "Senza titolo";
+"lyrics_edit.title" = "Testo";
 "track_edit.artwork" = "Copertina";
 "track_edit.artwork_a11y_hint" = "Seleziona, poi Incolla (⌘V) per un URL immagine";
 "track_edit.choose_file" = "Scegli file…";

@@ -36,6 +36,7 @@ final class LibraryController: ObservableObject {
     @Published var dbVersion: UInt32 = 0x14
     @Published var pendingImports: [ImportCandidate] = []
     @Published var trackEditDraft: TrackEditDraft?
+    @Published var lyricsEditDraft: LyricsEditDraft?
     @Published var showiPodPreview = false
     @Published var autoSyncPrompt: AutoSyncPrompt?
 
@@ -613,20 +614,9 @@ final class LibraryController: ObservableObject {
                 }
 
                 found += 1
-                if let idx = tracks.firstIndex(where: { $0.id == item.id }) {
-                    tracks[idx].setLyrics(text)
-                    if let fileURL = tracks[idx].resolvedPath {
-                        do {
-                            let newSize = try await LyricsTagWriter.embed(lyrics: text, into: fileURL)
-                            if newSize > 0 { tracks[idx].sizeBytes = newSize }
-                        } catch {
-                            embedFailed += 1
-                        }
-                    } else {
-                        embedFailed += 1
-                    }
-                    updatedIDs.append(item.id)
-                }
+                let embedOK = await applyLyricsToTrack(id: item.id, text: text, persist: false)
+                if !embedOK { embedFailed += 1 }
+                updatedIDs.append(item.id)
             }
 
             guard !updatedIDs.isEmpty, let device = connectedDevice else {
@@ -639,19 +629,7 @@ final class LibraryController: ObservableObject {
             }
 
             do {
-                var overrides = TrackTagStore.load(from: device)
-                for id in updatedIDs {
-                    guard let track = tracks.first(where: { $0.id == id }) else { continue }
-                    overrides[track.location] = TrackTagStore.override(from: track)
-                }
-                try TrackTagStore.save(overrides, to: device)
-                try sync.savePlaylists(
-                    tracks: &tracks,
-                    playlists: playlists,
-                    dbVersion: dbVersion,
-                    device: device
-                )
-                refreshLibraryCache(for: device)
+                try persistLyricsOverrides(for: updatedIDs, on: device)
 
                 if embedFailed > 0 {
                     setStatus(.failure(L10n.tf("status.lyrics_embed_failed_many", embedFailed)))
@@ -668,6 +646,83 @@ final class LibraryController: ObservableObject {
                 setStatus(.failure(error.localizedDescription))
             }
         }
+    }
+
+    func beginManualLyricsEdit(id: UInt32) {
+        guard let track = tracks.first(where: { $0.id == id }), !track.isVideo else { return }
+        selection = [id]
+        lyricsEditDraft = LyricsEditDraft(track: track)
+    }
+
+    func cancelManualLyricsEdit() {
+        lyricsEditDraft = nil
+    }
+
+    func saveManualLyrics() {
+        guard var draft = lyricsEditDraft, connectedDevice != nil else {
+            lyricsEditDraft = nil
+            return
+        }
+        let trimmed = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            setStatus(.failure(L10n.t("error.lyrics.empty")))
+            return
+        }
+        draft.text = trimmed
+        lyricsEditDraft = nil
+        setStatus(.working(L10n.t("status.lyrics_saving")))
+
+        Task {
+            let embedOK = await applyLyricsToTrack(id: draft.trackID, text: trimmed, persist: true)
+            if embedOK {
+                setStatus(.success(L10n.t("status.lyrics_saved_one")))
+            } else {
+                setStatus(.failure(L10n.tf("status.lyrics_embed_failed_many", 1)))
+            }
+        }
+    }
+
+    /// Scrive testo su track + tag file. Con `persist` salva anche override e iTunesDB.
+    /// - Returns: `false` se l’embed nel file audio non è riuscito.
+    @discardableResult
+    private func applyLyricsToTrack(id: UInt32, text: String, persist: Bool) async -> Bool {
+        guard let idx = tracks.firstIndex(where: { $0.id == id }) else { return false }
+        tracks[idx].setLyrics(text)
+        var embedOK = false
+        if let fileURL = tracks[idx].resolvedPath {
+            do {
+                let newSize = try await LyricsTagWriter.embed(lyrics: text, into: fileURL)
+                if newSize > 0 { tracks[idx].sizeBytes = newSize }
+                embedOK = true
+            } catch {
+                embedOK = false
+            }
+        }
+        if persist, let device = connectedDevice {
+            do {
+                try persistLyricsOverrides(for: [id], on: device)
+            } catch {
+                setStatus(.failure(error.localizedDescription))
+                return false
+            }
+        }
+        return embedOK
+    }
+
+    private func persistLyricsOverrides(for ids: [UInt32], on device: iPodDevice) throws {
+        var overrides = TrackTagStore.load(from: device)
+        for id in ids {
+            guard let track = tracks.first(where: { $0.id == id }) else { continue }
+            overrides[track.location] = TrackTagStore.override(from: track)
+        }
+        try TrackTagStore.save(overrides, to: device)
+        try sync.savePlaylists(
+            tracks: &tracks,
+            playlists: playlists,
+            dbVersion: dbVersion,
+            device: device
+        )
+        refreshLibraryCache(for: device)
     }
 
     func beginEditingSelectedTrack() {

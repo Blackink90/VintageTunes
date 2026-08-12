@@ -347,6 +347,7 @@
 "status.lyrics_saved_one" = "Lyrics saved";
 "status.lyrics_saved_partial" = "Saved lyrics for %1$d tracks · %2$d not found";
 "status.lyrics_embed_failed_many" = "Lyrics in library but not written to %d audio file(s) — iPod won’t show them";
+"status.lyrics_saving" = "Saving lyrics…";
 "status.no_file_to_transfer" = "No files to transfer";
 "status.no_new_track" = "No new tracks · %d already present";
 "status.no_new_video" = "No new videos · %d already present";
@@ -423,6 +424,9 @@
 "track.delete_from_ipod" = "Delete from iPod";
 "track.download_lyrics" = "Download lyrics";
 "track.edit_info" = "Get Info…";
+"track.lyrics_enter_manually" = "Enter Manually…";
+"track.lyrics_menu" = "Lyrics";
+"track.lyrics_search" = "Automatic Search";
 "track.play" = "Play";
 "track.rating_menu" = "Rating";
 "track.rating_none" = "No stars";
@@ -432,6 +436,7 @@
 "track.unknown_album" = "Unknown Album";
 "track.unknown_artist" = "Unknown Artist";
 "track.untitled" = "Untitled";
+"lyrics_edit.title" = "Lyrics";
 "track_edit.artwork" = "Artwork";
 "track_edit.artwork_a11y_hint" = "Select, then Paste (⌘V) an image URL";
 "track_edit.choose_file" = "Choose File…";

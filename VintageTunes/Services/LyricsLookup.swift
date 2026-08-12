@@ -3,7 +3,7 @@ import Foundation
 /// Scarica testi da LRCLIB (nessuna API key). Preferisce `plainLyrics` per iPod stock (MHOD 27).
 enum LyricsLookup {
     private static let baseURL = URL(string: "https://lrclib.net")!
-    private static let userAgent = "VintageTunes/1.8 (https://github.com/Blackink90/VintageTunes)"
+    private static let userAgent = "VintageTunes/1.9 (https://github.com/Blackink90/VintageTunes)"
     private static let interRequestDelayNs: UInt64 = 350_000_000
 
     static func fetch(

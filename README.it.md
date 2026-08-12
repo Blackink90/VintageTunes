@@ -4,7 +4,7 @@ Companion **macOS** per gestire la libreria di un **iPod Classic / Video / nano 
 
 Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce **foto** e **video** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
 
-Versione attuale: **1.8.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.8.0)).
+Versione attuale: **1.9.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.9.0)).
 
 > English README: [README.md](README.md)
 
@@ -73,6 +73,12 @@ Includi un campione **piccolo** per studiare Photo Database / Film:
 Grazie — ogni dump pulito e lecito aiuta ad allargare il supporto senza rischi legali.
 
 ---
+
+## Novità in 1.9.0
+
+- **Testi**: download automatico (LRCLIB) all’import e dal menu contestuale; scrive i tag **MP3 USLT** / **M4A ©lyr** e il flag lyrics in iTunesDB così gli iPod stock li mostrano
+- **Testo manuale**: menu contestuale **Testo → Inserisci manualmente…** per scrivere o incollare quando la ricerca automatica non trova nulla
+- Colonna **Testo** (Sì/No) nella tabella brani
 
 ## Novità in 1.8.0
 
@@ -183,7 +189,7 @@ Note:
 - L’app richiede accesso ai **volumi rimovibili**.
 - Con firma ad-hoc, macOS può chiedere i permessi a ogni avvio; una firma con Apple ID / Team di sviluppo aiuta a mantenerli.
 
-Scarica i binari pronti dalla [release 1.8.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.8.0) (al primo avvio: tasto destro → **Apri**).
+Scarica i binari pronti dalla [release 1.9.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.9.0) (al primo avvio: tasto destro → **Apri**).
 
 ---
 

@@ -164,3 +164,17 @@ struct TrackEditDraft: Equatable {
         return values.allSatisfy { $0 == first }
     }
 }
+
+struct LyricsEditDraft: Equatable {
+    var trackID: UInt32
+    var title: String
+    var artist: String
+    var text: String
+
+    init(track: Track) {
+        trackID = track.id
+        title = track.displayTitle
+        artist = track.displayArtist
+        text = track.lyrics ?? ""
+    }
+}

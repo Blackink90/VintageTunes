@@ -66,6 +66,13 @@ struct RootView: View {
                 .environmentObject(library)
         }
         .sheet(isPresented: Binding(
+            get: { library.lyricsEditDraft != nil },
+            set: { if !$0 { library.cancelManualLyricsEdit() } }
+        )) {
+            LyricsEditSheet()
+                .environmentObject(library)
+        }
+        .sheet(isPresented: Binding(
             get: { library.autoSyncPrompt != nil },
             set: { if !$0 { library.dismissAutoSync() } }
         )) {

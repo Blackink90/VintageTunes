@@ -188,8 +188,15 @@ struct TrackTableView: View {
                         library.refreshArtwork(for: Array(ids))
                     }
                     if library.selectedSection != .videos {
-                        Button(L10n.t("track.download_lyrics")) {
-                            library.downloadLyrics(for: Array(ids), replaceExisting: true)
+                        Menu(L10n.t("track.lyrics_menu")) {
+                            Button(L10n.t("track.lyrics_search")) {
+                                library.downloadLyrics(for: Array(ids), replaceExisting: true)
+                            }
+                            if ids.count == 1, let id = ids.first {
+                                Button(L10n.t("track.lyrics_enter_manually")) {
+                                    library.beginManualLyricsEdit(id: id)
+                                }
+                            }
                         }
                     }
                     Button(L10n.t("track.show_in_finder")) {
@@ -1681,6 +1688,75 @@ struct TrackEditSheet: View {
             set: { newValue in
                 guard library.trackEditDraft != nil else { return }
                 library.trackEditDraft![keyPath: keyPath] = newValue
+            }
+        )
+    }
+}
+
+struct LyricsEditSheet: View {
+    @EnvironmentObject private var library: LibraryController
+    @FocusState private var editorFocused: Bool
+
+    private var draft: LyricsEditDraft? { library.lyricsEditDraft }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.t("lyrics_edit.title"))
+                    .font(VTTheme.displayFont(size: 20))
+                if let draft {
+                    Text("\(draft.artist) — \(draft.title)")
+                        .font(.custom("Avenir Next", size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+
+            Divider().opacity(0.2)
+
+            TextEditor(text: lyricsBinding)
+                .font(.custom("Avenir Next", size: 13))
+                .focused($editorFocused)
+                .scrollContentBackground(.hidden)
+                .padding(12)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                )
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+
+            HStack {
+                Spacer()
+                Button(L10n.t("common.cancel")) {
+                    library.cancelManualLyricsEdit()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button(L10n.t("common.save")) {
+                    library.saveManualLyrics()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(VTTheme.amber)
+                .keyboardShortcut(.defaultAction)
+                .disabled(lyricsBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(20)
+        }
+        .frame(width: 520, height: 480)
+        .onAppear { editorFocused = true }
+    }
+
+    private var lyricsBinding: Binding<String> {
+        Binding(
+            get: { library.lyricsEditDraft?.text ?? "" },
+            set: { newValue in
+                guard library.lyricsEditDraft != nil else { return }
+                library.lyricsEditDraft!.text = newValue
             }
         )
     }
