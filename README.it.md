@@ -138,6 +138,7 @@ Grazie — ogni dump pulito e lecito aiuta ad allargare il supporto senza rischi
 - **Foto** (solo **iPod Video 5G/5.5G** stock): sezione dedicata in sidebar — elenco, aggiunta (drag & drop o file) ed eliminazione; scrive `Photos/Photo Database` e le thumb in `Photos/Thumbs/` come Music.app
 - **Backup totale** / **ripristino totale** (`.vbk`) dalle Impostazioni
 - **Modifica metadati** (titolo, artista, album, genere, traccia, anno, stelle, cover)
+- **Testi**: download automatico (LRCLIB) o inserimento manuale; scrive i tag nel file (**MP3 USLT** / **M4A ©lyr**, ffmpeg per M4A) e il flag lyrics in iTunesDB così gli iPod stock li mostrano
 - **Stelle e conteggi** riproduzioni: legge anche il file **Play Counts** scritto dall’iPod
 - **Riproduzione sul Mac** dei file presenti sul dispositivo (anteprima)
 - **Auto-sync** opzionale da una cartella osservata (mentre l’app è aperta)

@@ -138,6 +138,7 @@ Thanks — every clean, legal dump helps widen support without putting anyone at
 - **Photos** (**iPod Video 5G/5.5G** stock only): dedicated sidebar section — list, add (drag & drop or files), delete; writes `Photos/Photo Database` and thumbs in `Photos/Thumbs/` like Music.app
 - **Full backup** / **full restore** (`.vbk`) from Settings
 - **Edit metadata** (title, artist, album, genre, track, year, rating, artwork)
+- **Lyrics**: download automatically (LRCLIB) or enter manually; writes file tags (**MP3 USLT** / **M4A ©lyr**, ffmpeg for M4A) and the iTunesDB lyrics flag so stock iPods can show them
 - **Ratings and play counts**: also reads the **Play Counts** file written by the iPod
 - **Playback on the Mac** of files on the device (preview)
 - Optional **auto-sync** from a watched folder (while the app is open)
