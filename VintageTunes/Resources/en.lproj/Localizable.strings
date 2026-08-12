@@ -151,6 +151,7 @@
 "menu.pause" = "Pause";
 "menu.play" = "Play";
 "menu.reload_ipod" = "Reload iPod";
+"menu.settings" = "Settings…";
 "menu.remove_duplicates" = "Remove Duplicates";
 "menu.reset_demo" = "Reset Demo";
 "menu.show_converted" = "Show Converted Files";
@@ -260,6 +261,7 @@
 "settings.sync_watch_help" = "New songs in the folder are detected even while the app is open.";
 "settings.theme" = "Theme";
 "settings.theme_help" = "Automatic follows macOS system settings.";
+"settings.window_title" = "VintageTunes Settings";
 "sidebar.delete_playlist" = "Delete playlist";
 "sidebar.eject_help" = "Eject (iPod usable; Scan for devices to reconnect)";
 "sidebar.new_playlist_help" = "New playlist";

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 @main
 struct VintageTunesApp: App {
@@ -16,6 +17,12 @@ struct VintageTunesApp: App {
         .windowStyle(.titleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .appSettings) {
+                Button(L10n.t("menu.settings")) {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                }
+                .keyboardShortcut(",", modifiers: [.command])
+            }
             CommandMenu(L10n.t("menu.ipod")) {
                 Button(L10n.t("menu.reload_ipod")) {
                     library.refresh()

@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var library: LibraryController
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         // VStack (non safeAreaInset): la Table/NSTableView di macOS ignora gli inset
@@ -111,6 +112,22 @@ struct RootView: View {
             }
         }
         .animation(.spring(response: 0.38, dampingFraction: 0.86), value: library.showiPodPreview)
+        .overlay(alignment: .topTrailing) {
+            if library.connectedDevice == nil && !library.isEjecting {
+                Button {
+                    openSettings()
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VTTheme.textSecondary)
+                        .padding(10)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help(L10n.t("sidebar.settings"))
+                .padding(16)
+            }
+        }
     }
 
     private var deleteTracksDialogTitle: String {

@@ -1066,6 +1066,20 @@ struct DropImportView: View {
     }
 }
 
+private struct SettingsWindowTitleSetter: NSViewRepresentable {
+    let title: String
+
+    func makeNSView(context: Context) -> NSView {
+        NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            nsView.window?.title = title
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var library: LibraryController
     @EnvironmentObject private var settings: AppSettings
@@ -1296,6 +1310,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 800)
+        .background(SettingsWindowTitleSetter(title: L10n.t("settings.window_title")))
         .onAppear { syncDeviceNameDraft() }
         .onChange(of: library.connectedDevice?.id) { _, _ in syncDeviceNameDraft() }
         .onChange(of: library.connectedDevice?.name) { _, _ in syncDeviceNameDraft() }
