@@ -1,169 +1,173 @@
 # VintageTunes
 
-Companion **macOS** per gestire la libreria di un **iPod Classic / Video / nano 2G** senza passare da Music.app / iTunes.
+**macOS** companion for managing an **iPod Classic / Video / nano 2G** library without Music.app / iTunes.
 
-Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce **foto** e **video** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
+Import tracks (including FLAC and other non-native formats), prepare them for stock firmware, update **iTunesDB**, playlists and artwork, manage **photos** and **videos** on Video 5.5G, and play files directly from the mounted device.
 
-Versione attuale: **1.7.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.7.0)).
+Current version: **1.7.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.7.0)).
 
----
-
-## ⚠️ Avviso importante / Disclaimer
-
-**VintageTunes è software sperimentale, offerto “così com’è”, senza alcuna garanzia.**
-
-- L’uso è **a proprio rischio e pericolo**.
-- Scrivere su un iPod (database, file audio, ArtworkDB, Photo Database) può in rari casi **corrompere la libreria**, richiedere un ripristino o, in scenari estremi, rendere il dispositivo inutilizzabile finché non viene ripristinato.
-- Gli autori **non sono responsabili** di perdite di dati, danni al dispositivo, al computer o a terzi derivanti dall’uso (o dall’impossibilità di usare) questo programma.
-- **Fai sempre un backup** della volume dell’iPod (o almeno di `iPod_Control` e, se usi le foto, `Photos/`) prima di sincronizzare in massa. In Impostazioni puoi creare un **backup totale** `.vbk`.
-- Non è un prodotto Apple e non è affiliato ad Apple Inc.
-
-Usando VintageTunes dichiari di aver compreso questi rischi.
+> Italian README: [README.it.md](README.it.md)
 
 ---
 
-## Compatibilità testata
+## Important notice / Disclaimer
 
-| Dispositivo | Firmware | Stato |
+**VintageTunes is experimental software, provided “as is”, with no warranty of any kind.**
+
+- Use is **at your own risk**.
+- Writing to an iPod (database, audio files, ArtworkDB, Photo Database) can in rare cases **corrupt the library**, require a restore, or, in extreme scenarios, leave the device unusable until restored.
+- The authors are **not responsible** for data loss, damage to the device, computer, or third parties arising from use (or inability to use) this software.
+- **Always back up** the iPod volume (or at least `iPod_Control` and, if you use photos, `Photos/`) before large syncs. In Settings you can create a full **`.vbk` backup**.
+- This is not an Apple product and is not affiliated with Apple Inc.
+
+By using VintageTunes you acknowledge these risks.
+
+---
+
+## Tested compatibility
+
+| Device | Firmware | Status |
 |---|---|---|
-| **iPod Video 5.5G** (es. 80GB MA450) | Stock Apple | **Testato** — target principale (musica + foto + video sperimentale) |
-| **iPod nano 2G** | Stock Apple | Supporto musica/cover da dump; **nessun test su dispositivo reale**; niente Foto / Video |
-| iPod Classic 6G+ | Stock | Musica / cover Classic; Video sperimentale |
-| Altri iPod Classic / Video | Stock | Non verificato in modo sistematico |
-| iPod con **Rockbox** | Rockbox | Supporto parziale / sperimentale |
+| **iPod Video 5.5G** (e.g. 80GB MA450) | Stock Apple | **Tested** — primary target (music + photos + experimental video) |
+| **iPod nano 2G** | Stock Apple | Music/artwork support from dumps; **no real-device testing**; no Photos / Video |
+| iPod Classic 6G+ | Stock | Classic music / artwork; experimental Video |
+| Other Classic / Video iPods | Stock | Not systematically verified |
+| iPods with **Rockbox** | Rockbox | Partial / experimental support |
 
-> **In sintesi:** musica e cover su **Video 5.5G** (test approfondito); **nano 2G** supportato da dump di riferimento, **senza test su dispositivi reali**; **foto** e **video** sul Video. Classic: musica/cover + video sperimentale. Altri modelli non sono garantiti.
+> **In short:** music and artwork on **Video 5.5G** (thoroughly tested); **nano 2G** supported from reference dumps, **without real-device testing**; **photos** and **video** on Video. Classic: music/artwork + experimental video. Other models are not guaranteed.
 
-Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal sorgente. Per i video e per la conversione **MP3** serve anche **ffmpeg**. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
+Mac requirements: **macOS 14+** (Intel or Apple Silicon), Xcode to build from source. **ffmpeg** is also required for video and for **MP3** conversion. iPod volume is typically **HFS+** with an `iPod_Control` folder.
 
----
-
-## Novità in 1.7.0
-
-- **Espulsione + ricollegamento senza staccare il cavo**: dopo Scollega l’iPod torna utilizzabile; **Cerca dispositivi** forza un re-enumerate USB e rimonta il volume
-- **Conversione audio**: destinazione **M4A AAC 256**, **ALAC**, **MP3 192 CBR** o **MP3 320 CBR** (Impostazioni → Conversione audio; MP3 grezzo senza Xing/ID3, richiede ffmpeg)
-- Convivenza M4A/MP3: con «Sempre» puoi anche riformattare all’import; i brani già sull’iPod non vengono toccati
-
-## Novità in 1.6.0
-
-- **Impostazioni conversione FLAC**: Sempre / Chiedi / No, e destinazione **AAC 256** o **ALAC** (con “Solo per questo file” / “Applica a tutti”)
-- **Riallinea size/durate e ripulisci M4A…**: ricalcola size e durata dai file, riscrive iTunesDB, toglie JPEG/cover embedded enormi che sul 5.5G possono causare stridii
-- Scrittura iTunesDB: campi **gapless** azzerati (niente residui del template Music.app che tagliavano i brani)
-
-## Novità in 1.5.0
-
-- **Backup / ripristino totale** in Impostazioni: archivio `.vbk` con tutto il contenuto utente del volume (musica, video, foto, database, play count, Artwork, preferenze, Rockbox se presente) e il **nome** dell’iPod
-- Ideale prima di migrare HDD → SD: ripristino 1:1 dei dati
-
-## Novità in 1.4.0
-
-- Sezione **Video** (Film) su iPod Video / Classic stock
-- Drag & drop: conversione H.264/AAC → `.m4v` iPod-safe e scrittura in iTunesDB (`mediaType` Film)
-- Barra di progresso durante la conversione video (durata anche via **ffprobe**, utile per webm/mkv)
-- Feedback **Espulsione in corso…** e conferma prima di eliminare brani dall’iPod
-- Cleanup On-The-Go vuote / nome normalizzato in sidebar
-
-## Novità in 1.3.0
-
-- **Cache locale** della libreria: alla riconnessione, lista e cover partono subito se l’iPod non è cambiato
-- Fingerprint su iTunesDB/ArtworkDB: sync da altro Mac invalida la cache e la ricostruisce
-- Import/delete/playlist aggiornano iPod e cache insieme
-
-## Novità in 1.2.0
-
-- Supporto **iPod nano 2G**: musica, playlist, stelle, cover dedicate (da dump; senza test su dispositivi reali); niente Foto
-- Fix lista **Canzoni** all’apertura (prima a volte compariva una sola traccia finché non cambiavi sezione)
+The app UI is available in **English** and **Italian** (Settings → Language: System / English / Italiano).
 
 ---
 
-## Cosa fa
+## What’s new in 1.7.0
 
-- **Rileva** l’iPod collegato (o usa un iPod simulato per provare l’interfaccia)
-- **Sfoglia** Canzoni, Artisti, Album, Generi, Playlist, Video, Foto
-- **Importa** file o cartelle (drag & drop o selezione cartella)
-- **Converte** formati non supportati dal firmware stock (es. FLAC, OGG, Opus, WAV…) in **M4A AAC**, **ALAC** o **MP3** 192/320 CBR (impostabile; MP3 richiede ffmpeg)
-- **Ricollega** dopo l’espulsione con **Cerca dispositivi** senza staccare il cavo (re-enumerate USB)
-- **Video**: converte con ffmpeg in H.264 Baseline + AAC (barra di progresso in app; serve anche **ffprobe**) e li marca come Film in iTunesDB
-- **Scrive** tracce in `iPod_Control/Music`, aggiorna **iTunesDB** e (su stock) **ArtworkDB**
-- **Playlist** utente: crea, aggiungi, rimuovi brani (senza eliminarli dall’iPod)
-- **Copertine**: da tag, ricerca online, file locale o incolla URL; sull’iPod scrive ArtworkDB (Video F1028/F1029, Classic F1061/…, **nano 2G F1027/F1031**)
-- **Foto** (solo **iPod Video 5G/5.5G** stock): sezione dedicata in sidebar — elenco, aggiunta (drag & drop o file) ed eliminazione; scrive `Photos/Photo Database` e le thumb in `Photos/Thumbs/` come Music.app
-- **Backup totale** / **ripristino totale** (`.vbk`) dalle Impostazioni
-- **Modifica metadati** (titolo, artista, album, genere, traccia, anno, stelle, cover)
-- **Stelle e conteggi** riproduzioni: legge anche il file **Play Counts** scritto dall’iPod
-- **Riproduzione sul Mac** dei file presenti sul dispositivo (anteprima)
-- **Auto-sync** opzionale da una cartella osservata (mentre l’app è aperta)
+- **Eject + reconnect without unplugging**: after Eject the iPod becomes usable again; **Scan for devices** forces a USB re-enumerate and remounts the volume
+- **Audio conversion**: destination **M4A AAC 256**, **ALAC**, **MP3 192 CBR**, or **MP3 320 CBR** (Settings → Audio Conversion; raw MP3 without Xing/ID3, requires ffmpeg)
+- M4A/MP3 coexistence: with “Always” you can also reformat on import; tracks already on the iPod are left alone
+
+## What’s new in 1.6.0
+
+- **FLAC conversion settings**: Always / Ask / No, and destination **AAC 256** or **ALAC** (with “This file only” / “Apply to all”)
+- **Realign sizes/durations and clean M4A…**: recalculates size and duration from files, rewrites iTunesDB, strips huge embedded JPEG covers that can crackle on 5.5G
+- iTunesDB writing: **gapless** fields zeroed (no Music.app template leftovers that truncated tracks)
+
+## What’s new in 1.5.0
+
+- **Full backup / restore** in Settings: `.vbk` archive with all user volume content (music, video, photos, databases, play counts, Artwork, prefs, Rockbox if present) and the iPod **name**
+- Ideal before migrating HDD → SD: 1:1 restore of data
+
+## What’s new in 1.4.0
+
+- **Videos** (Movies) section on stock iPod Video / Classic
+- Drag & drop: H.264/AAC → iPod-safe `.m4v` and write to iTunesDB (`mediaType` Movie)
+- Progress bar during video conversion (duration via **ffprobe** as well, useful for webm/mkv)
+- **Ejecting…** feedback and confirmation before deleting tracks from the iPod
+- Empty On-The-Go cleanup / normalized name in the sidebar
+
+## What’s new in 1.3.0
+
+- **Local library cache**: on reconnect, list and artwork appear immediately if the iPod hasn’t changed
+- Fingerprint on iTunesDB/ArtworkDB: sync from another Mac invalidates the cache and rebuilds it
+- Import/delete/playlist update iPod and cache together
+
+## What’s new in 1.2.0
+
+- **iPod nano 2G** support: music, playlists, ratings, dedicated artwork (from dumps; no real-device testing); no Photos
+- Fix **Songs** list on open (sometimes only one track appeared until you changed section)
 
 ---
 
-## Come si usa (panoramica)
+## What it does
 
-1. Collega l’iPod e attendi che macOS lo monti.
-2. Apri VintageTunes: dovrebbe comparire il dispositivo nella sidebar.
-3. Alla prima sessione l’app completa metadati mancanti e cover se serve — lascia finire le operazioni. Le durate dei file si aggiornano in **import** (non viene più riscandita tutta la libreria a ogni collegamento).
-4. Trascina brani/cartelle sull’area di import, oppure usa **Scegli cartella…**.
-5. Per le playlist: crea dalla sidebar, poi **Aggiungi a playlist** dal menu contestuale; in playlist usa **Rimuovi dalla playlist** (non “Elimina dall’iPod”).
-6. Per le **foto** (Video 5.5G): apri **Foto** nella sidebar, aggiungi immagini o eliminale; sul dispositivo compaiono nel menu Foto. Dopo modifiche grosse, espelli e ricollega l’iPod.
-7. Per i **video** (Video / Classic): apri **Video**, trascina un file (serve `ffmpeg`); espelli e sul device apri Film/Video.
-8. Prima di cambiare disco: Impostazioni → **Backup totale…** (`.vbk`); sulla nuova SD → **Ripristino totale da .vbk…**.
-9. **Scollega** dall’app quando hai finito (l’iPod esce da «Non scollegare» ed è utilizzabile). Per lavorare di nuovo senza staccare il cavo: **Cerca dispositivi**.
+- **Detects** a connected iPod (or uses a simulated iPod to try the UI)
+- **Browses** Songs, Artists, Albums, Genres, Playlists, Videos, Photos
+- **Imports** files or folders (drag & drop or folder picker)
+- **Converts** formats unsupported by stock firmware (e.g. FLAC, OGG, Opus, WAV…) to **M4A AAC**, **ALAC**, or **MP3** 192/320 CBR (configurable; MP3 requires ffmpeg)
+- **Reconnects** after eject with **Scan for devices** without unplugging (USB re-enumerate)
+- **Video**: converts with ffmpeg to H.264 Baseline + AAC (in-app progress; **ffprobe** also needed) and marks them as Movies in iTunesDB
+- **Writes** tracks under `iPod_Control/Music`, updates **iTunesDB** and (on stock) **ArtworkDB**
+- **User playlists**: create, add, remove tracks (without deleting them from the iPod)
+- **Artwork**: from tags, online lookup, local file, or paste URL; writes ArtworkDB on the iPod (Video F1028/F1029, Classic F1061/…, **nano 2G F1027/F1031**)
+- **Photos** (**iPod Video 5G/5.5G** stock only): dedicated sidebar section — list, add (drag & drop or files), delete; writes `Photos/Photo Database` and thumbs in `Photos/Thumbs/` like Music.app
+- **Full backup** / **full restore** (`.vbk`) from Settings
+- **Edit metadata** (title, artist, album, genre, track, year, rating, artwork)
+- **Ratings and play counts**: also reads the **Play Counts** file written by the iPod
+- **Playback on the Mac** of files on the device (preview)
+- Optional **auto-sync** from a watched folder (while the app is open)
 
-### Formati (firmware stock)
+---
 
-| Sul Mac | Sull’iPod stock |
+## How to use (overview)
+
+1. Connect the iPod and wait for macOS to mount it.
+2. Open VintageTunes: the device should appear in the sidebar.
+3. On the first session the app may complete missing metadata and artwork — let it finish. File durations are updated on **import** (the whole library is no longer rescanned on every connect).
+4. Drop tracks/folders on the import area, or use **Choose Folder…**.
+5. For playlists: create from the sidebar, then **Add to Playlist** from the context menu; in a playlist use **Remove from Playlist** (not “Delete from iPod”).
+6. For **photos** (Video 5.5G): open **Photos** in the sidebar, add or delete images; they appear in the device Photos menu. After large changes, eject and reconnect.
+7. For **videos** (Video / Classic): open **Videos**, drop a file (needs `ffmpeg`); eject and open Movies/Videos on the device.
+8. Before changing the disk: Settings → **Full Backup…** (`.vbk`); on the new SD → **Full Restore from .vbk…**.
+9. **Eject** from the app when done (the iPod leaves “Do not disconnect” and is usable). To work again without unplugging: **Scan for devices**.
+
+### Formats (stock firmware)
+
+| On the Mac | On the stock iPod |
 |---|---|
-| MP3, M4A/AAC, WAV, AIFF, ALAC | Copia / preparazione |
-| FLAC, OGG, Opus, WMA, … | Conversione → **M4A AAC** (256), **ALAC**, **MP3 192** o **MP3 320** CBR (Impostazioni; MP3 richiede ffmpeg) |
-| MP4, M4V, MOV, MKV, … | Conversione → **M4V** H.264/AAC (sezione Video; richiede ffmpeg) |
+| MP3, M4A/AAC, WAV, AIFF, ALAC | Copy / light prep |
+| FLAC, OGG, Opus, WMA, … | Convert → **M4A AAC** (256), **ALAC**, **MP3 192**, or **MP3 320** CBR (Settings; MP3 requires ffmpeg) |
+| MP4, M4V, MOV, MKV, … | Convert → **M4V** H.264/AAC (Videos section; requires ffmpeg) |
 
-Rockbox: percorso diverso (es. playlist `.m3u`); il supporto FLAC nativo in-app non è ancora completo.
+Rockbox: different path (e.g. `.m3u` playlists); in-app native FLAC support is not complete yet.
 
-### Foto (Video 5G / 5.5G)
+### Photos (Video 5G / 5.5G)
 
-- La voce **Foto** in sidebar compare solo se il modello è riconosciuto come Video stock.
-- Formati thumb allineati a Music.app: F1036 / F1015 / F1024 (RGB565) e F1019 (UYVY TV-out).
-- Non sincronizza cartelle del Mac né salva JPEG full-resolution in `Full Resolution/` / DCIM (come nel sync “solo thumbs” di Music.app sul 5.5G).
-- Classic, nano e Rockbox: sezione foto **non** disponibile.
-- **nano 2G**: stessa gestione musica/playlist/stelle del Video; cover con thumb dedicate (non usa i formati Video). **Nessun test su dispositivo reale** (solo dump di riferimento).
+- The **Photos** sidebar item appears only if the model is recognized as stock Video.
+- Thumb formats aligned with Music.app: F1036 / F1015 / F1024 (RGB565) and F1019 (UYVY TV-out).
+- Does not sync Mac folders or store full-resolution JPEGs in `Full Resolution/` / DCIM (same as Music.app’s “thumbs only” sync on 5.5G).
+- Classic, nano, and Rockbox: Photos section **not** available.
+- **nano 2G**: same music/playlist/rating handling as Video; artwork with dedicated thumbs (not Video formats). **No real-device testing** (reference dumps only).
 
 ---
 
-## Compilare
+## Building
 
 ```bash
 open VintageTunes.xcodeproj
 ```
 
-Esegui lo scheme **VintageTunes** su un Mac con **macOS 14+**.
+Run the **VintageTunes** scheme on a Mac with **macOS 14+**.
 
-Note:
+Notes:
 
-- L’app richiede accesso ai **volumi rimovibili**.
-- Con firma ad-hoc, macOS può chiedere i permessi a ogni avvio; una firma con Apple ID / Team di sviluppo aiuta a mantenerli.
+- The app needs access to **removable volumes**.
+- With ad-hoc signing, macOS may ask for permission on every launch; signing with an Apple ID / development Team helps keep consent.
 
-Scarica i binari pronti dalla [release 1.7.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.7.0) (al primo avvio: tasto destro → **Apri**).
-
----
-
-## Limiti noti
-
-- Test approfondito su **iPod Video 5.5G**. **nano 2G**: nessun test su dispositivi reali (solo dump di riferimento per musica/cover).
-- Non sostituisce un backup completo né un ripristino ufficiale Apple.
-- Database, artwork e foto seguono i layout Music.app per famiglia (Video / Classic / nano); altre generazioni possono differire.
-- Foto: solo Video 5G/5.5G; niente Classic/nano, niente originali full-res.
-- Rockbox e Classic più recenti oltre al profilo già gestito: supporto incompleto o non validato.
+Download ready binaries from [release 1.7.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.7.0) (first launch: right-click → **Open**).
 
 ---
 
-## Licenza e responsabilità
+## Known limitations
 
-Il codice è pubblicato per uso personale e sperimentale.  
-**Nessuna garanzia di idoneità, continuità o assenza di difetti.**  
-Chi lo usa, lo modifica o lo distribuisce lo fa sotto la propria responsabilità.
+- Thorough testing on **iPod Video 5.5G**. **nano 2G**: no real-device testing (music/artwork from reference dumps only).
+- Does not replace a full backup or an official Apple restore.
+- Database, artwork, and photos follow Music.app layouts per family (Video / Classic / nano); other generations may differ.
+- Photos: Video 5G/5.5G only; no Classic/nano, no full-res originals.
+- Rockbox and newer Classics beyond the handled profile: incomplete or unvalidated support.
 
 ---
 
-## Crediti
+## License and liability
 
-Progetto **VintageTunes** — companion non ufficiale per iPod vintage.  
-Apple, iPod, iTunes e Music sono marchi di Apple Inc.
+The code is published for personal and experimental use.  
+**No warranty of fitness, continuity, or freedom from defects.**  
+Anyone who uses, modifies, or distributes it does so at their own responsibility.
+
+---
+
+## Credits
+
+**VintageTunes** — unofficial companion for vintage iPods.  
+Apple, iPod, iTunes, and Music are trademarks of Apple Inc.
