@@ -88,9 +88,9 @@ struct Track: Identifiable, Hashable {
 
     var resolvedPath: URL?
 
-    var displayArtist: String { artist.isEmpty ? "Artista sconosciuto" : artist }
-    var displayTitle: String { title.isEmpty ? "Senza titolo" : title }
-    var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : album }
+    var displayArtist: String { artist.isEmpty ? L10n.t("track.unknown_artist") : artist }
+    var displayTitle: String { title.isEmpty ? L10n.t("track.untitled") : title }
+    var displayAlbum: String { album.isEmpty ? L10n.t("track.unknown_album") : album }
     var displayGenre: String { genre.isEmpty ? "—" : genre }
     var displayYear: String { year == 0 ? "—" : "\(year)" }
     var displayPlayCount: String { playCount == 0 ? "—" : "\(playCount)" }
@@ -237,13 +237,15 @@ enum LibraryStats {
         if totalMinutes >= 60 {
             let h = totalMinutes / 60
             let m = totalMinutes % 60
-            return m == 0 ? "\(h) h" : "\(h) h \(m) min"
+            return m == 0
+                ? L10n.tf("stats.duration_hours", h)
+                : L10n.tf("stats.duration_hours_mins", h, m)
         }
-        return "\(totalMinutes) min"
+        return L10n.tf("stats.duration_mins", totalMinutes)
     }
 
     static func trackCountLabel(_ count: Int) -> String {
-        count == 1 ? "1 brano" : "\(count) brani"
+        count == 1 ? L10n.t("stats.track_one") : L10n.tf("stats.track_many", count)
     }
 }
 
@@ -281,7 +283,7 @@ struct Playlist: Identifiable, Hashable {
 
     /// Nome in UI: On-The-Go senza numerazione.
     var displayName: String {
-        isOnTheGo ? "On-The-Go" : name
+        isOnTheGo ? L10n.t("playlist.on_the_go") : name
     }
 
     static func == (lhs: Playlist, rhs: Playlist) -> Bool {
@@ -321,16 +323,29 @@ struct ImportCandidate: Identifiable, Hashable {
 }
 
 enum LibrarySection: String, CaseIterable, Identifiable {
-    case songs = "Canzoni"
-    case artists = "Artisti"
-    case albums = "Album"
-    case genres = "Generi"
-    case videos = "Video"
-    case photos = "Foto"
-    case playlists = "Playlist"
-    case dropZone = "Aggiungi"
+    case songs
+    case artists
+    case albums
+    case genres
+    case videos
+    case photos
+    case playlists
+    case dropZone
 
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .songs: return L10n.t("section.songs")
+        case .artists: return L10n.t("section.artists")
+        case .albums: return L10n.t("section.albums")
+        case .genres: return L10n.t("section.genres")
+        case .videos: return L10n.t("section.videos")
+        case .photos: return L10n.t("section.photos")
+        case .playlists: return L10n.t("section.playlists")
+        case .dropZone: return L10n.t("section.add")
+        }
+    }
 
     var systemImage: String {
         switch self {
@@ -370,8 +385,8 @@ struct AutoSyncCandidate: Identifiable, Equatable, Hashable {
     let needsConversion: Bool
 
     var displayTitle: String { title.isEmpty ? url.deletingPathExtension().lastPathComponent : title }
-    var displayArtist: String { artist.isEmpty ? "Artista sconosciuto" : artist }
-    var displayAlbum: String { album.isEmpty ? "Album sconosciuto" : album }
+    var displayArtist: String { artist.isEmpty ? L10n.t("track.unknown_artist") : artist }
+    var displayAlbum: String { album.isEmpty ? L10n.t("track.unknown_album") : album }
 }
 
 struct AutoSyncPrompt: Identifiable, Equatable {
@@ -391,9 +406,9 @@ struct PendingFlacConversionAsk: Identifiable, Equatable {
 
     var headline: String {
         if total <= 1 {
-            return "Come convertire questo file?"
+            return L10n.t("conversion.ask_headline_one")
         }
-        return "Come convertire il file \(index) di \(total)?"
+        return L10n.tf("conversion.ask_headline_batch", index, total)
     }
 }
 

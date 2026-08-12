@@ -8,10 +8,10 @@ enum SyncError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noDevice: return "Nessun iPod collegato."
-        case .unsupportedFormat(let e): return "Formato non supportato: \(e)"
-        case .copyFailed(let m): return "Copia fallita: \(m)"
-        case .database(let m): return "Errore database: \(m)"
+        case .noDevice: return L10n.t("error.sync.no_device")
+        case .unsupportedFormat(let e): return L10n.tf("error.sync.unsupported_format", e)
+        case .copyFailed(let m): return L10n.tf("error.sync.copy_failed", m)
+        case .database(let m): return L10n.tf("error.sync.database", m)
         }
     }
 }
@@ -92,7 +92,7 @@ final class SyncService {
             persistNow: false
         )
         if removedDupes > 0 {
-            progress(SyncProgress(fraction: 0, message: "Rimossi \(removedDupes) duplicati esistenti…"))
+            progress(SyncProgress(fraction: 0, message: L10n.tf("sync.removed_existing_dupes", removedDupes)))
         }
 
         if playlists.isEmpty {
@@ -103,7 +103,7 @@ final class SyncService {
         }
 
         let audioItems = items.filter { AudioMetadataReader.isSupportedAudio($0.url) }
-        guard !audioItems.isEmpty else { throw SyncError.unsupportedFormat("nessun file audio") }
+        guard !audioItems.isEmpty else { throw SyncError.unsupportedFormat(L10n.t("sync.no_audio_files")) }
 
         ensureMusicFolders(on: device)
 
@@ -114,7 +114,7 @@ final class SyncService {
         for (index, meta) in audioItems.enumerated() {
             try Task.checkCancellation()
             let step = Double(index) / Double(max(audioItems.count, 1))
-            progress(SyncProgress(fraction: step, message: "Controllo \(meta.url.lastPathComponent)…"))
+            progress(SyncProgress(fraction: step, message: L10n.tf("sync.checking", meta.url.lastPathComponent)))
 
             // Preferisci hash del file ORIGINE (impostato prima della conversione).
             // Hashare il M4A convertito fallisce: ogni afconvert produce byte diversi.
@@ -125,7 +125,7 @@ final class SyncService {
                 do {
                     fileHash = try FileHasher.sha256(of: meta.url)
                 } catch {
-                    throw SyncError.copyFailed("Hash fallito: \(error.localizedDescription)")
+                    throw SyncError.copyFailed(L10n.tf("sync.hash_failed", error.localizedDescription))
                 }
             }
 
@@ -140,7 +140,7 @@ final class SyncService {
                 continue
             }
 
-            progress(SyncProgress(fraction: step, message: "Importo \(meta.url.lastPathComponent)…"))
+            progress(SyncProgress(fraction: step, message: L10n.tf("sync.importing", meta.url.lastPathComponent)))
 
             let trackID = nextID
             nextID += 1
@@ -217,7 +217,7 @@ final class SyncService {
 
         if device.firmwareMode == .stock, let store = artworkStore {
             if artworkNeedsRebuild {
-                progress(SyncProgress(fraction: 0.9, message: "Riscrivo cover (formato iPod)…"))
+                progress(SyncProgress(fraction: 0.9, message: L10n.t("sync.rewriting_covers")))
                 await rewriteAllArtwork(tracks: &tracks, store: store, device: device)
             } else {
                 try? store.save()
@@ -229,14 +229,14 @@ final class SyncService {
             playlists[masterIndex].trackIDs = tracks.map(\.id)
         }
 
-        progress(SyncProgress(fraction: 0.95, message: "Aggiorno database…"))
+        progress(SyncProgress(fraction: 0.95, message: L10n.t("sync.updating_database")))
         let playMerge = absorbPlayCounts(into: &tracks, device: device)
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
         if playMerge.changed, playMerge.canRemoveFile {
             PlayCountsFile.remove(from: device)
         }
         try hashIndex.save(to: device)
-        progress(SyncProgress(fraction: 1, message: "Sincronizzazione completata"))
+        progress(SyncProgress(fraction: 1, message: L10n.t("sync.completed")))
         return (tracks, playlists, dbVersion == 0 ? 0x14 : dbVersion, imported, skippedDuplicates)
     }
 
@@ -250,10 +250,10 @@ final class SyncService {
         progress: @escaping (SyncProgress) -> Void
     ) async throws -> (tracks: [Track], playlists: [Playlist], dbVersion: UInt32, imported: Int, skippedDuplicates: Int) {
         guard device.firmwareMode == .stock else {
-            throw SyncError.unsupportedFormat("Video supportati solo su firmware stock")
+            throw SyncError.unsupportedFormat(L10n.t("sync.video_stock_only"))
         }
         guard device.supportsVideo else {
-            throw SyncError.unsupportedFormat("Questo iPod non supporta i video")
+            throw SyncError.unsupportedFormat(L10n.t("sync.video_unsupported"))
         }
 
         var tracks = existingTracks
@@ -276,7 +276,7 @@ final class SyncService {
             ["m4v", "mp4"].contains($0.url.pathExtension.lowercased())
         }
         guard !videoItems.isEmpty else {
-            throw SyncError.unsupportedFormat("nessun video convertito (.m4v)")
+            throw SyncError.unsupportedFormat(L10n.t("sync.no_converted_video"))
         }
 
         ensureMusicFolders(on: device)
@@ -285,7 +285,7 @@ final class SyncService {
         for (index, meta) in videoItems.enumerated() {
             try Task.checkCancellation()
             let step = Double(index) / Double(max(videoItems.count, 1))
-            progress(SyncProgress(fraction: step, message: "Controllo \(meta.url.lastPathComponent)…"))
+            progress(SyncProgress(fraction: step, message: L10n.tf("sync.checking", meta.url.lastPathComponent)))
 
             let fileHash: String
             if let known = meta.contentHash, !known.isEmpty {
@@ -294,7 +294,7 @@ final class SyncService {
                 do {
                     fileHash = try FileHasher.sha256(of: meta.url)
                 } catch {
-                    throw SyncError.copyFailed("Hash fallito: \(error.localizedDescription)")
+                    throw SyncError.copyFailed(L10n.tf("sync.hash_failed", error.localizedDescription))
                 }
             }
 
@@ -309,7 +309,7 @@ final class SyncService {
                 continue
             }
 
-            progress(SyncProgress(fraction: step, message: "Importo video \(meta.url.lastPathComponent)…"))
+            progress(SyncProgress(fraction: step, message: L10n.tf("sync.importing_video", meta.url.lastPathComponent)))
 
             let trackID = nextID
             nextID += 1
@@ -370,14 +370,14 @@ final class SyncService {
             playlists[masterIndex].trackIDs = tracks.map(\.id)
         }
 
-        progress(SyncProgress(fraction: 0.95, message: "Aggiorno database…"))
+        progress(SyncProgress(fraction: 0.95, message: L10n.t("sync.updating_database")))
         let playMerge = absorbPlayCounts(into: &tracks, device: device)
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
         if playMerge.changed, playMerge.canRemoveFile {
             PlayCountsFile.remove(from: device)
         }
         try hashIndex.save(to: device)
-        progress(SyncProgress(fraction: 1, message: "Video sincronizzati"))
+        progress(SyncProgress(fraction: 1, message: L10n.t("sync.videos_completed")))
         return (tracks, playlists, dbVersion == 0 ? 0x14 : dbVersion, imported, skippedDuplicates)
     }
 
@@ -397,7 +397,7 @@ final class SyncService {
             }
             guard let path = tracks[i].resolvedPath,
                   FileManager.default.fileExists(atPath: path.path) else { continue }
-            progress(SyncProgress(fraction: 0, message: "Indicizzo \(tracks[i].displayTitle)…"))
+            progress(SyncProgress(fraction: 0, message: L10n.tf("sync.indexing", tracks[i].displayTitle)))
             if let hash = try? FileHasher.sha256(of: path) {
                 tracks[i].contentHash = hash
                 index.set(location: tracks[i].location, hash: hash)
@@ -439,7 +439,7 @@ final class SyncService {
             tracks[i].resolvedPath = path
             let ext = path.pathExtension.lowercased()
             guard ["m4a", "m4b", "mp4"].contains(ext) else { continue }
-            progress?("Verifico \(path.lastPathComponent)…")
+            progress?(L10n.tf("sync.verifying", path.lastPathComponent))
             do {
                 if try AudioConverter.stripBloatedEmbeddedArtwork(at: path) {
                     stripped += 1
@@ -460,10 +460,10 @@ final class SyncService {
         device: iPodDevice,
         progress: @escaping (String) -> Void
     ) async throws -> (stripped: Int, metadataFixed: Int) {
-        progress("Tolgo cover embedded troppo grandi…")
+        progress(L10n.t("sync.stripping_large_covers"))
         let stripped = await stripBloatedEmbeddedArtwork(from: &tracks, device: device, progress: progress)
 
-        progress("Riallineo size e durate dai file…")
+        progress(L10n.t("sync.realigning_sizes"))
         var fixed = 0
         for i in tracks.indices {
             let path = tracks[i].resolvedPath ?? resolveLocation(tracks[i].location, device: device)
@@ -483,10 +483,10 @@ final class SyncService {
                 }
             }
             if trackChanged { fixed += 1 }
-            progress("Metadati \(i + 1)/\(tracks.count): \(tracks[i].displayTitle)")
+            progress(L10n.tf("sync.metadata_progress", i + 1, tracks.count, tracks[i].displayTitle))
         }
 
-        progress("Aggiorno iTunesDB…")
+        progress(L10n.t("sync.updating_itunesdb"))
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
         return (stripped, fixed)
     }
@@ -993,7 +993,7 @@ final class SyncService {
         // Stock: solo contenitori riprodotti dal firmware (come Music.app: soprattutto M4A).
         if device.firmwareMode == .stock, !["mp3", "m4a", "m4b", "wav", "aiff", "aif"].contains(outExt) {
             if let prepared { try? FileManager.default.removeItem(at: prepared) }
-            throw SyncError.copyFailed("Formato non supportato sull’iPod stock: .\(outExt)")
+            throw SyncError.copyFailed(L10n.tf("sync.stock_format_unsupported", outExt))
         }
 
         let folderIndex = Int(trackID % 50)

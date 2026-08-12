@@ -8,10 +8,10 @@ enum iTunesDBError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingFile: return "iTunesDB non trovato."
-        case .invalidHeader(let s): return "Header iTunesDB non valido: \(s)"
-        case .truncated: return "iTunesDB troncato o corrotto."
-        case .unsupported: return "Formato iTunesDB non supportato in scrittura."
+        case .missingFile: return L10n.t("error.itunesdb.missing")
+        case .invalidHeader(let s): return L10n.tf("error.itunesdb.invalid_header", s)
+        case .truncated: return L10n.t("error.itunesdb.truncated")
+        case .unsupported: return L10n.t("error.itunesdb.unsupported_write")
         }
     }
 }

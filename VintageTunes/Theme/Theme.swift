@@ -10,9 +10,9 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .system: return "Automatica"
-        case .light: return "Chiara"
-        case .dark: return "Scura"
+        case .system: return L10n.t("appearance.system")
+        case .light: return L10n.t("appearance.light")
+        case .dark: return L10n.t("appearance.dark")
         }
     }
 
@@ -33,8 +33,8 @@ enum SyncMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .manual: return "Manuale"
-        case .automatic: return "Automatica"
+        case .manual: return L10n.t("sync_mode.manual")
+        case .automatic: return L10n.t("sync_mode.automatic")
         }
     }
 }
@@ -50,19 +50,19 @@ enum FlacConversionFormat: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .aac256: return "M4A AAC 256 kbps"
-        case .alac: return "M4A ALAC (lossless)"
-        case .mp3192: return "MP3 192 kbps CBR"
-        case .mp3320: return "MP3 320 kbps CBR"
+        case .aac256: return L10n.t("format.aac256_title")
+        case .alac: return L10n.t("format.alac_title")
+        case .mp3192: return L10n.t("format.mp3192_title")
+        case .mp3320: return L10n.t("format.mp3320_title")
         }
     }
 
     var shortTitle: String {
         switch self {
-        case .aac256: return "AAC 256"
-        case .alac: return "ALAC"
-        case .mp3192: return "MP3 192"
-        case .mp3320: return "MP3 320"
+        case .aac256: return L10n.t("format.aac256_short")
+        case .alac: return L10n.t("format.alac_short")
+        case .mp3192: return L10n.t("format.mp3192_short")
+        case .mp3320: return L10n.t("format.mp3320_short")
         }
     }
 
@@ -75,10 +75,10 @@ enum FlacConversionFormat: String, CaseIterable, Identifiable {
 
     var helpSubtitle: String {
         switch self {
-        case .aac256: return "Più leggero, qualità alta (lossy)"
-        case .alac: return "Stessa qualità del FLAC, file più grandi"
-        case .mp3192: return "CBR 192 grezzo (niente Xing/ID3); più compatibile su alcuni brani del 5.5G"
-        case .mp3320: return "CBR 320 grezzo (niente Xing/ID3); qualità alta, profilo collaudato sul 5.5G"
+        case .aac256: return L10n.t("format.aac256_help")
+        case .alac: return L10n.t("format.alac_help")
+        case .mp3192: return L10n.t("format.mp3192_help")
+        case .mp3320: return L10n.t("format.mp3320_help")
         }
     }
 }
@@ -93,20 +93,20 @@ enum FlacConversionAskMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .always: return "Sempre"
-        case .ask: return "Chiedi"
-        case .never: return "No"
+        case .always: return L10n.t("conversion_ask.always")
+        case .ask: return L10n.t("conversion_ask.ask")
+        case .never: return L10n.t("conversion_ask.never")
         }
     }
 
     var helpText: String {
         switch self {
         case .always:
-            return "Converte subito nel formato scelto sotto (anche M4A↔MP3 se diverso), senza chiedere. I brani già sull’iPod restano com’erano."
+            return L10n.t("conversion_ask.always_help")
         case .ask:
-            return "A ogni import FLAC chiede il formato. Con più file puoi applicare la scelta a tutti. M4A/MP3 già compatibili seguono la preferenza sotto."
+            return L10n.t("conversion_ask.ask_help")
         case .never:
-            return "Converte FLAC/OGG/… nel formato scelto sotto, senza chiedere. MP3 e M4A già pronti restano invariati (possono convivere sull’iPod)."
+            return L10n.t("conversion_ask.never_help")
         }
     }
 }
@@ -120,10 +120,20 @@ final class AppSettings: ObservableObject {
     private static let dismissedHashesKey = "dismissedSyncHashes"
     private static let flacFormatKey = "flacConversionFormat"
     private static let flacAskModeKey = "flacConversionAskMode"
+    private static let appLanguageKey = "appLanguage"
 
     @Published var appearanceMode: AppearanceMode {
         didSet {
             UserDefaults.standard.set(appearanceMode.rawValue, forKey: Self.appearanceKey)
+        }
+    }
+
+    /// Lingua UI: sistema / inglese / italiano.
+    @Published var appLanguage: AppLanguage {
+        didSet {
+            UserDefaults.standard.set(appLanguage.rawValue, forKey: Self.appLanguageKey)
+            L10n.apply(appLanguage)
+            objectWillChange.send()
         }
     }
 
@@ -178,6 +188,11 @@ final class AppSettings: ObservableObject {
         let appearanceRaw = UserDefaults.standard.string(forKey: Self.appearanceKey) ?? AppearanceMode.dark.rawValue
         appearanceMode = AppearanceMode(rawValue: appearanceRaw) ?? .dark
 
+        let languageRaw = UserDefaults.standard.string(forKey: Self.appLanguageKey) ?? AppLanguage.system.rawValue
+        let language = AppLanguage(rawValue: languageRaw) ?? .system
+        appLanguage = language
+        L10n.apply(language)
+
         let syncRaw = UserDefaults.standard.string(forKey: Self.syncModeKey) ?? SyncMode.manual.rawValue
         syncMode = SyncMode(rawValue: syncRaw) ?? .manual
 
@@ -200,8 +215,8 @@ final class AppSettings: ObservableObject {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "Seleziona"
-        panel.message = "Cartella da cui VintageTunes proporrà le nuove canzoni all’iPod"
+        panel.prompt = L10n.t("settings.select_folder_prompt")
+        panel.message = L10n.t("settings.select_folder_message")
         if let current = resolvedSyncFolderURL() {
             panel.directoryURL = current
         } else {
@@ -388,13 +403,13 @@ struct BrandMark: View {
             }
 
             VStack(alignment: .leading, spacing: 0) {
-                Text("VintageTunes")
+                Text(L10n.t("brand.name"))
                     .font(VTTheme.displayFont(size: 22))
                     .foregroundStyle(VTTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("iPod Companion")
+                Text(L10n.t("brand.tagline"))
                     .font(.custom("Avenir Next", size: 11).weight(.medium))
                     .tracking(1.2)
                     .foregroundStyle(VTTheme.amber)
@@ -427,7 +442,7 @@ struct StarRatingControl: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(stars == 0 ? "Nessuna valutazione" : "\(stars) stelle")
+        .accessibilityLabel(stars == 0 ? L10n.t("rating.a11y_none") : L10n.tf("rating.a11y_stars", stars))
         .accessibilityAddTraits(interactive ? .isButton : [])
     }
 }

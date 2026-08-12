@@ -8,9 +8,9 @@ enum AudioConversionError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .afconvertMissing: return "afconvert non trovato (strumento di sistema macOS)."
+        case .afconvertMissing: return L10n.t("error.audio.afconvert_missing")
         case .failed(let m): return m
-        case .cancelled: return "Conversione annullata."
+        case .cancelled: return L10n.t("error.audio.cancelled")
         }
     }
 }
@@ -86,16 +86,16 @@ enum AudioConverter {
 
         switch format {
         case .aac256:
-            progress?("Converto \(source.lastPathComponent) → M4A AAC…")
+            progress?(L10n.tf("audio.convert_aac", source.lastPathComponent))
             try encodeAAC(from: source, to: archive, bitrate: iPodAACBitrate)
         case .alac:
-            progress?("Converto \(source.lastPathComponent) → M4A ALAC…")
+            progress?(L10n.tf("audio.convert_alac", source.lastPathComponent))
             try encodeALAC(from: source, to: archive)
         case .mp3192:
-            progress?("Converto \(source.lastPathComponent) → MP3 192 CBR…")
+            progress?(L10n.tf("audio.convert_mp3_192", source.lastPathComponent))
             try encodeMP3(from: source, to: archive, bitrate: iPodMP3Bitrate192)
         case .mp3320:
-            progress?("Converto \(source.lastPathComponent) → MP3 320 CBR…")
+            progress?(L10n.tf("audio.convert_mp3_320", source.lastPathComponent))
             try encodeMP3(from: source, to: archive, bitrate: iPodMP3Bitrate320)
         }
 
@@ -158,7 +158,7 @@ enum AudioConverter {
             // Pass-through: non ri-encodare (evita perdita generazionale). L’MP3 320 nasce in convertForiPod.
             let dest = tempDir.appendingPathComponent("\(UUID().uuidString).mp3")
             try? fm.removeItem(at: dest)
-            progress?("Copio \(source.lastPathComponent) (MP3)…")
+            progress?(L10n.tf("audio.copy_mp3", source.lastPathComponent))
             try fm.copyItem(at: source, to: dest)
             return dest
         }
@@ -169,7 +169,7 @@ enum AudioConverter {
         if ["m4a", "m4b", "mp4", "aac"].contains(ext) {
             let kind = probeAudioKind(source)
             if kind == .alac {
-                progress?("Ottimizzo \(source.lastPathComponent) (ALAC)…")
+                progress?(L10n.tf("audio.optimize_alac", source.lastPathComponent))
                 if remuxFaststart(from: source, to: dest) {
                     return dest
                 }
@@ -178,13 +178,13 @@ enum AudioConverter {
                 return dest
             }
             if kind == .aac, isiPodFriendlyAACSampleRate(source), remuxFaststart(from: source, to: dest) {
-                progress?("Ottimizzo \(source.lastPathComponent) per iPod…")
+                progress?(L10n.tf("audio.optimize_ipod", source.lastPathComponent))
                 return dest
             }
             try? fm.removeItem(at: dest)
         }
 
-        progress?("Converto \(source.lastPathComponent) → M4A AAC…")
+        progress?(L10n.tf("audio.convert_aac", source.lastPathComponent))
         try encodeAAC(from: source, to: dest, bitrate: iPodAACBitrate)
         return dest
     }
@@ -262,7 +262,7 @@ enum AudioConverter {
                 return
             }
         }
-        throw AudioConversionError.failed(lastError.isEmpty ? "Conversione AAC fallita" : lastError)
+        throw AudioConversionError.failed(lastError.isEmpty ? L10n.t("error.audio.aac_failed") : lastError)
     }
 
     private static func encodeALAC(from source: URL, to dest: URL) throws {
@@ -291,12 +291,12 @@ enum AudioConverter {
                 return
             }
         }
-        throw AudioConversionError.failed(lastError.isEmpty ? "Conversione ALAC fallita" : lastError)
+        throw AudioConversionError.failed(lastError.isEmpty ? L10n.t("error.audio.alac_failed") : lastError)
     }
 
     private static func encodeMP3(from source: URL, to dest: URL, bitrate: String) throws {
         guard let bin = ffmpegBinary() else {
-            throw AudioConversionError.failed("Serve ffmpeg (brew install ffmpeg) per MP3.")
+            throw AudioConversionError.failed(L10n.t("error.audio.ffmpeg_mp3"))
         }
         let process = Process()
         process.executableURL = bin
@@ -322,7 +322,7 @@ enum AudioConverter {
         guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: dest.path) else {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            throw AudioConversionError.failed(err.isEmpty ? "Conversione MP3 fallita" : err)
+            throw AudioConversionError.failed(err.isEmpty ? L10n.t("error.audio.mp3_failed") : err)
         }
     }
 
@@ -348,7 +348,7 @@ enum AudioConverter {
     static func stripBloatedEmbeddedArtwork(at url: URL) throws -> Bool {
         guard hasEmbeddedCoverOrVideoStream(url) else { return false }
         guard let bin = ffmpegBinary() else {
-            throw AudioConversionError.failed("Serve ffmpeg (brew install ffmpeg) per ripulire le cover embedded.")
+            throw AudioConversionError.failed(L10n.t("error.audio.ffmpeg_strip_covers"))
         }
         let fm = FileManager.default
         let tempDir = fm.temporaryDirectory.appendingPathComponent("VintageTunesConvert", isDirectory: true)
@@ -373,7 +373,7 @@ enum AudioConverter {
         guard process.terminationStatus == 0, fm.fileExists(atPath: dest.path) else {
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            throw AudioConversionError.failed(err.isEmpty ? "Pulizia cover embedded fallita" : err)
+            throw AudioConversionError.failed(err.isEmpty ? L10n.t("error.audio.strip_covers_failed") : err)
         }
 
         let backup = url.deletingLastPathComponent()

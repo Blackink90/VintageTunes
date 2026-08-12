@@ -15,7 +15,7 @@ struct iPodNowPlayingOverlay: View {
         iPodBaseOverlay(
             playback: library.playback,
             mode: mode,
-            deviceName: library.connectedDevice?.name ?? "iPod",
+            deviceName: library.connectedDevice?.name ?? L10n.t("ipod.default_name"),
             scrubbingActive: $isScrubbing,
             onMenu: { library.showiPodPreview = false },
             onSelect: { library.playback.togglePlayPause() },
@@ -47,7 +47,7 @@ struct iPodNowPlayingOverlay: View {
             }
         }
         .transition(.scale(scale: 0.92).combined(with: .opacity))
-        .help("Trascina per spostare l'iPod")
+        .help(L10n.t("ipod.drag_help"))
     }
 }
 
@@ -139,7 +139,7 @@ private struct iPodBaseOverlay: View {
                 }
             }
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("iPod Now Playing")
+            .accessibilityLabel(L10n.t("ipod.a11y_label"))
     }
 
     private func scaled(_ r: CGRect, in size: CGSize) -> CGRect {
@@ -157,7 +157,7 @@ private struct iPodBaseOverlay: View {
                 .frame(width: size, height: size)
         }
         .buttonStyle(iPodWheelCenterStyle(size: size))
-        .help("Play / Pausa")
+        .help(L10n.t("ipod.play_pause_help"))
     }
 
     /// Corona del click wheel (esclude il bottone centrale).

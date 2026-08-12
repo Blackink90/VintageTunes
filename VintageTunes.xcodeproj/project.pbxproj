@@ -42,6 +42,8 @@
 		F1A2B3C4D5E6071829A0B1C2 /* PhotoDBStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D5E6071829A0B1C2D3 /* PhotoDBStore.swift */; };
 		A1B2C3D4E5F6071829A0B1C2 /* OfficialDBFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6071829A0B1C2D3 /* OfficialDBFormat.swift */; };
 		C0FFEE01A11B2026C0DE0001 /* iPodUSBReconnect.c in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE01A11B2026C0DE0002 /* iPodUSBReconnect.c */; };
+		C0FFEE01A11B2026C0DE0011 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE01A11B2026C0DE0010 /* L10n.swift */; };
+		C0FFEE01A11B2026C0DE0021 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = C0FFEE01A11B2026C0DE0020 /* Localizable.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -86,6 +88,9 @@
 		C0FFEE01A11B2026C0DE0002 /* iPodUSBReconnect.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = iPodUSBReconnect.c; sourceTree = "<group>"; };
 		C0FFEE01A11B2026C0DE0003 /* iPodUSBReconnect.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = iPodUSBReconnect.h; sourceTree = "<group>"; };
 		C0FFEE01A11B2026C0DE0004 /* VintageTunes-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "VintageTunes-Bridging-Header.h"; sourceTree = "<group>"; };
+		C0FFEE01A11B2026C0DE0010 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
+		C0FFEE01A11B2026C0DE0022 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		C0FFEE01A11B2026C0DE0023 /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/Localizable.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -166,6 +171,7 @@
 				B2C3D4E5F6071829A0B1C2D3 /* OfficialDBFormat.swift */,
 				C0FFEE01A11B2026C0DE0002 /* iPodUSBReconnect.c */,
 				C0FFEE01A11B2026C0DE0003 /* iPodUSBReconnect.h */,
+				C0FFEE01A11B2026C0DE0010 /* L10n.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -196,11 +202,24 @@
 			children = (
 				E88F1D6AF6094D72A788C48C /* Assets.xcassets */,
 				1D8F13BCA73E4948B40C1471 /* AppIcon.icns */,
+				C0FFEE01A11B2026C0DE0020 /* Localizable.strings */,
 );
 			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
+
+/* Begin PBXVariantGroup section */
+		C0FFEE01A11B2026C0DE0020 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C0FFEE01A11B2026C0DE0022 /* en */,
+				C0FFEE01A11B2026C0DE0023 /* it */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin PBXNativeTarget section */
 		C33438279874475FAC430B6B /* VintageTunes */ = {
@@ -233,7 +252,7 @@
 			};
 			buildConfigurationList = 7403C422AC83404C84A37A3C /* Build configuration list for PBXProject "VintageTunes" */;
 			compatibilityVersion = "Xcode 14.0";
-			developmentRegion = it;
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
@@ -256,6 +275,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4DE282442581481B96AB7E56 /* Assets.xcassets in Resources */,
+				C0FFEE01A11B2026C0DE0021 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -334,6 +354,7 @@
 				F1A2B3C4D5E6071829A0B1C2 /* PhotoDBStore.swift in Sources */,
 				A1B2C3D4E5F6071829A0B1C2 /* OfficialDBFormat.swift in Sources */,
 				C0FFEE01A11B2026C0DE0001 /* iPodUSBReconnect.c in Sources */,
+				C0FFEE01A11B2026C0DE0011 /* L10n.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

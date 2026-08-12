@@ -784,7 +784,7 @@ enum CoverArtError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .embedFailed(let m): return "Embed cover fallito: \(m)"
+        case .embedFailed(let m): return L10n.tf("error.cover.embed_failed", m)
         }
     }
 }

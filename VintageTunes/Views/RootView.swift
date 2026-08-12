@@ -48,10 +48,10 @@ struct RootView: View {
             ),
             titleVisibility: .visible
         ) {
-            Button("Elimina", role: .destructive) {
+            Button(L10n.t("common.delete"), role: .destructive) {
                 library.confirmPendingTrackDelete()
             }
-            Button("Annulla", role: .cancel) {
+            Button(L10n.t("common.cancel"), role: .cancel) {
                 library.cancelPendingTrackDelete()
             }
         } message: {
@@ -115,15 +115,16 @@ struct RootView: View {
 
     private var deleteTracksDialogTitle: String {
         let n = library.pendingTrackDeleteCount ?? 0
-        return n == 1 ? "Eliminare 1 canzone?" : "Eliminare \(n) canzoni?"
+        return n == 1
+            ? L10n.t("delete.confirm_title_one")
+            : L10n.tf("delete.confirm_title_many", n)
     }
 
     private var deleteTracksDialogMessage: String {
         let n = library.pendingTrackDeleteCount ?? 0
-        if n == 1 {
-            return "Sei veramente sicuro di eliminare definitivamente 1 canzone dall’iPod? L’operazione non si può annullare."
-        }
-        return "Sei veramente sicuro di eliminare definitivamente \(n) canzoni dall’iPod? L’operazione non si può annullare."
+        return n == 1
+            ? L10n.t("delete.confirm_message_one")
+            : L10n.tf("delete.confirm_message_many", n)
     }
 
     private var bottomBannerPadding: CGFloat {
@@ -170,14 +171,14 @@ struct StatusBanner: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if case .working = status, let onCancel {
-                    Button("Annulla") {
+                    Button(L10n.t("common.cancel")) {
                         onCancel()
                     }
                     .buttonStyle(.plain)
                     .font(.custom("Avenir Next", size: 12).weight(.bold))
                     .foregroundStyle(VTTheme.amber)
                     .padding(.leading, 4)
-                    .help("Interrompi import / conversione")
+                    .help(L10n.t("status.cancel_import_help"))
                 }
             }
 
@@ -234,11 +235,11 @@ struct EmptyDeviceView: View {
                     .frame(width: 220)
                     .shadow(color: .black.opacity(0.45), radius: 28, y: 14)
 
-                Text("Collega il tuo iPod")
+                Text(L10n.t("empty.connect_title"))
                     .font(VTTheme.displayFont(size: 28))
                     .foregroundStyle(VTTheme.textPrimary)
 
-                Text("VintageTunes riconosce automaticamente iPod Classic / Video\ncon firmware stock o Rockbox.")
+                Text(L10n.t("empty.connect_subtitle"))
                     .font(.custom("Avenir Next", size: 14))
                     .foregroundStyle(VTTheme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -249,7 +250,7 @@ struct EmptyDeviceView: View {
                 Button {
                     library.refresh()
                 } label: {
-                    Label("Cerca dispositivi", systemImage: "arrow.triangle.2.circlepath")
+                    Label(L10n.t("empty.scan_devices"), systemImage: "arrow.triangle.2.circlepath")
                         .font(.custom("Avenir Next", size: 14).weight(.semibold))
                         .padding(.horizontal, 18)
                         .padding(.vertical, 10)
@@ -260,7 +261,7 @@ struct EmptyDeviceView: View {
                 Button {
                     library.startDemo()
                 } label: {
-                    Label("Prova senza iPod", systemImage: "play.rectangle.on.rectangle")
+                    Label(L10n.t("empty.try_without_ipod"), systemImage: "play.rectangle.on.rectangle")
                         .font(.custom("Avenir Next", size: 14).weight(.semibold))
                         .padding(.horizontal, 18)
                         .padding(.vertical, 10)
@@ -268,7 +269,7 @@ struct EmptyDeviceView: View {
                 .buttonStyle(.bordered)
             }
 
-            Text("La demo crea un iPod virtuale sul Mac con 5 brani di prova.")
+            Text(L10n.t("empty.demo_hint"))
                 .font(.custom("Avenir Next", size: 11))
                 .foregroundStyle(VTTheme.textSecondary)
         }
@@ -282,10 +283,10 @@ struct LoadingDeviceView: View {
             ProgressView()
                 .controlSize(.large)
                 .tint(VTTheme.amber)
-            Text("Carico la libreria dall’iPod…")
+            Text(L10n.t("loading.library"))
                 .font(.custom("Avenir Next", size: 15).weight(.semibold))
                 .foregroundStyle(VTTheme.textPrimary)
-            Text("Metadati, copertine e database — un momento.")
+            Text(L10n.t("loading.library_detail"))
                 .font(.custom("Avenir Next", size: 12))
                 .foregroundStyle(VTTheme.textSecondary)
         }
@@ -300,10 +301,10 @@ struct EjectingDeviceView: View {
                 .controlSize(.large)
                 .tint(VTTheme.amber)
                 .scaleEffect(1.15)
-            Text("Espulsione in corso…")
+            Text(L10n.t("eject.in_progress"))
                 .font(VTTheme.displayFont(size: 26))
                 .foregroundStyle(VTTheme.textPrimary)
-            Text("Attendi che il volume venga smontato in sicurezza.")
+            Text(L10n.t("eject.wait_unmount"))
                 .font(.custom("Avenir Next", size: 14))
                 .foregroundStyle(VTTheme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -555,12 +556,12 @@ struct AutoSyncConfirmSheet: View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Nuove canzoni nella cartella sync")
+                    Text(L10n.t("autosync.title"))
                         .font(VTTheme.displayFont(size: 20))
                         .foregroundStyle(VTTheme.textPrimary)
                     Text(candidates.count == 1
-                          ? "1 brano non è ancora sull’iPod."
-                          : "\(candidates.count) brani non sono ancora sull’iPod.")
+                          ? L10n.t("autosync.subtitle_one")
+                          : L10n.tf("autosync.subtitle_many", candidates.count))
                         .font(.custom("Avenir Next", size: 13))
                         .foregroundStyle(VTTheme.textSecondary)
                 }
@@ -594,7 +595,7 @@ struct AutoSyncConfirmSheet: View {
                     Spacer(minLength: 8)
 
                     if candidate.needsConversion {
-                        Text("Conversione")
+                        Text(L10n.t("autosync.needs_conversion"))
                             .font(.custom("Avenir Next", size: 10).weight(.bold))
                             .foregroundStyle(VTTheme.amber)
                             .padding(.horizontal, 8)
@@ -611,14 +612,16 @@ struct AutoSyncConfirmSheet: View {
             Divider().opacity(0.2)
 
             HStack {
-                Button("Non ora") {
+                Button(L10n.t("autosync.not_now")) {
                     library.dismissAutoSync()
                 }
                 .keyboardShortcut(.cancelAction)
 
                 Spacer()
 
-                Button(candidates.count == 1 ? "Importa 1 canzone" : "Importa \(candidates.count) canzoni") {
+                Button(candidates.count == 1
+                        ? L10n.t("autosync.import_one")
+                        : L10n.tf("autosync.import_many", candidates.count)) {
                     library.confirmAutoSync()
                 }
                 .buttonStyle(.borderedProminent)
@@ -643,7 +646,7 @@ struct FlacConversionAskSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(prompt?.headline ?? "Come convertire questo file?")
+                Text(prompt?.headline ?? L10n.t("conversion.ask_headline_one"))
                     .font(VTTheme.displayFont(size: 20))
                     .foregroundStyle(VTTheme.textPrimary)
                 Text(prompt?.displayTitle ?? "")
@@ -660,14 +663,14 @@ struct FlacConversionAskSheet: View {
             Divider().opacity(0.2)
 
             VStack(alignment: .leading, spacing: 14) {
-                Text("Il firmware stock non riproduce i FLAC: scegli M4A o MP3. MP3 CBR senza Xing/ID3 (192 o 320).")
+                Text(L10n.t("conversion.ask_body"))
                     .font(.custom("Avenir Next", size: 13))
                     .foregroundStyle(VTTheme.textSecondary)
 
                 if prompt?.showsBatchScope == true {
-                    Picker("Ambito", selection: $library.flacAskApplyToAll) {
-                        Text("Solo per questo file").tag(false)
-                        Text("Applica a tutti i file").tag(true)
+                    Picker(L10n.t("conversion.ask_scope"), selection: $library.flacAskApplyToAll) {
+                        Text(L10n.t("conversion.ask_scope_this_file")).tag(false)
+                        Text(L10n.t("conversion.ask_scope_all")).tag(true)
                     }
                     .pickerStyle(.segmented)
                 }
@@ -694,7 +697,7 @@ struct FlacConversionAskSheet: View {
             Divider().opacity(0.2)
 
             HStack {
-                Button("Annulla import") {
+                Button(L10n.t("conversion.cancel_import")) {
                     library.cancelFlacConversionAsk()
                 }
                 .keyboardShortcut(.cancelAction)
@@ -719,7 +722,7 @@ struct FlacConversionAskSheet: View {
             }
             Spacer(minLength: 8)
             if emphasized {
-                Text("Preferito")
+                Text(L10n.t("conversion.preferred_badge"))
                     .font(.custom("Avenir Next", size: 10).weight(.bold))
                     .foregroundStyle(VTTheme.amber)
                     .padding(.horizontal, 8)

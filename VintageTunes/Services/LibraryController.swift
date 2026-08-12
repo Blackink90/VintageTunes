@@ -11,7 +11,7 @@ final class LibraryController: ObservableObject {
     @Published var playlists: [Playlist] = []
     @Published var photos: [DevicePhoto] = []
     @Published var photoSelection = Set<UInt32>()
-    @Published var photoAlbumName = "Photo Library"
+    @Published var photoAlbumName = L10n.t("photos.default_album")
     @Published var selectedSection: LibrarySection = .songs
     @Published var selectedPlaylistID: UInt64?
     @Published var browseArtist: String?
@@ -349,15 +349,13 @@ final class LibraryController: ObservableObject {
 
     func refresh() {
         Task { @MainActor in
-            setStatus(.working("Ricollegamento iPod…"))
+            setStatus(.working(L10n.t("status.reconnecting")))
             await Task.yield()
             await detector.scanAndRemountAsync()
             if let device = connectedDevice {
                 await load(device: device)
             } else if detector.devices.isEmpty {
-                setStatus(.failure(
-                    "iPod non trovato. Se l’hai espulso resta in carica: riprova «Cerca dispositivi» oppure stacca e ricollega il cavo."
-                ))
+                setStatus(.failure(L10n.t("status.ipod_not_found")))
             }
             // Se un dispositivo è comparso, handleDevices avvia il load e aggiorna lo status.
         }
@@ -375,12 +373,12 @@ final class LibraryController: ObservableObject {
             clearBrowse()
             artwork.clear()
             clearAutoSyncUI()
-            setStatus(.success("Demo disconnessa"))
+            setStatus(.success(L10n.t("status.demo_disconnected")))
             return
         }
 
         isEjecting = true
-        setStatus(.working("Espulsione in corso…"))
+        setStatus(.working(L10n.t("status.ejecting")))
         Task { @MainActor in
             // Due yield: ridisegna rotella + testo prima dell’unmount (può bloccare il main).
             await Task.yield()
@@ -395,7 +393,7 @@ final class LibraryController: ObservableObject {
                 artwork.clear()
                 clearAutoSyncUI()
                 selection.removeAll()
-                setStatus(.success("iPod espulso — puoi usarlo. «Cerca dispositivi» per ricollegarlo"))
+                setStatus(.success(L10n.t("status.ejected")))
             } catch {
                 setStatus(.failure(error.localizedDescription))
             }
@@ -410,7 +408,7 @@ final class LibraryController: ObservableObject {
         guard var device = connectedDevice else { return }
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            setStatus(.failure("Il nome non può essere vuoto"))
+            setStatus(.failure(L10n.t("status.name_empty")))
             return
         }
         // Music.app mostra il nome della playlist master, non solo l’etichetta volume.
@@ -454,7 +452,7 @@ final class LibraryController: ObservableObject {
                 refreshLibraryCache(for: device)
             }
 
-            setStatus(.success("Rinominato in \"\(name)\""))
+            setStatus(.success(L10n.tf("status.renamed", name)))
         } catch {
             setStatus(.failure(error.localizedDescription))
         }
@@ -531,13 +529,13 @@ final class LibraryController: ObservableObject {
         guard let device = connectedDevice, device.firmwareMode == .stock else {
             setStatus(.success(
                 selected.count == 1
-                    ? "Ricarico copertina…"
-                    : "Ricarico copertine per \(seen.count) album…"
+                    ? L10n.t("status.reload_artwork_one")
+                    : L10n.tf("status.reload_artwork_many", seen.count)
             ))
             return
         }
 
-        setStatus(.working("Scrivo copertine sull’iPod…"))
+        setStatus(.working(L10n.t("status.writing_artwork")))
         let targetIDs = Set(selected.map(\.id))
         let playlistSnapshot = playlists
         let version = dbVersion
@@ -558,11 +556,11 @@ final class LibraryController: ObservableObject {
                 if updated > 0 {
                     setStatus(.success(
                         updated == 1
-                            ? "Copertina scritta sull’iPod"
-                            : "Copertine scritte sull’iPod (\(updated))"
+                            ? L10n.t("status.artwork_written_one")
+                            : L10n.tf("status.artwork_written_many", updated)
                     ))
                 } else {
-                    setStatus(.failure("Copertina trovata in app, ma non scritta sul dispositivo"))
+                    setStatus(.failure(L10n.t("status.artwork_not_written")))
                 }
             } catch {
                 setStatus(.failure(error.localizedDescription))
@@ -626,8 +624,8 @@ final class LibraryController: ObservableObject {
             refreshLibraryCache(for: device)
             setStatus(.success(
                 updated == 1
-                    ? (stars == 0 ? "Valutazione rimossa" : "Valutazione: \(stars) ★")
-                    : "Valutazione aggiornata su \(updated) brani"
+                    ? (stars == 0 ? L10n.t("status.rating_cleared") : L10n.tf("status.rating_set", stars))
+                    : L10n.tf("status.rating_updated_many", updated)
             ))
         } catch {
             setStatus(.failure(error.localizedDescription))
@@ -760,7 +758,7 @@ final class LibraryController: ObservableObject {
             }
 
             if let coverData, !coverIDs.isEmpty, device.firmwareMode == .stock {
-                setStatus(.working("Scrivo copertina sull’iPod…"))
+                setStatus(.working(L10n.t("status.writing_cover")))
                 let playlistSnapshot = playlists
                 let version = dbVersion
                 Task {
@@ -779,11 +777,11 @@ final class LibraryController: ObservableObject {
                         setStatus(.success(
                             n > 0
                                 ? (updated == 1
-                                    ? "Informazioni e copertina aggiornate"
-                                    : "Informazioni aggiornate; copertina scritta sull’iPod")
+                                    ? L10n.t("status.info_and_cover_updated")
+                                    : L10n.t("status.info_updated_cover_written"))
                                 : (updated == 1
-                                    ? "Informazioni brano aggiornate"
-                                    : "Informazioni aggiornate su \(updated) brani")
+                                    ? L10n.t("status.info_updated_one")
+                                    : L10n.tf("status.info_updated_many", updated))
                         ))
                     } catch {
                         setStatus(.failure(error.localizedDescription))
@@ -792,8 +790,8 @@ final class LibraryController: ObservableObject {
             } else {
                 setStatus(.success(
                     updated == 1
-                        ? "Informazioni brano aggiornate"
-                        : "Informazioni aggiornate su \(updated) brani"
+                        ? L10n.t("status.info_updated_one")
+                        : L10n.tf("status.info_updated_many", updated)
                 ))
             }
         } catch {
@@ -814,9 +812,9 @@ final class LibraryController: ObservableObject {
             do {
                 let device = try SimulatediPod.prepare(reset: reset)
                 await load(device: device)
-                setStatus(.success(reset ? "Demo azzerata e ricaricata" : "Modalità demo attiva"))
+                setStatus(.success(reset ? L10n.t("status.demo_reset") : L10n.t("status.demo_active")))
             } catch {
-                setStatus(.failure("Impossibile creare la demo: \(error.localizedDescription)"))
+                setStatus(.failure(L10n.tf("status.demo_create_failed", error.localizedDescription)))
             }
         }
     }
@@ -841,7 +839,7 @@ final class LibraryController: ObservableObject {
     /// Riallinea size/durate da disco, toglie cover embedded enormi (es. La recette), riscrive iTunesDB.
     func repairLibraryPlaybackMetadata() {
         guard let device = connectedDevice else {
-            setStatus(.failure("Collega un iPod per riallineare i metadati"))
+            setStatus(.failure(L10n.t("status.connect_to_repair")))
             return
         }
         guard !isImportRunning, !isEjecting else { return }
@@ -849,7 +847,7 @@ final class LibraryController: ObservableObject {
         importCancelled = false
         importTask?.cancel()
         importTask = Task { @MainActor in
-            setStatus(.working("Riallineamento libreria…"))
+            setStatus(.working(L10n.t("status.repairing_library")))
             do {
                 var workingTracks = tracks
                 let result = try await sync.repairPlaybackMetadata(
@@ -867,14 +865,14 @@ final class LibraryController: ObservableObject {
                 refreshLibraryCache(for: device)
                 var parts: [String] = []
                 if result.metadataFixed > 0 {
-                    parts.append("\(result.metadataFixed) metadati aggiornati")
+                    parts.append(L10n.tf("status.metadata_fixed", result.metadataFixed))
                 }
                 if result.stripped > 0 {
-                    parts.append("\(result.stripped) cover embedded rimosse")
+                    parts.append(L10n.tf("status.embedded_covers_stripped", result.stripped))
                 }
-                setStatus(.success(parts.isEmpty ? "Libreria già allineata" : parts.joined(separator: " · ")))
+                setStatus(.success(parts.isEmpty ? L10n.t("status.library_already_aligned") : parts.joined(separator: " · ")))
             } catch is CancellationError {
-                setStatus(.success("Riallineamento annullato"))
+                setStatus(.success(L10n.t("status.repair_cancelled")))
             } catch {
                 setStatus(.failure(error.localizedDescription))
             }
@@ -900,8 +898,8 @@ final class LibraryController: ObservableObject {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [iPodVolumeBackup.utType]
         panel.nameFieldStringValue = sanitizedBackupName(for: device)
-        panel.message = "Backup totale dell’iPod (musica, video, foto, database, play count, cover…)"
-        panel.prompt = "Salva backup"
+        panel.message = L10n.t("panel.backup_message")
+        panel.prompt = L10n.t("panel.backup_prompt")
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Documents", isDirectory: true)
 
@@ -914,7 +912,7 @@ final class LibraryController: ObservableObject {
         let deviceSnapshot = device
         let destURL = url
         backupTask = Task { @MainActor in
-            setStatus(.working("Backup totale in corso…"), progress: 0)
+            setStatus(.working(L10n.t("status.backup_running")), progress: 0)
             do {
                 try await Task.detached(priority: .userInitiated) {
                     try iPodVolumeBackup.createBackup(device: deviceSnapshot, to: destURL) { progress in
@@ -927,12 +925,12 @@ final class LibraryController: ObservableObject {
                 }.value
                 try Task.checkCancellation()
                 if cancelFlag.value { throw iPodBackupError.cancelled }
-                setStatus(.success("Backup salvato: \(destURL.lastPathComponent)"), progress: nil)
+                setStatus(.success(L10n.tf("status.backup_saved", destURL.lastPathComponent)), progress: nil)
                 NSWorkspace.shared.activateFileViewerSelecting([destURL])
             } catch is CancellationError {
-                setStatus(.success("Backup annullato"))
+                setStatus(.success(L10n.t("status.backup_cancelled")))
             } catch let error as iPodBackupError where error == .cancelled {
-                setStatus(.success("Backup annullato"))
+                setStatus(.success(L10n.t("status.backup_cancelled")))
             } catch {
                 setStatus(.failure(error.localizedDescription))
             }
@@ -957,8 +955,8 @@ final class LibraryController: ObservableObject {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [iPodVolumeBackup.utType]
-        panel.message = "Scegli un backup VintageTunes (.vbk) da ripristinare sull’iPod"
-        panel.prompt = "Apri"
+        panel.message = L10n.t("panel.restore_message")
+        panel.prompt = L10n.t("common.open")
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -994,7 +992,7 @@ final class LibraryController: ObservableObject {
         let archive = pending.archiveURL
         let deviceSnapshot = device
         backupTask = Task { @MainActor in
-            setStatus(.working("Ripristino totale in corso…"), progress: 0)
+            setStatus(.working(L10n.t("status.restore_running")), progress: 0)
             do {
                 try await Task.detached(priority: .userInitiated) {
                     try iPodVolumeBackup.restoreBackup(from: archive, to: deviceSnapshot) { progress in
@@ -1009,11 +1007,11 @@ final class LibraryController: ObservableObject {
                 if cancelFlag.value { throw iPodBackupError.cancelled }
                 // Ricarica libreria dal volume ripristinato.
                 await load(device: deviceSnapshot)
-                setStatus(.success("Ripristino completato da \(archive.lastPathComponent)"))
+                setStatus(.success(L10n.tf("status.restore_completed", archive.lastPathComponent)))
             } catch is CancellationError {
-                setStatus(.success("Ripristino annullato"))
+                setStatus(.success(L10n.t("status.restore_cancelled")))
             } catch let error as iPodBackupError where error == .cancelled {
-                setStatus(.success("Ripristino annullato"))
+                setStatus(.success(L10n.t("status.restore_cancelled")))
             } catch {
                 setStatus(.failure(error.localizedDescription))
             }
@@ -1039,7 +1037,7 @@ final class LibraryController: ObservableObject {
         }.filter { FileManager.default.fileExists(atPath: $0.path) }
 
         guard !urls.isEmpty else {
-            setStatus(.failure("File non trovato sul dispositivo"))
+            setStatus(.failure(L10n.t("status.file_not_on_device")))
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
@@ -1053,7 +1051,7 @@ final class LibraryController: ObservableObject {
             if !device.isSimulated,
                let fingerprint = try? LibraryCacheStore.fingerprint(for: device),
                var cached = LibraryCacheStore.loadIfMatching(device: device, fingerprint: fingerprint) {
-                setStatus(.working("Carico dalla cache locale…"))
+                setStatus(.working(L10n.t("status.loading_cache")))
                 sync.adoptSession(cached.session)
                 let playMerge = sync.absorbPlayCounts(into: &cached.tracks, device: device)
                 if device.firmwareMode == .stock, playMerge.changed {
@@ -1091,7 +1089,7 @@ final class LibraryController: ObservableObject {
                 }
                 syncMasterPlaylistName(with: device)
                 cleanupEmptyOnTheGoPlaylists(on: device)
-                setStatus(.success("Caricate \(cached.tracks.count) tracce (cache)"))
+                setStatus(.success(L10n.tf("status.loaded_cache", cached.tracks.count)))
                 checkAutoSync()
                 return
             }
@@ -1104,7 +1102,7 @@ final class LibraryController: ObservableObject {
             // Le durate corrette per i tagli a fine brano si allineano in import (applyTechnicalMetadata).
             await sync.backfillFromFiles(&result.tracks)
             TrackTagStore.apply(TrackTagStore.load(from: device), to: &result.tracks)
-            setStatus(.working("Completo metadati mancanti…"))
+            setStatus(.working(L10n.t("status.completing_metadata")))
             await sync.enrichMissingFromOnline(&result.tracks)
             if result.tracks != before {
                 // Salva override metadati su disco; le stats le gestiamo sotto se fuse da Play Counts.
@@ -1128,7 +1126,7 @@ final class LibraryController: ObservableObject {
             }
             // Dopo merge ascolti, riscrivi iTunesDB.
             if device.firmwareMode == .stock, playMerge.changed {
-                setStatus(.working("Salvo stelle e ascolti dall’iPod…"))
+                setStatus(.working(L10n.t("status.saving_playcounts")))
                 try sync.persistLibrary(
                     tracks: result.tracks,
                     playlists: result.playlists,
@@ -1155,14 +1153,14 @@ final class LibraryController: ObservableObject {
                 try? TrackTagStore.save(overrides, to: device)
             }
             if device.firmwareMode == .stock {
-                setStatus(.working("Verifico cover sul dispositivo…"))
+                setStatus(.working(L10n.t("status.verifying_covers")))
                 if try await sync.repairArtworkIfNeeded(
                     tracks: &result.tracks,
                     playlists: result.playlists,
                     dbVersion: result.dbVersion,
                     device: device
                 ) {
-                    setStatus(.success("Cover riscritte per l'iPod"))
+                    setStatus(.success(L10n.t("status.covers_rewritten")))
                 }
                 let missing = try await sync.pushMissingArtworkToDevice(
                     tracks: &result.tracks,
@@ -1171,7 +1169,7 @@ final class LibraryController: ObservableObject {
                     device: device
                 )
                 if missing > 0 {
-                    setStatus(.success("Copertine mancanti scritte sull’iPod (\(missing))"))
+                    setStatus(.success(L10n.tf("status.missing_covers_written", missing)))
                 }
             }
             connectedDevice = device
@@ -1202,7 +1200,7 @@ final class LibraryController: ObservableObject {
             }
             syncMasterPlaylistName(with: device)
             cleanupEmptyOnTheGoPlaylists(on: device)
-            setStatus(.success("Caricate \(result.tracks.count) tracce"))
+            setStatus(.success(L10n.tf("status.loaded_tracks", result.tracks.count)))
             checkAutoSync()
         } catch {
             setStatus(.failure(error.localizedDescription))
@@ -1267,8 +1265,8 @@ final class LibraryController: ObservableObject {
                 let n = before.count - playlists.count
                 setStatus(.success(
                     n == 1
-                        ? "Rimossa On-The-Go vuota"
-                        : "Rimosse \(n) On-The-Go vuote"
+                        ? L10n.t("status.removed_empty_otg_one")
+                        : L10n.tf("status.removed_empty_otg_many", n)
                 ))
             }
         } catch {
@@ -1299,7 +1297,7 @@ final class LibraryController: ObservableObject {
     private func clearPhotosState() {
         photos = []
         photoSelection.removeAll()
-        photoAlbumName = "Photo Library"
+        photoAlbumName = L10n.t("photos.default_album")
     }
 
     private func reloadPhotos(from device: iPodDevice) {
@@ -1316,7 +1314,7 @@ final class LibraryController: ObservableObject {
             photos = store.images.map { entry in
                 DevicePhoto(
                     id: entry.id,
-                    title: "Foto \(entry.id)",
+                    title: L10n.tf("photos.default_title", Int(entry.id)),
                     previewJPEG: store.previewJPEGData(for: entry.id)
                 )
             }
@@ -1329,7 +1327,7 @@ final class LibraryController: ObservableObject {
 
     func choosePhotosToImport() {
         guard let device = connectedDevice, device.supportsPhotos else {
-            setStatus(.failure("Foto non disponibili su questo iPod"))
+            setStatus(.failure(L10n.t("status.photos_unavailable")))
             return
         }
         let panel = NSOpenPanel()
@@ -1337,21 +1335,21 @@ final class LibraryController: ObservableObject {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.image]
-        panel.prompt = "Aggiungi"
-        panel.message = "Scegli una o più foto da copiare sull’iPod"
+        panel.prompt = L10n.t("common.add")
+        panel.message = L10n.t("panel.add_photos_message")
         guard panel.runModal() == .OK else { return }
         importPhotos(urls: panel.urls)
     }
 
     func importPhotos(urls: [URL]) {
         guard let device = connectedDevice, device.supportsPhotos else {
-            setStatus(.failure("Foto non disponibili su questo iPod"))
+            setStatus(.failure(L10n.t("status.photos_unavailable")))
             return
         }
         Task { @MainActor in
             do {
                 guard let store = try PhotoDBStore.open(for: device) else {
-                    setStatus(.failure("Foto non supportate su questo modello"))
+                    setStatus(.failure(L10n.t("status.photos_unsupported")))
                     return
                 }
                 var added = 0
@@ -1359,15 +1357,15 @@ final class LibraryController: ObservableObject {
                     let scoped = url.startAccessingSecurityScopedResource()
                     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                     guard let data = try? Data(contentsOf: url), !data.isEmpty else { continue }
-                    setStatus(.working("Aggiungo foto \(added + 1)…"))
+                    setStatus(.working(L10n.tf("status.adding_photo", added + 1)))
                     _ = try store.addPhoto(imageData: data)
                     added += 1
                 }
                 reloadPhotos(from: device)
                 if added > 0 {
-                    setStatus(.success(added == 1 ? "Aggiunta 1 foto" : "Aggiunte \(added) foto"))
+                    setStatus(.success(added == 1 ? L10n.t("status.added_photo_one") : L10n.tf("status.added_photo_many", added)))
                 } else {
-                    setStatus(.failure("Nessuna immagine valida"))
+                    setStatus(.failure(L10n.t("status.no_valid_image")))
                 }
             } catch {
                 setStatus(.failure(error.localizedDescription))
@@ -1383,7 +1381,7 @@ final class LibraryController: ObservableObject {
             try store.deletePhotos(ids: ids)
             photoSelection.removeAll()
             reloadPhotos(from: device)
-            setStatus(.success(ids.count == 1 ? "Eliminata 1 foto" : "Eliminate \(ids.count) foto"))
+            setStatus(.success(ids.count == 1 ? L10n.t("status.deleted_photo_one") : L10n.tf("status.deleted_photo_many", ids.count)))
         } catch {
             setStatus(.failure(error.localizedDescription))
         }
@@ -1415,8 +1413,8 @@ final class LibraryController: ObservableObject {
         panel.canCreateDirectories = false
         panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
         panel.allowsOtherFileTypes = true
-        panel.prompt = "Importa"
-        panel.message = "Scegli video da convertire e copiare sull’iPod"
+        panel.prompt = L10n.t("common.import")
+        panel.message = L10n.t("panel.import_videos_message")
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Movies")
 
         guard panel.runModal() == .OK else { return }
@@ -1429,8 +1427,8 @@ final class LibraryController: ObservableObject {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         panel.canCreateDirectories = false
-        panel.prompt = "Importa"
-        panel.message = "Scegli una o più cartelle da scansionare per file audio"
+        panel.prompt = L10n.t("common.import")
+        panel.message = L10n.t("panel.import_folders_message")
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Music")
 
         guard panel.runModal() == .OK else { return }
@@ -1449,7 +1447,7 @@ final class LibraryController: ObservableObject {
         releaseImportSecurityRoots()
         workingProgress = nil
         if !silent {
-            setStatus(.success("Operazione annullata"))
+            setStatus(.success(L10n.t("status.operation_cancelled")))
             finishImportAndMaybeAutoSync()
         }
     }
@@ -1551,12 +1549,12 @@ final class LibraryController: ObservableObject {
 
     private func prepareImport(_ urls: [URL]) async {
         guard connectedDevice != nil else {
-            setStatus(.failure("Collega un iPod (o avvia la demo) per sincronizzare"))
+            setStatus(.failure(L10n.t("status.connect_to_sync")))
             return
         }
 
         beginImportSecurityAccess(for: urls)
-        setStatus(.working("Cerco file audio…"))
+        setStatus(.working(L10n.t("status.searching_audio")))
 
         do {
             try throwIfImportCancelled()
@@ -1593,12 +1591,12 @@ final class LibraryController: ObservableObject {
             }
 
             if files.isEmpty {
-                setStatus(.failure("Nessun file audio trovato nella selezione (mp3, m4a, flac, wav, …)"))
+                setStatus(.failure(L10n.t("status.no_audio_found")))
                 releaseImportSecurityRoots()
                 return
             }
 
-            setStatus(.working("Trovati \(files.count) file audio…"))
+            setStatus(.working(L10n.tf("status.found_audio", files.count)))
             try throwIfImportCancelled()
 
             // FLAC/WAV/… (e M4A↔MP3 se impostato) → formato scelto. Il resto resta ready.
@@ -1611,7 +1609,7 @@ final class LibraryController: ObservableObject {
         } catch is CancellationError {
             releaseImportSecurityRoots()
             if importCancelled {
-                setStatus(.success("Import annullato"))
+                setStatus(.success(L10n.t("status.import_cancelled")))
             }
         } catch {
             releaseImportSecurityRoots()
@@ -1621,20 +1619,20 @@ final class LibraryController: ObservableObject {
 
     private func prepareVideoImport(_ urls: [URL]) async {
         guard let device = connectedDevice else {
-            setStatus(.failure("Collega un iPod (o avvia la demo) per sincronizzare"))
+            setStatus(.failure(L10n.t("status.connect_to_sync")))
             return
         }
         guard device.supportsVideo else {
-            setStatus(.failure("Questo iPod non supporta i video"))
+            setStatus(.failure(L10n.t("status.video_unsupported_device")))
             return
         }
         if device.firmwareMode != .stock {
-            setStatus(.failure("Video supportati solo su firmware stock"))
+            setStatus(.failure(L10n.t("status.video_stock_only")))
             return
         }
 
         beginImportSecurityAccess(for: urls)
-        setStatus(.working("Cerco file video…"))
+        setStatus(.working(L10n.t("status.searching_video")))
 
         do {
             try throwIfImportCancelled()
@@ -1642,18 +1640,18 @@ final class LibraryController: ObservableObject {
             try throwIfImportCancelled()
 
             if files.isEmpty {
-                setStatus(.failure("Nessun video trovato (mp4, m4v, mov, mkv, …)"))
+                setStatus(.failure(L10n.t("status.no_video_found")))
                 releaseImportSecurityRoots()
                 return
             }
 
-            setStatus(.working("Trovati \(files.count) video…"))
+            setStatus(.working(L10n.tf("status.found_video", files.count)))
             await runVideoImport(files: files, device: device)
             releaseImportSecurityRoots()
         } catch is CancellationError {
             releaseImportSecurityRoots()
             if importCancelled {
-                setStatus(.success("Import annullato"))
+                setStatus(.success(L10n.t("status.import_cancelled")))
             }
         } catch {
             releaseImportSecurityRoots()
@@ -1678,7 +1676,7 @@ final class LibraryController: ObservableObject {
         do {
             for (index, url) in files.enumerated() {
                 try throwIfImportCancelled()
-                setStatus(.working("Leggo \(index + 1)/\(files.count): \(url.lastPathComponent)"))
+                setStatus(.working(L10n.tf("status.reading_file", index + 1, files.count, url.lastPathComponent)))
                 var meta = await VideoMetadataReader.read(url: url)
                 meta.contentHash = try? FileHasher.sha256(of: url)
 
@@ -1690,7 +1688,7 @@ final class LibraryController: ObservableObject {
                 }
 
                 try throwIfImportCancelled()
-                setStatus(.working("Conversione \(index + 1)/\(files.count): \(url.lastPathComponent)"), progress: 0)
+                setStatus(.working(L10n.tf("status.converting_file", index + 1, files.count, url.lastPathComponent)), progress: 0)
                 let durationSeconds = meta.durationMs > 0 ? Double(meta.durationMs) / 1000.0 : nil
                 let m4v = try await VideoConverter.convertForiPod(
                     url,
@@ -1703,13 +1701,13 @@ final class LibraryController: ObservableObject {
                     }
                 }
                 try throwIfImportCancelled()
-                setStatus(.working("Conversione \(index + 1)/\(files.count) completata"), progress: 1)
+                setStatus(.working(L10n.tf("status.conversion_done", index + 1, files.count)), progress: 1)
 
                 var converted = await VideoMetadataReader.read(url: m4v)
                 converted.title = meta.title
                 converted.artist = meta.artist
                 converted.album = meta.album
-                converted.genre = meta.genre.isEmpty ? "Film" : meta.genre
+                converted.genre = meta.genre.isEmpty ? L10n.t("video.default_genre") : meta.genre
                 converted.contentHash = meta.contentHash
                 items.append(converted)
                 tempFiles.append(m4v)
@@ -1719,14 +1717,14 @@ final class LibraryController: ObservableObject {
 
             if items.isEmpty {
                 if skippedBeforeImport > 0 {
-                    setStatus(.success("Nessun nuovo video · \(skippedBeforeImport) già presenti"))
+                    setStatus(.success(L10n.tf("status.no_new_video", skippedBeforeImport)))
                 } else {
-                    setStatus(.failure("Nessun video da trasferire"))
+                    setStatus(.failure(L10n.t("status.no_video_to_transfer")))
                 }
                 return
             }
 
-            setStatus(.working("Copio video sull’iPod…"), progress: nil)
+            setStatus(.working(L10n.t("status.copying_video")), progress: nil)
             let result = try await sync.importVideoFiles(
                 items,
                 to: device,
@@ -1745,15 +1743,15 @@ final class LibraryController: ObservableObject {
 
             let skipped = result.skippedDuplicates + skippedBeforeImport
             var parts: [String] = []
-            if result.imported > 0 { parts.append("Aggiunti \(result.imported) video") }
-            if skipped > 0 { parts.append("\(skipped) già presenti") }
-            parts.append("\(tempFiles.count) convertiti in M4V")
+            if result.imported > 0 { parts.append(L10n.tf("status.added_videos", result.imported)) }
+            if skipped > 0 { parts.append(L10n.tf("status.already_present", skipped)) }
+            parts.append(L10n.tf("status.converted_to_m4v", tempFiles.count))
             setStatus(.success(parts.joined(separator: " · ")))
             selectSection(.videos)
             refreshLibraryCache(for: device)
         } catch is CancellationError {
             if importCancelled {
-                setStatus(.success("Import annullato"))
+                setStatus(.success(L10n.t("status.import_cancelled")))
             }
         } catch {
             setStatus(.failure(error.localizedDescription))
@@ -1777,7 +1775,7 @@ final class LibraryController: ObservableObject {
         defer { accessed.forEach { $0.stopAccessingSecurityScopedResource() } }
 
         guard let device = connectedDevice else {
-            setStatus(.failure("Collega un iPod (o avvia la demo) per sincronizzare"))
+            setStatus(.failure(L10n.t("status.connect_to_sync")))
             return
         }
 
@@ -1788,7 +1786,7 @@ final class LibraryController: ObservableObject {
         do {
             for url in ready {
                 try throwIfImportCancelled()
-                setStatus(.working("Leggo \(url.lastPathComponent)…"))
+                setStatus(.working(L10n.tf("status.reading_one", url.lastPathComponent)))
                 var meta = await AudioMetadataReader.read(url: url)
                 try throwIfImportCancelled()
                 meta = await MetadataLookup.enrich(meta)
@@ -1805,7 +1803,7 @@ final class LibraryController: ObservableObject {
                 var batchFormatOverride: FlacConversionFormat?
                 for (index, url) in toConvert.enumerated() {
                     try throwIfImportCancelled()
-                    setStatus(.working("Leggo tag \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
+                    setStatus(.working(L10n.tf("status.reading_tags", index + 1, toConvert.count, url.lastPathComponent)))
                     var sourceMeta = await AudioMetadataReader.read(url: url)
                     sourceMeta = await MetadataLookup.enrich(sourceMeta)
                     sourceMeta.contentHash = try FileHasher.sha256(of: url)
@@ -1832,7 +1830,7 @@ final class LibraryController: ObservableObject {
                     )
 
                     try throwIfImportCancelled()
-                    setStatus(.working("Conversione \(index + 1)/\(toConvert.count): \(url.lastPathComponent)"))
+                    setStatus(.working(L10n.tf("status.converting_file", index + 1, toConvert.count, url.lastPathComponent)))
                     let converted = try await AudioConverter.convertForiPod(
                         url,
                         format: format,
@@ -1861,8 +1859,8 @@ final class LibraryController: ObservableObject {
                         artData = CoverArtService.loadFromDisk(artist: merged.artist, album: merged.album)
                     }
                     if let artData {
-                        let artistName = merged.artist.isEmpty ? "Artista sconosciuto" : merged.artist
-                        let albumName = merged.album.isEmpty ? "Album sconosciuto" : merged.album
+                        let artistName = merged.artist.isEmpty ? L10n.t("track.unknown_artist") : merged.artist
+                        let albumName = merged.album.isEmpty ? L10n.t("track.unknown_album") : merged.album
                         artwork.store(artist: artistName, album: albumName, data: artData)
                     }
                     items.append(merged)
@@ -1875,14 +1873,14 @@ final class LibraryController: ObservableObject {
             if items.isEmpty {
                 removeLibraryDuplicates(silentIfNone: true)
                 if skippedBeforeImport > 0 {
-                    setStatus(.success("Nessuna nuova traccia · \(skippedBeforeImport) già presenti"))
+                    setStatus(.success(L10n.tf("status.no_new_track", skippedBeforeImport)))
                 } else {
-                    setStatus(.failure("Nessun file da trasferire"))
+                    setStatus(.failure(L10n.t("status.no_file_to_transfer")))
                 }
                 return
             }
 
-            setStatus(.working("Preparazione import…"))
+            setStatus(.working(L10n.t("status.preparing_import")))
             // Solo libreria/master: le playlist utente si aggiornano con «Aggiungi a playlist».
             let result = try await sync.importFiles(
                 items,
@@ -1903,16 +1901,16 @@ final class LibraryController: ObservableObject {
             let converted = tempFiles.count
             let skipped = result.skippedDuplicates + skippedBeforeImport
             var parts: [String] = []
-            if result.imported > 0 { parts.append("Aggiunte \(result.imported)") }
-            if skipped > 0 { parts.append("\(skipped) già presenti (saltate)") }
-            if converted > 0 { parts.append("\(converted) convertite") }
-            setStatus(.success(parts.isEmpty ? "Nessuna nuova traccia da aggiungere" : parts.joined(separator: " · ")))
+            if result.imported > 0 { parts.append(L10n.tf("status.added_tracks", result.imported)) }
+            if skipped > 0 { parts.append(L10n.tf("status.skipped_duplicates", skipped)) }
+            if converted > 0 { parts.append(L10n.tf("status.converted_tracks", converted)) }
+            setStatus(.success(parts.isEmpty ? L10n.t("status.nothing_to_add") : parts.joined(separator: " · ")))
             selectSection(.songs)
             prefetchArtwork()
             refreshLibraryCache(for: device)
         } catch is CancellationError {
             if importCancelled {
-                setStatus(.success("Import annullato"))
+                setStatus(.success(L10n.t("status.import_cancelled")))
             }
         } catch {
             setStatus(.failure(error.localizedDescription))
@@ -2035,9 +2033,9 @@ final class LibraryController: ObservableObject {
                     playback.stop()
                 }
                 refreshLibraryCache(for: device)
-                setStatus(.success("Rimossi \(removed) duplicati"))
+                setStatus(.success(L10n.tf("status.removed_duplicates", removed)))
             } else if !silentIfNone {
-                setStatus(.success("Nessun duplicato trovato"))
+                setStatus(.success(L10n.t("status.no_duplicates")))
             }
         } catch {
             setStatus(.failure(error.localizedDescription))
@@ -2076,7 +2074,7 @@ final class LibraryController: ObservableObject {
             playlists[idx].trackIDs.append(id)
         }
         persistPlaylists(device: device)
-        setStatus(.success("Aggiunte \(ids.count) tracce alla playlist"))
+        setStatus(.success(L10n.tf("status.added_to_playlist", ids.count)))
     }
 
     func removeSelectionFromCurrentPlaylist() {
@@ -2089,7 +2087,9 @@ final class LibraryController: ObservableObject {
         selection.removeAll()
         persistPlaylists(device: device)
         if removed > 0 {
-            setStatus(.success(removed == 1 ? "Rimossa 1 traccia dalla playlist" : "Rimosse \(removed) tracce dalla playlist"))
+            setStatus(.success(removed == 1
+                ? L10n.t("status.removed_from_playlist_one")
+                : L10n.tf("status.removed_from_playlist_many", removed)))
         }
     }
 
@@ -2126,7 +2126,9 @@ final class LibraryController: ObservableObject {
             selection.removeAll()
             refreshLibraryCache(for: device)
             setStatus(.success(
-                count == 1 ? "Eliminata 1 canzone dall’iPod" : "Eliminate \(count) canzoni dall’iPod"
+                count == 1
+                    ? L10n.t("status.deleted_song_one")
+                    : L10n.tf("status.deleted_song_many", count)
             ))
         } catch {
             setStatus(.failure(error.localizedDescription))
@@ -2137,7 +2139,7 @@ final class LibraryController: ObservableObject {
         do {
             try sync.savePlaylists(tracks: &tracks, playlists: playlists, dbVersion: dbVersion, device: device)
             refreshLibraryCache(for: device)
-            setStatus(.success("Playlist salvate"))
+            setStatus(.success(L10n.t("status.playlists_saved")))
         } catch {
             setStatus(.failure(error.localizedDescription))
         }

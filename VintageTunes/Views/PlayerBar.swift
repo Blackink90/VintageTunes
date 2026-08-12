@@ -6,14 +6,16 @@ struct LibraryStatsBar: View {
     var body: some View {
         if library.connectedDevice != nil {
             HStack(spacing: 0) {
-                stat(library.statsTracks.count == 1 ? "1 canzone" : "\(library.statsTracks.count) canzoni")
+                stat(library.statsTracks.count == 1
+                        ? L10n.t("stats.song_one")
+                        : L10n.tf("stats.song_many", library.statsTracks.count))
                 separator
                 stat(durationLabel)
                 separator
                 stat(sizeLabel)
                 Spacer(minLength: 8)
                 if !library.selection.isEmpty {
-                    Text("selezione")
+                    Text(L10n.t("stats.selection_badge"))
                         .font(.custom("Avenir Next", size: 10).weight(.semibold))
                         .foregroundStyle(VTTheme.amber.opacity(0.9))
                         .padding(.horizontal, 8)
@@ -38,8 +40,8 @@ struct LibraryStatsBar: View {
             }
             .help(
                 library.selection.isEmpty
-                    ? "Totali della lista corrente"
-                    : "Clic per deselezionare e vedere i totali"
+                    ? L10n.t("stats.help_totals")
+                    : L10n.t("stats.help_clear_selection")
             )
         }
     }
@@ -94,7 +96,7 @@ struct PlayerBar: View {
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .help(playback.isPlaying ? "Pausa" : "Riproduci")
+                .help(playback.isPlaying ? L10n.t("player.pause") : L10n.t("player.play"))
 
                 Button {
                     playback.stop()
@@ -105,7 +107,7 @@ struct PlayerBar: View {
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
-                .help("Stop")
+                .help(L10n.t("player.stop"))
 
                 VStack(alignment: .leading, spacing: 4) {
                     MarqueeText(
@@ -140,12 +142,12 @@ struct PlayerBar: View {
                         library.setStarRating(stars, for: [track.id])
                     }
                     if livePlays > 0 {
-                        Text("\(livePlays) ascolti")
+                        Text(L10n.tf("player.play_count", Int(livePlays)))
                             .font(.custom("Avenir Next", size: 10))
                             .foregroundStyle(VTTheme.textSecondary)
                     }
                 }
-                .help("Valutazione e ascolti")
+                .help(L10n.t("player.rating_plays_help"))
 
                 Text("\(playback.currentTimeLabel) / \(playback.durationLabel)")
                     .font(.custom("Avenir Next", size: 11).monospacedDigit())
@@ -165,7 +167,7 @@ struct PlayerBar: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .help("Apri iPod Now Playing")
+                .help(L10n.t("player.open_ipod_preview"))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -385,7 +387,7 @@ struct PlaybackScrubber: View {
                     dragProgress = nil
                 }
         )
-        .help("Trascina per spostarti nel brano")
+        .help(L10n.t("player.scrub_help"))
     }
 
     @ViewBuilder

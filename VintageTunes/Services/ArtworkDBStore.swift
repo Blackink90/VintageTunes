@@ -9,9 +9,9 @@ enum ArtworkDBError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unsupportedDevice: return "Artwork sul dispositivo non supportato per questo modello."
-        case .invalidImage: return "Immagine cover non valida."
-        case .writeFailed(let m): return "Scrittura ArtworkDB fallita: \(m)"
+        case .unsupportedDevice: return L10n.t("error.artwork.unsupported")
+        case .invalidImage: return L10n.t("error.artwork.invalid_image")
+        case .writeFailed(let m): return L10n.tf("error.artwork.write_failed", m)
         }
     }
 }

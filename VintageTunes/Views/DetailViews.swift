@@ -9,7 +9,7 @@ struct DetailContainer: View {
         Group {
             switch library.selectedSection {
             case .songs:
-                TrackTableView(title: "Canzoni")
+                TrackTableView(title: L10n.t("section.songs"))
             case .artists:
                 ArtistsBrowserView()
             case .albums:
@@ -58,7 +58,7 @@ struct TrackTableView: View {
                 }
                 .width(36)
 
-                TableColumn("Titolo") { track in
+                TableColumn(L10n.t("table.column_title")) { track in
                     HStack(spacing: 6) {
                         if library.playback.nowPlaying?.id == track.id {
                             Image(systemName: library.playback.isPlaying ? "speaker.wave.2.fill" : "speaker.fill")
@@ -72,25 +72,25 @@ struct TrackTableView: View {
                 }
                 .width(min: 160, ideal: 220)
 
-                TableColumn("Artista") { track in
+                TableColumn(L10n.t("table.column_artist")) { track in
                     Text(track.displayArtist)
                         .foregroundStyle(VTTheme.textSecondary)
                 }
                 .width(min: 120, ideal: 160)
 
-                TableColumn("Album") { track in
+                TableColumn(L10n.t("table.column_album")) { track in
                     Text(track.displayAlbum)
                         .foregroundStyle(VTTheme.textSecondary)
                 }
                 .width(min: 120, ideal: 160)
 
-                TableColumn("Genere") { track in
+                TableColumn(L10n.t("table.column_genre")) { track in
                     Text(track.displayGenre)
                         .foregroundStyle(VTTheme.textSecondary)
                 }
                 .width(min: 90, ideal: 120)
 
-                TableColumn("Anno") { track in
+                TableColumn(L10n.t("table.column_year")) { track in
                     Text(track.displayYear)
                         .monospacedDigit()
                         .foregroundStyle(VTTheme.textSecondary)
@@ -108,14 +108,14 @@ struct TrackTableView: View {
                 }
                 .width(88)
 
-                TableColumn("Ascolti") { track in
+                TableColumn(L10n.t("table.column_plays")) { track in
                     Text(track.displayPlayCount)
                         .monospacedDigit()
                         .foregroundStyle(VTTheme.textSecondary)
                 }
                 .width(56)
 
-                TableColumn("Durata") { track in
+                TableColumn(L10n.t("table.column_duration")) { track in
                     Text(track.durationLabel)
                         .monospacedDigit()
                         .foregroundStyle(VTTheme.textSecondary)
@@ -157,16 +157,16 @@ struct TrackTableView: View {
             }
             .contextMenu(forSelectionType: Track.ID.self) { ids in
                 if !ids.isEmpty {
-                    Button("Riproduci") {
+                    Button(L10n.t("track.play")) {
                         if let id = ids.first, let track = library.tracks.first(where: { $0.id == id }) {
                             library.playTrack(track)
                         }
                     }
-                    Button("Modifica informazioni…") {
+                    Button(L10n.t("track.edit_info")) {
                         library.beginEditingTracks(ids: Array(ids))
                     }
-                    Menu("Valutazione") {
-                        Button("Nessuna stella") {
+                    Menu(L10n.t("track.rating_menu")) {
+                        Button(L10n.t("track.rating_none")) {
                             library.setStarRating(0, for: Array(ids))
                         }
                         ForEach(1...5, id: \.self) { stars in
@@ -175,14 +175,14 @@ struct TrackTableView: View {
                             }
                         }
                     }
-                    Button("Ricarica copertina") {
+                    Button(L10n.t("track.reload_artwork")) {
                         library.refreshArtwork(for: Array(ids))
                     }
-                    Button("Mostra in Finder") {
+                    Button(L10n.t("track.show_in_finder")) {
                         library.selection = Set(ids)
                         library.revealSelectedTracksInFinder()
                     }
-                    Menu("Aggiungi a playlist") {
+                    Menu(L10n.t("track.add_to_playlist")) {
                         ForEach(library.sidebarPlaylists) { playlist in
                             Button(playlist.displayName) {
                                 library.selection = Set(ids)
@@ -194,12 +194,12 @@ struct TrackTableView: View {
                        let pid = library.selectedPlaylistID,
                        let current = library.playlists.first(where: { $0.id == pid }),
                        !current.isMaster {
-                        Button("Rimuovi dalla playlist") {
+                        Button(L10n.t("track.remove_from_playlist")) {
                             library.selection = Set(ids)
                             library.removeSelectionFromCurrentPlaylist()
                         }
                     }
-                    Button("Elimina dall'iPod", role: .destructive) {
+                    Button(L10n.t("track.delete_from_ipod"), role: .destructive) {
                         library.selection = Set(ids)
                         library.requestDeleteSelectedTracks()
                     }
@@ -231,7 +231,7 @@ struct TrackTableView: View {
                 Button {
                     library.browseBack()
                 } label: {
-                    Label("Indietro", systemImage: "chevron.left")
+                    Label(L10n.t("common.back"), systemImage: "chevron.left")
                         .font(.custom("Avenir Next", size: 13).weight(.semibold))
                 }
                 .buttonStyle(.borderless)
@@ -251,7 +251,7 @@ struct TrackTableView: View {
                 library.clearListSelection()
             }
             Spacer()
-            TextField("Cerca", text: $library.searchText)
+            TextField(L10n.t("common.search"), text: $library.searchText)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 220)
         }
@@ -275,7 +275,7 @@ struct ArtistsBrowserView: View {
         } else if let artist = library.browseArtist {
             AlbumGridView(
                 title: artist,
-                subtitle: "\(library.albums(forArtist: artist).count) album",
+                subtitle: L10n.tf("browse.album_count", library.albums(forArtist: artist).count),
                 albums: library.albums(forArtist: artist),
                 showsBackButton: true,
                 showsArtistOnTile: false
@@ -294,8 +294,8 @@ struct AlbumsBrowserView: View {
             TrackTableView(title: album.name, showsBackButton: true)
         } else {
             AlbumGridView(
-                title: "Album",
-                subtitle: "\(library.albums.count) album",
+                title: L10n.t("section.albums"),
+                subtitle: L10n.tf("browse.album_count", library.albums.count),
                 albums: library.albums,
                 showsBackButton: false,
                 showsArtistOnTile: true
@@ -313,7 +313,7 @@ struct GenresBrowserView: View {
         } else if let genre = library.browseGenre {
             ArtistListView(
                 title: genre,
-                subtitle: "\(library.artists(forGenre: genre).count) artisti",
+                subtitle: L10n.tf("browse.artist_count", library.artists(forGenre: genre).count),
                 artists: library.artists(forGenre: genre),
                 showsBackButton: true,
                 genreFilter: genre
@@ -326,7 +326,7 @@ struct GenresBrowserView: View {
 
 struct ArtistListView: View {
     @EnvironmentObject private var library: LibraryController
-    var title: String = "Artisti"
+    var title: String = L10n.t("section.artists")
     var subtitle: String? = nil
     var artists: [(name: String, count: Int)]? = nil
     var showsBackButton: Bool = false
@@ -339,7 +339,7 @@ struct ArtistListView: View {
                     Button {
                         library.browseBack()
                     } label: {
-                        Label("Indietro", systemImage: "chevron.left")
+                        Label(L10n.t("common.back"), systemImage: "chevron.left")
                             .font(.custom("Avenir Next", size: 13).weight(.semibold))
                     }
                     .buttonStyle(.borderless)
@@ -350,12 +350,12 @@ struct ArtistListView: View {
                     Text(title)
                         .font(VTTheme.displayFont(size: 24))
                         .foregroundStyle(VTTheme.textPrimary)
-                    Text(subtitle ?? "\(rows.count) artisti")
+                    Text(subtitle ?? L10n.tf("browse.artist_count", rows.count))
                         .font(.custom("Avenir Next", size: 12))
                         .foregroundStyle(VTTheme.textSecondary)
                 }
                 Spacer()
-                TextField("Cerca", text: $library.searchText)
+                TextField(L10n.t("common.search"), text: $library.searchText)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
             }
@@ -418,15 +418,15 @@ struct GenreGridView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Generi")
+                    Text(L10n.t("section.genres"))
                         .font(VTTheme.displayFont(size: 24))
                         .foregroundStyle(VTTheme.textPrimary)
-                    Text("\(filteredGenres.count) generi")
+                    Text(L10n.tf("browse.genre_count", filteredGenres.count))
                         .font(.custom("Avenir Next", size: 12))
                         .foregroundStyle(VTTheme.textSecondary)
                 }
                 Spacer()
-                TextField("Cerca", text: $library.searchText)
+                TextField(L10n.t("common.search"), text: $library.searchText)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
             }
@@ -439,10 +439,10 @@ struct GenreGridView: View {
                     Image(systemName: "guitars")
                         .font(.system(size: 36, weight: .light))
                         .foregroundStyle(VTTheme.amber)
-                    Text("Nessun genere nei brani")
+                    Text(L10n.t("genres.empty_title"))
                         .font(.custom("Avenir Next", size: 14).weight(.medium))
                         .foregroundStyle(VTTheme.textSecondary)
-                    Text("I generi compaiono qui quando i tag delle canzoni li contengono.")
+                    Text(L10n.t("genres.empty_body"))
                         .font(.custom("Avenir Next", size: 12))
                         .foregroundStyle(VTTheme.textSecondary.opacity(0.8))
                         .multilineTextAlignment(.center)
@@ -516,7 +516,11 @@ struct GenreTile: View {
                     .foregroundStyle(VTTheme.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                Text("\(genre.artistCount) artisti · \(LibraryStats.trackCountLabel(genre.trackCount))")
+                Text(L10n.tf(
+                    "genres.row_subtitle",
+                    genre.artistCount,
+                    LibraryStats.trackCountLabel(genre.trackCount)
+                ))
                     .font(.custom("Avenir Next", size: 10))
                     .foregroundStyle(VTTheme.textSecondary.opacity(0.75))
                     .lineLimit(1)
@@ -567,7 +571,7 @@ struct AlbumGridView: View {
                     Button {
                         library.browseBack()
                     } label: {
-                        Label("Indietro", systemImage: "chevron.left")
+                        Label(L10n.t("common.back"), systemImage: "chevron.left")
                             .font(.custom("Avenir Next", size: 13).weight(.semibold))
                     }
                     .buttonStyle(.borderless)
@@ -583,7 +587,7 @@ struct AlbumGridView: View {
                         .foregroundStyle(VTTheme.textSecondary)
                 }
                 Spacer()
-                TextField("Cerca", text: $library.searchText)
+                TextField(L10n.t("common.search"), text: $library.searchText)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
             }
@@ -767,7 +771,7 @@ struct PlaylistDetailView: View {
             TrackTableView(title: playlist.displayName)
                 .toolbar {
                     ToolbarItemGroup {
-                        Button("Rimuovi dalla playlist") {
+                        Button(L10n.t("track.remove_from_playlist")) {
                             library.removeSelectionFromCurrentPlaylist()
                         }
                         .disabled(library.selection.isEmpty || playlist.isMaster)
@@ -778,9 +782,9 @@ struct PlaylistDetailView: View {
                 Image(systemName: "list.bullet.rectangle")
                     .font(.system(size: 36))
                     .foregroundStyle(VTTheme.amber)
-                Text("Crea o seleziona una playlist")
+                Text(L10n.t("playlists.empty_title"))
                     .font(VTTheme.displayFont(size: 22))
-                Text("Usa il + nella sidebar. Poi trascina le canzoni o aggiungile dal menu contestuale.")
+                Text(L10n.t("playlists.empty_body"))
                     .foregroundStyle(VTTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 360)
@@ -799,13 +803,13 @@ struct VideosView: View {
             if library.videoTracks.isEmpty {
                 emptyState
             } else {
-                TrackTableView(title: "Video")
+                TrackTableView(title: L10n.t("section.videos"))
             }
         }
         .background(Color.clear)
         .overlay(alignment: .topTrailing) {
             if isTargeted {
-                Text("Rilascia per convertire e importare")
+                Text(L10n.t("videos.drop_hint"))
                     .font(.custom("Avenir Next", size: 12).weight(.semibold))
                     .foregroundStyle(VTTheme.amber)
                     .padding(16)
@@ -819,10 +823,10 @@ struct VideosView: View {
         }
         .toolbar {
             ToolbarItemGroup {
-                Button("Aggiungi video…") {
+                Button(L10n.t("videos.add")) {
                     library.chooseVideosToImport()
                 }
-                Button("Elimina dall'iPod", role: .destructive) {
+                Button(L10n.t("track.delete_from_ipod"), role: .destructive) {
                     library.requestDeleteSelectedTracks()
                 }
                 .disabled(library.selection.isEmpty)
@@ -836,17 +840,17 @@ struct VideosView: View {
             Image(systemName: "film")
                 .font(.system(size: 42, weight: .light))
                 .foregroundStyle(VTTheme.amber)
-            Text("Nessun video sull’iPod")
+            Text(L10n.t("videos.empty_title"))
                 .font(VTTheme.displayFont(size: 22))
-            Text("Trascina un video qui: verrà convertito in H.264/AAC\ncompatibile con l’iPod Video e salvato come Film.")
+            Text(L10n.t("videos.empty_body"))
                 .font(.custom("Avenir Next", size: 13))
                 .foregroundStyle(VTTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 440)
-            Text("Serve ffmpeg (`brew install ffmpeg`).")
+            Text(L10n.t("videos.ffmpeg_required"))
                 .font(.custom("Avenir Next", size: 11))
                 .foregroundStyle(VTTheme.textSecondary.opacity(0.85))
-            Button("Aggiungi video…") {
+            Button(L10n.t("videos.add")) {
                 library.chooseVideosToImport()
             }
             .buttonStyle(.borderedProminent)
@@ -892,10 +896,10 @@ struct PhotosView: View {
         }
         .toolbar {
             ToolbarItemGroup {
-                Button("Aggiungi foto…") {
+                Button(L10n.t("photos.add")) {
                     library.choosePhotosToImport()
                 }
-                Button("Elimina", role: .destructive) {
+                Button(L10n.t("common.delete"), role: .destructive) {
                     library.deleteSelectedPhotos()
                 }
                 .disabled(library.photoSelection.isEmpty)
@@ -909,13 +913,15 @@ struct PhotosView: View {
                 Text(library.photoAlbumName)
                     .font(VTTheme.displayFont(size: 24))
                     .foregroundStyle(VTTheme.textPrimary)
-                Text(library.photos.count == 1 ? "1 foto" : "\(library.photos.count) foto")
+                Text(library.photos.count == 1
+                        ? L10n.t("photos.count_one")
+                        : L10n.tf("photos.count_many", library.photos.count))
                     .font(.custom("Avenir Next", size: 12))
                     .foregroundStyle(VTTheme.textSecondary)
             }
             Spacer()
             if isTargeted {
-                Text("Rilascia per aggiungere")
+                Text(L10n.t("photos.drop_hint"))
                     .font(.custom("Avenir Next", size: 12).weight(.semibold))
                     .foregroundStyle(VTTheme.amber)
             }
@@ -929,14 +935,14 @@ struct PhotosView: View {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 42, weight: .light))
                 .foregroundStyle(VTTheme.amber)
-            Text("Nessuna foto sull’iPod")
+            Text(L10n.t("photos.empty_title"))
                 .font(VTTheme.displayFont(size: 22))
-            Text("Trascina immagini qui oppure usa «Aggiungi foto…».\nVisibili nel menu Foto del Video 5G/5.5G.")
+            Text(L10n.t("photos.empty_body"))
                 .font(.custom("Avenir Next", size: 13))
                 .foregroundStyle(VTTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
-            Button("Aggiungi foto…") {
+            Button(L10n.t("photos.add")) {
                 library.choosePhotosToImport()
             }
             .buttonStyle(.borderedProminent)
@@ -985,7 +991,7 @@ struct PhotosView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Elimina", role: .destructive) {
+            Button(L10n.t("common.delete"), role: .destructive) {
                 library.photoSelection = [photo.id]
                 library.deleteSelectedPhotos()
             }
@@ -999,10 +1005,10 @@ struct DropImportView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Text("Aggiungi musica")
+            Text(L10n.t("dropzone.title"))
                 .font(VTTheme.displayFont(size: 28))
 
-            Text("Trascina file o cartelle qui (o sulla lista canzoni).\nVerranno cercati tutti i file audio, anche nelle sottocartelle.")
+            Text(L10n.t("dropzone.body"))
                 .font(.custom("Avenir Next", size: 14))
                 .foregroundStyle(VTTheme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -1025,9 +1031,9 @@ struct DropImportView: View {
                         .font(.system(size: 42, weight: .light))
                         .foregroundStyle(VTTheme.amber)
                         .symbolEffect(.pulse, options: .repeating, isActive: isTargeted)
-                    Text(isTargeted ? "Rilascia per sincronizzare" : "File o cartelle")
+                    Text(isTargeted ? L10n.t("dropzone.release_to_sync") : L10n.t("dropzone.files_or_folders"))
                         .font(.custom("Avenir Next", size: 16).weight(.semibold))
-                    Text("mp3 · m4a · wav · aiff · flac (conversione) · …")
+                    Text(L10n.t("dropzone.formats"))
                         .font(.custom("Avenir Next", size: 12))
                         .foregroundStyle(VTTheme.textSecondary)
                 }
@@ -1042,7 +1048,7 @@ struct DropImportView: View {
             Button {
                 library.chooseFolderToImport()
             } label: {
-                Label("Scegli cartella…", systemImage: "folder")
+                Label(L10n.t("dropzone.choose_folder"), systemImage: "folder")
                     .font(.custom("Avenir Next", size: 14).weight(.semibold))
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
@@ -1051,7 +1057,7 @@ struct DropImportView: View {
             .tint(VTTheme.amber)
             .disabled(library.connectedDevice == nil)
 
-            Text("Le tracce finiscono nella libreria; per una playlist usa «Aggiungi a playlist».")
+            Text(L10n.t("dropzone.playlist_hint"))
                 .font(.custom("Avenir Next", size: 12))
                 .foregroundStyle(VTTheme.textSecondary)
         }
@@ -1067,29 +1073,44 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Aspetto") {
-                Picker("Tema", selection: $settings.appearanceMode) {
+            Section(L10n.t("language.section")) {
+                Picker(L10n.t("language.section"), selection: $settings.appLanguage) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text(L10n.t("language.help"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Text(L10n.t("language.restart_hint"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(L10n.t("settings.appearance")) {
+                Picker(L10n.t("settings.theme"), selection: $settings.appearanceMode) {
                     ForEach(AppearanceMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
-                Text("Automatica segue le impostazioni di sistema di macOS.")
+                Text(L10n.t("settings.theme_help"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Accesso all’iPod") {
-                Text("Se macOS chiede il permesso a ogni avvio, in Xcode aggiungi il tuo Apple ID (Settings → Accounts) e abilita Signing Team sul target: così la firma resta stabile e il consenso viene ricordato.")
+            Section(L10n.t("settings.ipod_access")) {
+                Text(L10n.t("settings.signing_help"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                Text("In Impostazioni di sistema → Privacy e sicurezza, concedi a VintageTunes l’accesso ai volumi rimovibili.")
+                Text(L10n.t("settings.removable_volumes_help"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Sincronizzazione") {
-                Picker("Modalità", selection: $settings.syncMode) {
+            Section(L10n.t("settings.sync")) {
+                Picker(L10n.t("settings.sync_mode"), selection: $settings.syncMode) {
                     ForEach(SyncMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
@@ -1105,7 +1126,7 @@ struct SettingsView: View {
                 if settings.syncMode == .automatic {
                     HStack(spacing: 8) {
                         TextField(
-                            "Seleziona una cartella…",
+                            L10n.t("settings.sync_folder_placeholder"),
                             text: Binding(
                                 get: { settings.syncFolderDisplayPath ?? "" },
                                 set: { newValue in
@@ -1118,9 +1139,9 @@ struct SettingsView: View {
                             )
                         )
                         .textFieldStyle(.roundedBorder)
-                        .help("Cartella osservata per le nuove canzoni")
+                        .help(L10n.t("settings.sync_folder_help"))
 
-                        Button("Sfoglia…") {
+                        Button(L10n.t("settings.browse")) {
                             // Aspetta il ciclo UI: un NSOpenPanel dentro Settings altrimenti fallisce spesso.
                             DispatchQueue.main.async {
                                 if settings.chooseSyncFolder() {
@@ -1129,41 +1150,41 @@ struct SettingsView: View {
                                 }
                             }
                         }
-                        .help("Scegli la cartella di sincronizzazione")
+                        .help(L10n.t("settings.choose_sync_folder_help"))
                     }
 
                     if settings.hasSyncFolder {
                         HStack {
                             Spacer()
-                            Button("Rimuovi cartella", role: .destructive) {
+                            Button(L10n.t("settings.remove_folder"), role: .destructive) {
                                 settings.clearSyncFolder()
                                 library.refreshAutoSyncWatching()
                             }
                             .buttonStyle(.borderless)
                         }
                     } else {
-                        Text("Scegli una cartella: con l’iPod collegato verranno proposte le canzoni mancanti.")
+                        Text(L10n.t("settings.sync_folder_empty_help"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
 
-                    Text("Le nuove canzoni nella cartella vengono rilevate anche mentre l’app è aperta.")
+                    Text(L10n.t("settings.sync_watch_help"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("In modalità manuale importa con trascina-e-rilascia o da File → Importa cartella.")
+                    Text(L10n.t("settings.sync_manual_help"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Dispositivo") {
+            Section(L10n.t("settings.device")) {
                 if let device = library.connectedDevice {
                     HStack(spacing: 8) {
-                        TextField("Nome iPod", text: $deviceNameDraft)
+                        TextField(L10n.t("settings.device_name"), text: $deviceNameDraft)
                             .textFieldStyle(.roundedBorder)
                             .onSubmit { applyDeviceName() }
-                        Button("Rinomina") {
+                        Button(L10n.t("settings.rename")) {
                             applyDeviceName()
                         }
                         .disabled(
@@ -1171,69 +1192,76 @@ struct SettingsView: View {
                                 || deviceNameDraft.trimmingCharacters(in: .whitespacesAndNewlines) == device.name
                         )
                     }
-                    Text("Come in iTunes: cambia il nome del volume (visibile anche in Finder).")
+                    Text(L10n.t("settings.rename_help"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
-                    LabeledContent("Modello", value: device.modelHint)
+                    LabeledContent(L10n.t("settings.model"), value: device.modelHint)
                     LabeledContent(
-                        "Firmware",
+                        L10n.t("settings.firmware"),
                         value: device.isSimulated
-                            ? "Simulato (demo)"
-                            : (device.firmwareMode == .rockbox ? "Rockbox" : "Stock Apple")
+                            ? L10n.t("settings.firmware_simulated")
+                            : (device.firmwareMode == .rockbox
+                                ? L10n.t("device.firmware_rockbox")
+                                : L10n.t("settings.firmware_stock_apple"))
                     )
-                    LabeledContent("Database", value: device.hasDatabase ? "iTunesDB presente" : "Assente")
+                    LabeledContent(
+                        L10n.t("settings.database"),
+                        value: device.hasDatabase
+                            ? L10n.t("settings.database_present")
+                            : L10n.t("settings.database_absent")
+                    )
                     if device.isSimulated {
-                        Button("Azzera demo") { library.startDemo(reset: true) }
-                        Button("Mostra cartella demo") { library.revealDemoFolder() }
+                        Button(L10n.t("settings.reset_demo")) { library.startDemo(reset: true) }
+                        Button(L10n.t("settings.show_demo_folder")) { library.revealDemoFolder() }
                     }
-                    Button("Mostra file convertiti") { library.revealConvertedFolder() }
-                    Button("Mostra musica sull'iPod") { library.revealMusicFolder() }
-                    Button("Riallinea size/durate e ripulisci M4A…") {
+                    Button(L10n.t("settings.show_converted")) { library.revealConvertedFolder() }
+                    Button(L10n.t("settings.show_ipod_music")) { library.revealMusicFolder() }
+                    Button(L10n.t("settings.repair_metadata")) {
                         library.repairLibraryPlaybackMetadata()
                     }
                     .disabled(library.isImportRunning || library.isEjecting)
-                    Text("Ricalcola size e durata da ogni file sul disco, riscrive iTunesDB e toglie eventuali cover JPEG enormi embedded nei M4A (che sul 5.5G possono causare stridii).")
+                    Text(L10n.t("settings.repair_metadata_help"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Nessun iPod collegato")
-                    Button("Avvia modalità demo") { library.startDemo() }
+                    Text(L10n.t("settings.no_device"))
+                    Button(L10n.t("settings.start_demo")) { library.startDemo() }
                 }
             }
 
-            Section("Backup e ripristino") {
-                Text("Copia tutto il contenuto utente del volume (iPod_Control, Photos, play count, Artwork, preferenze, Rockbox se presente…) e il **nome** dell’iPod in un archivio `.vbk`. Utile prima di sostituire l’hard disk con una SD.")
+            Section(L10n.t("settings.backup_restore")) {
+                Text(L10n.t("settings.backup_help"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                Button("Backup totale…") {
+                Button(L10n.t("settings.full_backup")) {
                     DispatchQueue.main.async {
                         library.createFullVolumeBackup()
                     }
                 }
                 .disabled(library.connectedDevice == nil || library.connectedDevice?.isSimulated == true || library.isImportRunning || library.isEjecting)
 
-                Button("Ripristino totale da .vbk…", role: .destructive) {
+                Button(L10n.t("settings.full_restore"), role: .destructive) {
                     DispatchQueue.main.async {
                         library.chooseFullVolumeRestore()
                     }
                 }
                 .disabled(library.connectedDevice == nil || library.connectedDevice?.isSimulated == true || library.isImportRunning || library.isEjecting)
 
-                Text("Il ripristino cancella il contenuto attuale dell’iPod, lo sostituisce con il backup e ripristina anche il nome del volume (e la playlist master in Music.app). Serve spazio libero sul Mac circa quanto i dati sull’iPod.")
+                Text(L10n.t("settings.restore_help"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Formati audio") {
-                Text("Stock iPod: MP3, M4A/AAC, WAV, AIFF, ALAC")
+            Section(L10n.t("settings.audio_formats")) {
+                Text(L10n.t("settings.formats_supported"))
                     .foregroundStyle(.secondary)
-                Text("Non supportati: FLAC, OGG, WMA (il 5.5 stock non li riproduce)")
+                Text(L10n.t("settings.formats_unsupported"))
                     .foregroundStyle(.secondary)
             }
 
-            Section("Conversione audio") {
-                Picker("Chiedi conversione", selection: $settings.flacConversionAskMode) {
+            Section(L10n.t("settings.audio_conversion")) {
+                Picker(L10n.t("settings.ask_conversion"), selection: $settings.flacConversionAskMode) {
                     ForEach(FlacConversionAskMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
@@ -1244,24 +1272,24 @@ struct SettingsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
-                Picker("Formato destinazione", selection: $settings.flacConversionFormat) {
+                Picker(L10n.t("settings.conversion_format"), selection: $settings.flacConversionFormat) {
                     ForEach(FlacConversionFormat.allCases) { format in
                         Text(format.title).tag(format)
                     }
                 }
                 Text(
                     settings.flacConversionAskMode == .always
-                        ? "Con «Sempre»: usato anche per trasformare M4A↔MP3 all’import. I brani già sull’iPod non vengono toccati."
+                        ? L10n.t("settings.conversion_always_detail")
                         : settings.flacConversionAskMode == .ask
-                            ? "Preferenza suggerita; in «Chiedi» sui FLAC puoi comunque scegliere file per file. MP3 richiede ffmpeg."
-                            : "Con «No»: formato automatico senza dialogo (solo FLAC/OGG/… → destinazione). MP3 richiede ffmpeg."
+                            ? L10n.t("settings.conversion_ask_detail")
+                            : L10n.t("settings.conversion_never_detail")
                 )
                 .font(.callout)
                 .foregroundStyle(.secondary)
             }
 
-            Section("Note") {
-                Text("Su firmware stock, VintageTunes scrive iTunesDB. Prima di modifiche importanti viene creato un backup iTunesDB.vintagebackup. Su Rockbox le playlist sono file .m3u.")
+            Section(L10n.t("settings.notes")) {
+                Text(L10n.t("settings.notes_body"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -1272,22 +1300,22 @@ struct SettingsView: View {
         .onChange(of: library.connectedDevice?.id) { _, _ in syncDeviceNameDraft() }
         .onChange(of: library.connectedDevice?.name) { _, _ in syncDeviceNameDraft() }
         .confirmationDialog(
-            "Ripristinare il backup sull’iPod?",
+            L10n.t("restore.confirm_title"),
             isPresented: Binding(
                 get: { library.pendingRestore != nil },
                 set: { if !$0 { library.cancelPendingRestore() } }
             ),
             titleVisibility: .visible
         ) {
-            Button("Ripristina (cancella contenuto attuale)", role: .destructive) {
+            Button(L10n.t("restore.confirm_action"), role: .destructive) {
                 library.confirmFullVolumeRestore()
             }
-            Button("Annulla", role: .cancel) {
+            Button(L10n.t("common.cancel"), role: .cancel) {
                 library.cancelPendingRestore()
             }
         } message: {
             if let pending = library.pendingRestore {
-                Text("Verrà cancellato tutto ciò che c’è ora sul dispositivo e sostituito con:\n\n\(pending.summary)")
+                Text(L10n.tf("restore.confirm_message", pending.summary))
             }
         }
     }
@@ -1328,49 +1356,49 @@ struct TrackEditSheet: View {
             if let draft {
                 Form {
                     if !draft.isMulti {
-                        TextField("Titolo", text: draftBinding(\.title))
+                        TextField(L10n.t("track_edit.field_title"), text: draftBinding(\.title))
                             .focused($focusedField, equals: .title)
                     }
 
                     TextField(
-                        "Artista",
+                        L10n.t("track_edit.field_artist"),
                         text: draftBinding(\.artist),
                         prompt: prompt(mixed: draft.mixedArtist, current: draft.artist)
                     )
                     .focused($focusedField, equals: .artist)
 
                     TextField(
-                        "Album",
+                        L10n.t("track_edit.field_album"),
                         text: draftBinding(\.album),
                         prompt: prompt(mixed: draft.mixedAlbum, current: draft.album)
                     )
                     .focused($focusedField, equals: .album)
 
                     TextField(
-                        "Genere",
+                        L10n.t("track_edit.field_genre"),
                         text: draftBinding(\.genre),
                         prompt: prompt(mixed: draft.mixedGenre, current: draft.genre)
                     )
                     .focused($focusedField, equals: .genre)
 
                     TextField(
-                        "Numero traccia",
+                        L10n.t("track_edit.field_track_number"),
                         text: draftBinding(\.trackNumber),
                         prompt: prompt(mixed: draft.mixedTrackNumber, current: draft.trackNumber)
                     )
                     .focused($focusedField, equals: .trackNumber)
 
                     TextField(
-                        "Anno",
+                        L10n.t("track_edit.field_year"),
                         text: draftBinding(\.year),
                         prompt: prompt(mixed: draft.mixedYear, current: draft.year)
                     )
                     .focused($focusedField, equals: .year)
 
-                    LabeledContent("Valutazione") {
+                    LabeledContent(L10n.t("track_edit.field_rating")) {
                         HStack(spacing: 10) {
                             if draft.mixedRating {
-                                Text("Valori diversi")
+                                Text(L10n.t("track_edit.mixed_values"))
                                     .font(.custom("Avenir Next", size: 12))
                                     .foregroundStyle(.secondary)
                             }
@@ -1383,7 +1411,7 @@ struct TrackEditSheet: View {
                                 library.trackEditDraft?.mixedRating = false
                             }
                             if !draft.mixedRating, draft.starRating > 0 {
-                                Button("Nessuna") {
+                                Button(L10n.t("track_edit.clear_rating")) {
                                     library.trackEditDraft?.starRating = 0
                                     library.trackEditDraft?.mixedRating = false
                                 }
@@ -1392,7 +1420,7 @@ struct TrackEditSheet: View {
                         }
                     }
 
-                    LabeledContent("Copertina") {
+                    LabeledContent(L10n.t("track_edit.artwork")) {
                         HStack(alignment: .center, spacing: 12) {
                             coverThumbnail(for: draft)
                                 .frame(width: 56, height: 56)
@@ -1410,8 +1438,8 @@ struct TrackEditSheet: View {
                                 .onTapGesture {
                                     focusedField = .cover
                                 }
-                                .accessibilityLabel("Copertina")
-                                .accessibilityHint("Seleziona, poi Incolla (⌘V) per un URL immagine")
+                                .accessibilityLabel(L10n.t("track_edit.artwork"))
+                                .accessibilityHint(L10n.t("track_edit.artwork_a11y_hint"))
                                 .onPasteCommand(of: [.url, .text, .plainText]) { providers in
                                     guard focusedField == .cover else { return }
                                     handlePasteProviders(providers)
@@ -1419,7 +1447,7 @@ struct TrackEditSheet: View {
 
                             VStack(alignment: .leading, spacing: 6) {
                                 if isLoadingCoverFromURL {
-                                    Text("Scarico immagine…")
+                                    Text(L10n.t("track_edit.downloading_image"))
                                         .font(.custom("Avenir Next", size: 12))
                                         .foregroundStyle(.secondary)
                                 } else if let name = draft.coverFileName, draft.coverImageData != nil, !draft.removeManualCover {
@@ -1427,29 +1455,29 @@ struct TrackEditSheet: View {
                                         .font(.custom("Avenir Next", size: 12))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
-                                    Text("Priorità su file e ricerca online · ⌘V con URL")
+                                    Text(L10n.t("track_edit.cover_priority_hint"))
                                         .font(.custom("Avenir Next", size: 10))
                                         .foregroundStyle(.tertiary)
                                 } else {
                                     Text(draft.isMulti
-                                          ? "Stessa immagine per i brani selezionati"
-                                          : "Nessuna copertina personalizzata")
+                                          ? L10n.t("track_edit.same_cover_multi")
+                                          : L10n.t("track_edit.no_custom_cover"))
                                         .font(.custom("Avenir Next", size: 12))
                                         .foregroundStyle(.secondary)
-                                    Text("Clic sulla cover, poi ⌘V con URL immagine")
+                                    Text(L10n.t("track_edit.paste_url_hint"))
                                         .font(.custom("Avenir Next", size: 10))
                                         .foregroundStyle(.tertiary)
                                 }
 
                                 HStack(spacing: 10) {
-                                    Button("Scegli file…") {
+                                    Button(L10n.t("track_edit.choose_file")) {
                                         focusedField = .cover
                                         pickCoverImage()
                                     }
                                     .buttonStyle(.borderless)
 
                                     if draft.coverImageData != nil, !draft.removeManualCover {
-                                        Button("Rimuovi") {
+                                        Button(L10n.t("common.remove")) {
                                             library.trackEditDraft?.coverImageData = nil
                                             library.trackEditDraft?.coverFileName = nil
                                             library.trackEditDraft?.removeManualCover = true
@@ -1470,12 +1498,12 @@ struct TrackEditSheet: View {
 
             HStack {
                 Spacer()
-                Button("Annulla") {
+                Button(L10n.t("common.cancel")) {
                     library.cancelTrackEdit()
                 }
                 .keyboardShortcut(.cancelAction)
 
-                Button("Salva") {
+                Button(L10n.t("common.save")) {
                     library.saveTrackEdit()
                 }
                 .buttonStyle(.borderedProminent)
@@ -1524,7 +1552,7 @@ struct TrackEditSheet: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
               ["http", "https", "file"].contains(scheme) else {
-            library.setStatus(.failure("Appunti: nessun URL immagine"))
+            library.setStatus(.failure(L10n.t("track_edit.clipboard_no_url")))
             return
         }
         Task { await applyCover(from: url) }
@@ -1569,22 +1597,24 @@ struct TrackEditSheet: View {
             } else {
                 let (downloaded, response) = try await URLSession.shared.data(from: url)
                 if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                    library.setStatus(.failure("Download cover fallito (\(http.statusCode))"))
+                    library.setStatus(.failure(L10n.tf("track_edit.download_failed", http.statusCode)))
                     return
                 }
                 data = downloaded
             }
             guard !data.isEmpty, NSImage(data: data) != nil else {
-                library.setStatus(.failure("URL non è un’immagine valida"))
+                library.setStatus(.failure(L10n.t("track_edit.invalid_image_url")))
                 return
             }
             library.trackEditDraft?.coverImageData = data
-            library.trackEditDraft?.coverFileName = url.lastPathComponent.isEmpty ? "Da URL" : url.lastPathComponent
+            library.trackEditDraft?.coverFileName = url.lastPathComponent.isEmpty
+                ? L10n.t("track_edit.from_url")
+                : url.lastPathComponent
             library.trackEditDraft?.removeManualCover = false
             library.trackEditDraft?.coverDidChange = true
             focusedField = .cover
         } catch {
-            library.setStatus(.failure("Impossibile caricare l’immagine"))
+            library.setStatus(.failure(L10n.t("track_edit.load_image_failed")))
         }
     }
 
@@ -1596,24 +1626,24 @@ struct TrackEditSheet: View {
             panel.canChooseDirectories = false
             panel.allowsMultipleSelection = false
             panel.allowedContentTypes = [.jpeg, .png, .heic, .tiff, .gif]
-            panel.prompt = "Scegli"
-            panel.message = "Copertina personalizzata (ha priorità su file e online)"
+            panel.prompt = L10n.t("track_edit.panel_prompt")
+            panel.message = L10n.t("track_edit.panel_message")
             guard panel.runModal() == .OK, let url = panel.url else { return }
             Task { await applyCover(from: url) }
         }
     }
 
     private var headerTitle: String {
-        guard let draft else { return "Modifica informazioni" }
+        guard let draft else { return L10n.t("track_edit.title") }
         if draft.isMulti {
-            return "Modifica \(draft.trackIDs.count) brani"
+            return L10n.tf("track_edit.title_multi", draft.trackIDs.count)
         }
-        return "Modifica informazioni"
+        return L10n.t("track_edit.title")
     }
 
     private func prompt(mixed: Bool, current: String) -> Text? {
         guard isMulti, mixed, current.isEmpty else { return nil }
-        return Text("Valori diversi")
+        return Text(L10n.t("track_edit.mixed_values"))
     }
 
     private func draftBinding(_ keyPath: WritableKeyPath<TrackEditDraft, String>) -> Binding<String> {

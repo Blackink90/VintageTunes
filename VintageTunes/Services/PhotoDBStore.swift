@@ -8,9 +8,9 @@ enum PhotoDBError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unsupportedDevice: return "Foto non supportate su questo iPod."
-        case .invalidImage: return "Immagine non valida."
-        case .writeFailed(let m): return "Scrittura Photo Database fallita: \(m)"
+        case .unsupportedDevice: return L10n.t("error.photos.unsupported")
+        case .invalidImage: return L10n.t("error.photos.invalid_image")
+        case .writeFailed(let m): return L10n.tf("error.photos.write_failed", m)
         }
     }
 }

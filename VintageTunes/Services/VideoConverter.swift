@@ -9,9 +9,9 @@ enum VideoConversionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .ffmpegMissing:
-            return "Serve ffmpeg (brew install ffmpeg) per convertire i video per iPod."
+            return L10n.t("error.video.ffmpeg_missing")
         case .failed(let m): return m
-        case .cancelled: return "Conversione video annullata."
+        case .cancelled: return L10n.t("error.video.cancelled")
         }
     }
 }
@@ -242,7 +242,7 @@ enum VideoConverter {
         }
 
         let label = source.lastPathComponent
-        progress?(0, "Converto \(label) → video iPod…")
+        progress?(0, L10n.tf("video.convert_start", label))
 
         let scale = "scale=\(profile.maxWidth):\(profile.maxHeight):force_original_aspect_ratio=decrease"
         let pad = "pad=\(profile.maxWidth):\(profile.maxHeight):(ow-iw)/2:(oh-ih)/2"
@@ -314,7 +314,7 @@ enum VideoConverter {
                                 let pct = Int((fraction * 100).rounded())
                                 if pct != lastReported {
                                     lastReported = pct
-                                    progress?(fraction, "Conversione \(label) · \(pct)%")
+                                    progress?(fraction, L10n.tf("video.convert_percent", label, pct))
                                 }
                             } else {
                                 // Durata sconosciuta: avanza la barra in modo blando e mostra tempo elaborato.
@@ -323,13 +323,13 @@ enum VideoConverter {
                                 if pct != lastReported {
                                     lastReported = pct
                                     let clock = Self.formatClock(elapsed)
-                                    progress?(soft, "Conversione \(label) · \(clock)")
+                                    progress?(soft, L10n.tf("video.convert_clock", label, clock))
                                 }
                             }
                         }
                         if text.contains("progress=end"), lastReported < 100 {
                             lastReported = 100
-                            progress?(1, "Conversione \(label) · 100%")
+                            progress?(1, L10n.tf("video.convert_done", label))
                         }
                     }
                 }
@@ -356,7 +356,7 @@ enum VideoConverter {
                                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                             let tail = err.split(separator: "\n").suffix(4).joined(separator: " ")
                             cont.resume(throwing: VideoConversionError.failed(
-                                tail.isEmpty ? "Conversione video fallita" : String(tail)
+                                tail.isEmpty ? L10n.t("error.video.failed") : String(tail)
                             ))
                         }
                     }
@@ -381,7 +381,7 @@ enum VideoConverter {
         let dest = tempDir.appendingPathComponent("\(UUID().uuidString).m4v")
         try? fm.removeItem(at: dest)
         try fm.copyItem(at: archive, to: dest)
-        progress?(1, "Conversione \(label) · 100%")
+        progress?(1, L10n.tf("video.convert_done", label))
         return dest
     }
 

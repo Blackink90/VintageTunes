@@ -13,19 +13,19 @@ enum iPodBackupError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .noDevice:
-            return "Collega un iPod per il backup o il ripristino."
+            return L10n.t("error.backup.no_device")
         case .simulatedDevice:
-            return "Il backup totale non è disponibile in modalità demo."
+            return L10n.t("error.backup.demo")
         case .cancelled:
-            return "Operazione annullata."
+            return L10n.t("error.backup.cancelled")
         case .notEnoughSpace(let need, let available):
             let n = ByteCountFormatter.string(fromByteCount: need, countStyle: .file)
             let a = ByteCountFormatter.string(fromByteCount: available, countStyle: .file)
-            return "Spazio insufficiente sul Mac: servono circa \(n), disponibili \(a)."
+            return L10n.tf("error.backup.not_enough_space", n, a)
         case .invalidArchive:
-            return "File .vbk non valido o corrotto."
+            return L10n.t("error.backup.invalid_archive")
         case .unsupportedVersion(let v):
-            return "Versione backup non supportata (\(v)). Aggiorna VintageTunes."
+            return L10n.tf("error.backup.unsupported_version", v)
         case .failed(let m):
             return m
         }
@@ -85,7 +85,7 @@ enum iPodVolumeBackup {
 
         let fm = FileManager.default
         let volume = device.volumeURL.standardizedFileURL
-        progress(Progress(fraction: 0.01, message: "Analizzo il contenuto dell’iPod…"))
+        progress(Progress(fraction: 0.01, message: L10n.t("backup.analyzing")))
 
         let entries = try collectEntries(from: volume, isCancelled: isCancelled)
         let totalBytes = entries.reduce(Int64(0)) { $0 + $1.size }
@@ -99,7 +99,7 @@ enum iPodVolumeBackup {
         let volumeRoot = stagingRoot.appendingPathComponent("volume", isDirectory: true)
         try fm.createDirectory(at: volumeRoot, withIntermediateDirectories: true)
 
-        progress(Progress(fraction: 0.03, message: "Copio \(fileCount) elementi…"))
+        progress(Progress(fraction: 0.03, message: L10n.tf("backup.copying_count", fileCount)))
 
         var copied: Int64 = 0
         for (index, entry) in entries.enumerated() {
@@ -115,7 +115,12 @@ enum iPodVolumeBackup {
                 let frac = 0.03 + 0.72 * (Double(copied) / Double(max(totalBytes, 1)))
                 progress(Progress(
                     fraction: min(0.75, frac),
-                    message: "Copio \(index + 1)/\(fileCount) · \(ByteCountFormatter.string(fromByteCount: copied, countStyle: .file))"
+                    message: L10n.tf(
+                        "backup.copying_progress",
+                        index + 1,
+                        fileCount,
+                        ByteCountFormatter.string(fromByteCount: copied, countStyle: .file)
+                    )
                 ))
             }
         }
@@ -138,7 +143,7 @@ enum iPodVolumeBackup {
         try manifestData.write(to: stagingRoot.appendingPathComponent("manifest.json"), options: .atomic)
 
         if isCancelled() { throw iPodBackupError.cancelled }
-        progress(Progress(fraction: 0.78, message: "Creo archivio .vbk…"))
+        progress(Progress(fraction: 0.78, message: L10n.t("backup.creating_archive")))
 
         let tempArchive = stagingRoot.deletingLastPathComponent()
             .appendingPathComponent("\(UUID().uuidString).zip")
@@ -151,7 +156,7 @@ enum iPodVolumeBackup {
             try fm.removeItem(at: destination)
         }
         try fm.moveItem(at: tempArchive, to: destination)
-        progress(Progress(fraction: 1, message: "Backup completato"))
+        progress(Progress(fraction: 1, message: L10n.t("backup.completed")))
     }
 
     // MARK: - Restore
@@ -181,7 +186,7 @@ enum iPodVolumeBackup {
 
         let fm = FileManager.default
         let volume = device.volumeURL.standardizedFileURL
-        progress(Progress(fraction: 0.02, message: "Leggo archivio .vbk…"))
+        progress(Progress(fraction: 0.02, message: L10n.t("restore.reading_archive")))
 
         let extractRoot = try makeStagingDirectory(near: archive)
         defer { try? fm.removeItem(at: extractRoot) }
@@ -197,14 +202,14 @@ enum iPodVolumeBackup {
         }
 
         let payloadRoot = try findVolumePayload(in: extractRoot)
-        progress(Progress(fraction: 0.12, message: "Svuoto il volume (contenuto utente)…"))
+        progress(Progress(fraction: 0.12, message: L10n.t("restore.wiping")))
         try wipeUserContent(on: volume, isCancelled: isCancelled)
 
         let restoreEntries = try collectEntries(from: payloadRoot, isCancelled: isCancelled)
         let totalBytes = max(1, restoreEntries.reduce(Int64(0)) { $0 + $1.size })
         var copied: Int64 = 0
 
-        progress(Progress(fraction: 0.18, message: "Ripristino file…"))
+        progress(Progress(fraction: 0.18, message: L10n.t("restore.restoring_files")))
         for (index, entry) in restoreEntries.enumerated() {
             if isCancelled() { throw iPodBackupError.cancelled }
             let dest = volume.appendingPathComponent(entry.relativePath)
@@ -218,7 +223,12 @@ enum iPodVolumeBackup {
                 let frac = 0.18 + 0.80 * (Double(copied) / Double(totalBytes))
                 progress(Progress(
                     fraction: min(0.98, frac),
-                    message: "Ripristino \(index + 1)/\(restoreEntries.count) · \(ByteCountFormatter.string(fromByteCount: copied, countStyle: .file))"
+                    message: L10n.tf(
+                        "restore.progress",
+                        index + 1,
+                        restoreEntries.count,
+                        ByteCountFormatter.string(fromByteCount: copied, countStyle: .file)
+                    )
                 ))
             }
         }
@@ -227,7 +237,7 @@ enum iPodVolumeBackup {
         let restoredName = manifest.deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !restoredName.isEmpty {
             if isCancelled() { throw iPodBackupError.cancelled }
-            progress(Progress(fraction: 0.99, message: "Ripristino nome «\(restoredName)»…"))
+            progress(Progress(fraction: 0.99, message: L10n.tf("restore.renaming", restoredName)))
             do {
                 var volumeURL = volume
                 var values = URLResourceValues()
@@ -238,7 +248,7 @@ enum iPodVolumeBackup {
             }
         }
 
-        progress(Progress(fraction: 1, message: "Ripristino completato"))
+        progress(Progress(fraction: 1, message: L10n.t("restore.completed")))
     }
 
     // MARK: - Internals
@@ -260,7 +270,7 @@ enum iPodVolumeBackup {
             includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .isSymbolicLinkKey],
             options: [.skipsPackageDescendants]
         ) else {
-            throw iPodBackupError.failed("Impossibile elencare \(root.path)")
+            throw iPodBackupError.failed(L10n.tf("error.backup.list_failed", root.path))
         }
 
         let rootPath = root.standardizedFileURL.path
@@ -360,7 +370,7 @@ enum iPodVolumeBackup {
         guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: archive.path) else {
             let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            throw iPodBackupError.failed(msg.isEmpty ? "Creazione archivio fallita" : msg)
+            throw iPodBackupError.failed(msg.isEmpty ? L10n.t("error.backup.archive_failed") : msg)
         }
     }
 
@@ -376,7 +386,7 @@ enum iPodVolumeBackup {
         guard process.terminationStatus == 0 else {
             let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            throw iPodBackupError.failed(msg.isEmpty ? "Estrazione archivio fallita" : msg)
+            throw iPodBackupError.failed(msg.isEmpty ? L10n.t("error.backup.extract_failed") : msg)
         }
     }
 
@@ -430,6 +440,13 @@ struct PendingVolumeRestore: Equatable {
 
     var summary: String {
         let size = ByteCountFormatter.string(fromByteCount: manifest.byteCount, countStyle: .file)
-        return "\(manifest.deviceName) · \(manifest.fileCount) file · \(size)\nCreato: \(manifest.createdAt)\nModello: \(manifest.modelHint)"
+        return L10n.tf(
+            "restore.summary",
+            manifest.deviceName,
+            manifest.fileCount,
+            size,
+            manifest.createdAt,
+            manifest.modelHint
+        )
     }
 }

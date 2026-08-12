@@ -214,7 +214,7 @@ enum AudioMetadataReader {
     ]
 
     static func rejectionMessage(for urls: [URL], firmware: FirmwareMode) -> String? {
-        guard !urls.isEmpty else { return "Nessun file ricevuto." }
+        guard !urls.isEmpty else { return L10n.t("import.no_files") }
 
         let exts = urls.map { $0.pathExtension.lowercased() }
         let supported = urls.filter(isSupportedAudio)
@@ -223,12 +223,12 @@ enum AudioMetadataReader {
         if exts.contains(where: { stockUnsupportedExtensions.contains($0) }) {
             let bad = Set(exts.filter { stockUnsupportedExtensions.contains($0) }).sorted().joined(separator: ", ")
             if firmware == .rockbox && exts.contains("flac") {
-                return "Import FLAC su Rockbox non è ancora abilitato in VintageTunes. Converti in MP3/M4A oppure chiedi di aggiungerlo."
+                return L10n.t("import.flac_rockbox_disabled")
             }
-            return "Formato non supportato sull'iPod stock: \(bad). Usa MP3, M4A/AAC, WAV o AIFF."
+            return L10n.tf("import.stock_unsupported", bad)
         }
 
-        return "Nessun file audio supportato (mp3, m4a, aac, wav, aiff)."
+        return L10n.t("import.no_supported_audio")
     }
 
     // MARK: - Helpers

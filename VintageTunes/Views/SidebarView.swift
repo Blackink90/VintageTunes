@@ -13,21 +13,21 @@ struct SidebarView: View {
                 HStack(spacing: 8) {
                     sidebarActionButton(
                         systemImage: "arrow.clockwise",
-                        help: "Ricarica",
+                        help: L10n.t("sidebar.reload"),
                         disabled: false
                     ) {
                         library.refresh()
                     }
                     sidebarActionButton(
                         systemImage: "eject",
-                        help: "Espelli (iPod utilizzabile; Cerca dispositivi per ricollegare)",
+                        help: L10n.t("sidebar.eject_help"),
                         disabled: library.connectedDevice == nil || library.isEjecting
                     ) {
                         library.eject()
                     }
                     sidebarActionButton(
                         systemImage: "gearshape",
-                        help: "Impostazioni",
+                        help: L10n.t("sidebar.settings"),
                         disabled: false
                     ) {
                         openSettings()
@@ -58,7 +58,7 @@ struct SidebarView: View {
                         return true
                     }) { section in
                         sidebarRow(
-                            title: section.rawValue,
+                            title: section.title,
                             systemImage: section.systemImage,
                             selected: library.selectedSection == section
                         ) {
@@ -66,7 +66,7 @@ struct SidebarView: View {
                         }
                     }
                 } header: {
-                    Text("LIBRERIA")
+                    Text(L10n.t("sidebar.section_library"))
                         .font(.custom("Avenir Next", size: 11).weight(.bold))
                         .foregroundStyle(VTTheme.textSecondary)
                 }
@@ -84,14 +84,14 @@ struct SidebarView: View {
                             library.selectedPlaylistID = playlist.id
                         }
                         .contextMenu {
-                            Button("Elimina playlist", role: .destructive) {
+                            Button(L10n.t("sidebar.delete_playlist"), role: .destructive) {
                                 library.deletePlaylist(playlist.id)
                             }
                         }
                     }
                 } header: {
                     HStack {
-                        Text("PLAYLIST")
+                        Text(L10n.t("sidebar.section_playlists"))
                             .font(.custom("Avenir Next", size: 11).weight(.bold))
                             .foregroundStyle(VTTheme.textSecondary)
                         Spacer()
@@ -102,7 +102,7 @@ struct SidebarView: View {
                                 .foregroundStyle(VTTheme.amber)
                         }
                         .buttonStyle(.borderless)
-                        .help("Nuova playlist")
+                        .help(L10n.t("sidebar.new_playlist_help"))
                     }
                 }
 
@@ -130,17 +130,17 @@ struct SidebarView: View {
         .onTapGesture {
             library.clearListSelection()
         }
-        .alert("Nuova playlist", isPresented: $showingNewPlaylist) {
-            TextField("Nome", text: $newPlaylistName)
-            Button("Crea") {
+        .alert(L10n.t("playlist.new_title"), isPresented: $showingNewPlaylist) {
+            TextField(L10n.t("playlist.name_field"), text: $newPlaylistName)
+            Button(L10n.t("playlist.create")) {
                 let name = newPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !name.isEmpty else { return }
                 library.createPlaylist(named: name)
                 newPlaylistName = ""
             }
-            Button("Annulla", role: .cancel) { newPlaylistName = "" }
+            Button(L10n.t("common.cancel"), role: .cancel) { newPlaylistName = "" }
         } message: {
-            Text("La playlist viene scritta direttamente sull'iPod.")
+            Text(L10n.t("playlist.new_message"))
         }
     }
 
@@ -234,7 +234,9 @@ struct DeviceCard: View {
                     .foregroundStyle(VTTheme.textPrimary)
                     .lineLimit(1)
                 Spacer()
-                Text(device.firmwareMode == .rockbox ? "Rockbox" : (device.isSimulated ? "Demo" : "Stock"))
+                Text(device.firmwareMode == .rockbox
+                        ? L10n.t("device.firmware_rockbox")
+                        : (device.isSimulated ? L10n.t("device.firmware_demo") : L10n.t("device.firmware_stock")))
                     .font(.custom("Avenir Next", size: 10).weight(.bold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
@@ -256,7 +258,11 @@ struct DeviceCard: View {
             }
             .frame(height: 6)
 
-            Text("\(ByteCountFormatter.string(fromByteCount: device.usedBytes, countStyle: .file)) di \(ByteCountFormatter.string(fromByteCount: device.capacityBytes, countStyle: .file))")
+            Text(L10n.tf(
+                "device.space_of",
+                ByteCountFormatter.string(fromByteCount: device.usedBytes, countStyle: .file),
+                ByteCountFormatter.string(fromByteCount: device.capacityBytes, countStyle: .file)
+            ))
                 .font(.custom("Avenir Next", size: 10))
                 .foregroundStyle(VTTheme.textSecondary.opacity(0.85))
         }

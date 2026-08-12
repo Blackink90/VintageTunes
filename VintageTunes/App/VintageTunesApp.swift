@@ -11,17 +11,18 @@ struct VintageTunesApp: App {
                 .environmentObject(library)
                 .environmentObject(settings)
                 .frame(minWidth: 960, minHeight: 640)
+                .id(settings.appLanguage)
         }
         .windowStyle(.titleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
-            CommandMenu("iPod") {
-                Button("Ricarica iPod") {
+            CommandMenu(L10n.t("menu.ipod")) {
+                Button(L10n.t("menu.reload_ipod")) {
                     library.refresh()
                 }
                 .keyboardShortcut("r", modifiers: [.command])
 
-                Button("Espelli iPod") {
+                Button(L10n.t("menu.eject_ipod")) {
                     library.eject()
                 }
                 .keyboardShortcut("e", modifiers: [.command])
@@ -29,25 +30,25 @@ struct VintageTunesApp: App {
 
                 Divider()
 
-                Button(library.playback.isPlaying ? "Pausa" : "Riproduci") {
+                Button(library.playback.isPlaying ? L10n.t("menu.pause") : L10n.t("menu.play")) {
                     library.playSelectedOrToggle()
                 }
                 .keyboardShortcut(.space, modifiers: [])
 
-                Button("Stop") {
+                Button(L10n.t("menu.stop")) {
                     library.playback.stop()
                 }
                 .keyboardShortcut(".", modifiers: [.command])
                 .disabled(library.playback.nowPlaying == nil)
 
-                Button("Rimuovi duplicati") {
+                Button(L10n.t("menu.remove_duplicates")) {
                     library.removeLibraryDuplicates()
                 }
                 .disabled(library.connectedDevice == nil)
 
                 Divider()
 
-                Button("Importa cartella…") {
+                Button(L10n.t("menu.import_folder")) {
                     library.chooseFolderToImport()
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
@@ -55,25 +56,25 @@ struct VintageTunesApp: App {
 
                 Divider()
 
-                Button("Avvia modalità demo") {
+                Button(L10n.t("menu.start_demo")) {
                     library.startDemo()
                 }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
 
-                Button("Azzera demo") {
+                Button(L10n.t("menu.reset_demo")) {
                     library.startDemo(reset: true)
                 }
                 .disabled(!(library.connectedDevice?.isSimulated ?? true))
 
-                Button("Mostra cartella demo") {
+                Button(L10n.t("menu.show_demo_folder")) {
                     library.revealDemoFolder()
                 }
 
-                Button("Mostra file convertiti") {
+                Button(L10n.t("menu.show_converted")) {
                     library.revealConvertedFolder()
                 }
 
-                Button("Mostra musica sull'iPod") {
+                Button(L10n.t("menu.show_ipod_music")) {
                     library.revealMusicFolder()
                 }
                 .disabled(library.connectedDevice == nil)
@@ -85,6 +86,7 @@ struct VintageTunesApp: App {
                 .environmentObject(library)
                 .environmentObject(settings)
                 .preferredColorScheme(settings.appearanceMode.preferredColorScheme)
+                .id(settings.appLanguage)
         }
     }
 }

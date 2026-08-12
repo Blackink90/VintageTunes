@@ -284,8 +284,8 @@ final class iPodDetector: ObservableObject {
 
         var errorDescription: String? {
             switch self {
-            case .emptyName: return "Il nome non può essere vuoto"
-            case .notApplicable: return "Rinomina non disponibile per questo dispositivo"
+            case .emptyName: return L10n.t("error.rename.empty_name")
+            case .notApplicable: return L10n.t("error.rename.not_applicable")
             }
         }
     }
@@ -295,7 +295,7 @@ final class iPodDetector: ObservableObject {
 
         var errorDescription: String? {
             switch self {
-            case .unmountFailed(let m): return m.isEmpty ? "Espulsione iPod fallita" : m
+            case .unmountFailed(let m): return m.isEmpty ? L10n.t("error.eject.failed") : m
             }
         }
     }
