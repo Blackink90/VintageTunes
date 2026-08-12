@@ -26,7 +26,8 @@ struct ParsedLibrary {
 
 final class iTunesDBParser {
     /// MHOD string types managed by VintageTunes (rebuilt on write).
-    private static let managedMhodTypes: Set<UInt32> = [1, 2, 3, 4, 5, 6]
+    /// 27 = lyrics (UTF-16LE), come iTunes / stock Click Wheel.
+    private static let managedMhodTypes: Set<UInt32> = [1, 2, 3, 4, 5, 6, 27]
 
     func parse(at url: URL, volumeRoot: URL) throws -> ParsedLibrary {
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -162,6 +163,7 @@ final class iTunesDBParser {
             var album = ""
             var genre = ""
             var location = ""
+            var lyrics: String? = nil
             var extraMhods: [Data] = []
 
             var child = offset + headerLen
@@ -182,6 +184,9 @@ final class iTunesDBParser {
                         case 3: album = str
                         case 4: artist = str
                         case 5: genre = str
+                        case 27:
+                            let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                            lyrics = trimmed.isEmpty ? nil : trimmed
                         default: break // type 6 filetype — regenerated on write
                         }
                     }
@@ -221,6 +226,7 @@ final class iTunesDBParser {
                     hasArtwork: hasArtwork == 0 ? 2 : hasArtwork,
                     artworkCount: artworkCount,
                     mhiiLink: mhiiLink,
+                    lyrics: lyrics,
                     dbBlob: TrackDBBlob(header: headerBytes, extraMhods: extraMhods),
                     resolvedPath: resolved
                 )

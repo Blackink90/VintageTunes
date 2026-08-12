@@ -25,6 +25,7 @@ struct iTunesDBWriter {
         var hasArtwork: UInt8 = 2
         var artworkCount: UInt16 = 0
         var mhiiLink: UInt32 = 0
+        var lyrics: String? = nil
         var dbBlob: TrackDBBlob? = nil
     }
 
@@ -279,16 +280,28 @@ struct iTunesDBWriter {
         if !track.filetype.isEmpty {
             mhods.append(buildStringMhod(type: 6, string: track.filetype))
         }
+        let lyricsText = track.lyrics?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !lyricsText.isEmpty {
+            mhods.append(buildStringMhod(type: 27, string: lyricsText))
+        }
+        var extraCount: UInt32 = 0
         if let blob = track.dbBlob {
             for extra in blob.extraMhods {
+                // Evita MHOD 27 duplicati (ora gestito sopra).
+                if extra.count >= 16 {
+                    let type = extra.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 12, as: UInt32.self).littleEndian }
+                    if type == 27 { continue }
+                }
                 mhods.append(extra)
+                extraCount += 1
             }
         }
 
         let managedCount: UInt32 = 4
             + (track.genre.isEmpty ? 0 : 1)
             + (track.filetype.isEmpty ? 0 : 1)
-        let mhodCount = managedCount + UInt32(track.dbBlob?.extraMhods.count ?? 0)
+            + (lyricsText.isEmpty ? 0 : 1)
+        let mhodCount = managedCount + extraCount
 
         let fourCC = OfficialDBFormat.filetypeFourCC(for: track.filetype)
         let flags = OfficialDBFormat.codecFlags(for: fourCC)
@@ -346,13 +359,26 @@ struct iTunesDBWriter {
         if headerLen > 176 {
             writeU64(&header, at: 168, dbid) // dbid2
         }
+        // Offset 176 = lyrics flag: l’iPod mostra i testi solo se 1 E i tag USLT/©lyr sono nel file.
+        let hasLyrics = !(track.lyrics?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        if headerLen > 177 {
+            header[176] = hasLyrics ? 1 : 0
+        }
         if headerLen > 178 {
-            header[178] = 2 // mark_unplayed style seen in official DB
+            // movie file flag
+            let isVideo = (track.mediaType & 0x02) != 0
+                || (track.mediaType & 0x20) != 0
+                || (track.mediaType & 0x40) != 0
+            header[177] = isVideo ? 1 : 0
+        }
+        if headerLen > 179 {
+            header[178] = 1 // played_mark (0x02 = bullet “non ascoltato” per podcast)
+            header[179] = 0
         }
         // Gapless: niente residui del template Music.app (sample count / flag di un’altra traccia
         // faceva tagliare il brano sull’iPod). Azzeriamo i campi gapless: il firmware usa durationMs.
-        if headerLen > 180 {
-            writeU32(&header, at: 176, 0) // unk / gapless-related leftover from Music.app template
+        if headerLen > 184 {
+            writeU32(&header, at: 180, 0) // unk21
         }
         if headerLen > 204 {
             writeU32(&header, at: 184, 0) // pregap

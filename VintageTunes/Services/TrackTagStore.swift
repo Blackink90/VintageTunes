@@ -11,6 +11,7 @@ struct TrackTagOverride: Codable, Equatable {
     var rating: UInt8 = 0
     var playCount: UInt32 = 0
     var lastPlayedMacTime: UInt32 = 0
+    var lyrics: String? = nil
 }
 
 enum TrackTagStore {
@@ -35,6 +36,21 @@ enum TrackTagStore {
         try data.write(to: url(on: device), options: .atomic)
     }
 
+    static func override(from track: Track) -> TrackTagOverride {
+        TrackTagOverride(
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            genre: track.genre,
+            trackNumber: track.trackNumber,
+            year: track.year,
+            rating: track.rating,
+            playCount: track.playCount,
+            lastPlayedMacTime: track.lastPlayedMacTime,
+            lyrics: track.lyrics
+        )
+    }
+
     static func apply(_ map: [String: TrackTagOverride], to tracks: inout [Track]) {
         guard !map.isEmpty else { return }
         for i in tracks.indices {
@@ -50,6 +66,9 @@ enum TrackTagStore {
             tracks[i].lastPlayedMacTime = max(tracks[i].lastPlayedMacTime, patch.lastPlayedMacTime)
             if tracks[i].rating == 0, patch.rating != 0 {
                 tracks[i].rating = patch.rating
+            }
+            if let lyrics = patch.lyrics, !lyrics.isEmpty, !tracks[i].hasLyrics {
+                tracks[i].setLyrics(lyrics)
             }
         }
     }

@@ -918,6 +918,7 @@ final class SyncService {
                     hasArtwork: $0.hasArtwork,
                     artworkCount: $0.artworkCount,
                     mhiiLink: $0.mhiiLink,
+                    lyrics: $0.lyrics,
                     dbBlob: $0.dbBlob
                 )
             }

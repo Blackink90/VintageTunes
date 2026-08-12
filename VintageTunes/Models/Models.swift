@@ -83,10 +83,34 @@ struct Track: Identifiable, Hashable {
     /// Link all’mhii in ArtworkDB (mhit @352); 0 = usa solo dbid.
     var mhiiLink: UInt32 = 0
     var contentHash: String? = nil
+    /// Testo canzone (iTunesDB MHOD type 27); nil = assente.
+    var lyrics: String? = nil
     /// Raw mhit header + unmanaged MHODs; nil for tracks created in-app.
     var dbBlob: TrackDBBlob? = nil
 
     var resolvedPath: URL?
+
+    /// true se c’è un testo non vuoto salvato.
+    var hasLyrics: Bool {
+        guard let lyrics else { return false }
+        return !lyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Imposta il testo e rimuove eventuali MHOD 27 residui in `extraMhods`.
+    mutating func setLyrics(_ text: String?) {
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        lyrics = (trimmed?.isEmpty == false) ? trimmed : nil
+        guard var blob = dbBlob else { return }
+        blob.extraMhods.removeAll { Self.mhodType(of: $0) == 27 }
+        dbBlob = blob
+    }
+
+    private static func mhodType(of data: Data) -> UInt32? {
+        guard data.count >= 16 else { return nil }
+        return data.withUnsafeBytes { raw in
+            raw.loadUnaligned(fromByteOffset: 12, as: UInt32.self).littleEndian
+        }
+    }
 
     var displayArtist: String { artist.isEmpty ? L10n.t("track.unknown_artist") : artist }
     var displayTitle: String { title.isEmpty ? L10n.t("track.untitled") : title }
@@ -147,6 +171,36 @@ struct Track: Identifiable, Hashable {
         let m = total / 60
         let s = total % 60
         return String(format: "%d:%02d", m, s)
+    }
+
+    /// Estensione file in forma breve (MP3, M4A, WAV…).
+    var displayFormat: String {
+        let raw: String
+        if let path = resolvedPath {
+            raw = path.pathExtension
+        } else {
+            raw = (location as NSString).pathExtension
+        }
+        let ext = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !ext.isEmpty else { return "—" }
+        switch ext {
+        case "mp3": return "MP3"
+        case "m4a", "aac", "m4b": return "M4A"
+        case "m4v": return "M4V"
+        case "mp4": return "MP4"
+        case "wav": return "WAV"
+        case "aiff", "aif": return "AIFF"
+        case "alac": return "ALAC"
+        case "flac": return "FLAC"
+        case "ogg", "oga": return "OGG"
+        case "wma": return "WMA"
+        case "opus": return "Opus"
+        default: return ext.uppercased()
+        }
+    }
+
+    var displayLyricsPresent: String {
+        hasLyrics ? L10n.t("common.yes") : L10n.t("common.no")
     }
 
     var albumKey: String { "\(displayAlbum)|||\(displayArtist)" }

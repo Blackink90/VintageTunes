@@ -485,17 +485,7 @@ final class LibraryController: ObservableObject {
         guard let device = connectedDevice else { return }
         var overrides = TrackTagStore.load(from: device)
         for track in tracks {
-            overrides[track.location] = TrackTagOverride(
-                title: track.title,
-                artist: track.artist,
-                album: track.album,
-                genre: track.genre,
-                trackNumber: track.trackNumber,
-                year: track.year,
-                rating: track.rating,
-                playCount: track.playCount,
-                lastPlayedMacTime: track.lastPlayedMacTime
-            )
+            overrides[track.location] = TrackTagStore.override(from: track)
         }
         do {
             try TrackTagStore.save(overrides, to: device)
@@ -568,6 +558,118 @@ final class LibraryController: ObservableObject {
         }
     }
 
+    /// Scarica i testi (LRCLIB) e li scrive nei **tag del file** + iTunesDB (flag lyrics).
+    /// Con `replaceExisting` riusa il testo già in libreria e lo re-applica ai file (riparazione).
+    func downloadLyrics(for ids: [UInt32], replaceExisting: Bool = true) {
+        guard connectedDevice != nil else { return }
+        let selected = ids.compactMap { id in tracks.first(where: { $0.id == id }) }
+            .filter { !$0.isVideo }
+        let targets = replaceExisting
+            ? selected
+            : selected.filter { !$0.hasLyrics }
+        guard !targets.isEmpty else {
+            if !selected.isEmpty, !replaceExisting {
+                setStatus(.success(L10n.t("status.lyrics_already_present")))
+            }
+            return
+        }
+
+        setStatus(.working(
+            targets.count == 1
+                ? L10n.t("status.lyrics_downloading_one")
+                : L10n.tf("status.lyrics_downloading_many", targets.count)
+        ))
+
+        let snapshot = targets.map {
+            (id: $0.id, artist: $0.artist, title: $0.title, album: $0.album,
+             durationMs: $0.durationMs, existing: $0.lyrics)
+        }
+        Task {
+            var found = 0
+            var missing = 0
+            var embedFailed = 0
+            var updatedIDs: [UInt32] = []
+
+            for (index, item) in snapshot.enumerated() {
+                let text: String?
+                if let existing = item.existing?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !existing.isEmpty,
+                   replaceExisting {
+                    // Ripara: non ri-scaricare, riscrivi tag + flag.
+                    text = existing
+                } else {
+                    if index > 0 { await LyricsLookup.throttle() }
+                    text = await LyricsLookup.fetch(
+                        artist: item.artist,
+                        title: item.title,
+                        album: item.album,
+                        durationMs: item.durationMs
+                    )
+                }
+
+                guard let text, !text.isEmpty else {
+                    missing += 1
+                    continue
+                }
+
+                found += 1
+                if let idx = tracks.firstIndex(where: { $0.id == item.id }) {
+                    tracks[idx].setLyrics(text)
+                    if let fileURL = tracks[idx].resolvedPath {
+                        do {
+                            let newSize = try await LyricsTagWriter.embed(lyrics: text, into: fileURL)
+                            if newSize > 0 { tracks[idx].sizeBytes = newSize }
+                        } catch {
+                            embedFailed += 1
+                        }
+                    } else {
+                        embedFailed += 1
+                    }
+                    updatedIDs.append(item.id)
+                }
+            }
+
+            guard !updatedIDs.isEmpty, let device = connectedDevice else {
+                setStatus(.failure(
+                    snapshot.count == 1
+                        ? L10n.t("status.lyrics_not_found_one")
+                        : L10n.tf("status.lyrics_not_found_many", missing)
+                ))
+                return
+            }
+
+            do {
+                var overrides = TrackTagStore.load(from: device)
+                for id in updatedIDs {
+                    guard let track = tracks.first(where: { $0.id == id }) else { continue }
+                    overrides[track.location] = TrackTagStore.override(from: track)
+                }
+                try TrackTagStore.save(overrides, to: device)
+                try sync.savePlaylists(
+                    tracks: &tracks,
+                    playlists: playlists,
+                    dbVersion: dbVersion,
+                    device: device
+                )
+                refreshLibraryCache(for: device)
+
+                if embedFailed > 0 {
+                    setStatus(.failure(L10n.tf("status.lyrics_embed_failed_many", embedFailed)))
+                } else if missing == 0 {
+                    setStatus(.success(
+                        found == 1
+                            ? L10n.t("status.lyrics_saved_one")
+                            : L10n.tf("status.lyrics_saved_many", found)
+                    ))
+                } else {
+                    setStatus(.success(L10n.tf("status.lyrics_saved_partial", found, missing)))
+                }
+            } catch {
+                setStatus(.failure(error.localizedDescription))
+            }
+        }
+    }
+
     func beginEditingSelectedTrack() {
         beginEditingTracks(ids: Array(selection))
     }
@@ -597,17 +699,7 @@ final class LibraryController: ObservableObject {
         for id in ids {
             guard let idx = tracks.firstIndex(where: { $0.id == id }) else { continue }
             tracks[idx].rating = rating
-            overrides[tracks[idx].location] = TrackTagOverride(
-                title: tracks[idx].title,
-                artist: tracks[idx].artist,
-                album: tracks[idx].album,
-                genre: tracks[idx].genre,
-                trackNumber: tracks[idx].trackNumber,
-                year: tracks[idx].year,
-                rating: tracks[idx].rating,
-                playCount: tracks[idx].playCount,
-                lastPlayedMacTime: tracks[idx].lastPlayedMacTime
-            )
+            overrides[tracks[idx].location] = TrackTagStore.override(from: tracks[idx])
             updated += 1
         }
 
@@ -682,17 +774,7 @@ final class LibraryController: ObservableObject {
                 }
             }
 
-            overrides[tracks[idx].location] = TrackTagOverride(
-                title: tracks[idx].title,
-                artist: tracks[idx].artist,
-                album: tracks[idx].album,
-                genre: tracks[idx].genre,
-                trackNumber: tracks[idx].trackNumber,
-                year: tracks[idx].year,
-                rating: tracks[idx].rating,
-                playCount: tracks[idx].playCount,
-                lastPlayedMacTime: tracks[idx].lastPlayedMacTime
-            )
+            overrides[tracks[idx].location] = TrackTagStore.override(from: tracks[idx])
 
             let newArtist = tracks[idx].displayArtist
             let newAlbum = tracks[idx].displayAlbum
@@ -1110,17 +1192,7 @@ final class LibraryController: ObservableObject {
                 var overrides = TrackTagStore.load(from: device)
                 for track in result.tracks {
                     guard let old = beforeByID[track.id], old != track else { continue }
-                    overrides[track.location] = TrackTagOverride(
-                        title: track.title,
-                        artist: track.artist,
-                        album: track.album,
-                        genre: track.genre,
-                        trackNumber: track.trackNumber,
-                        year: track.year,
-                        rating: track.rating,
-                        playCount: track.playCount,
-                        lastPlayedMacTime: track.lastPlayedMacTime
-                    )
+                    overrides[track.location] = TrackTagStore.override(from: track)
                 }
                 try? TrackTagStore.save(overrides, to: device)
             }
@@ -1138,17 +1210,7 @@ final class LibraryController: ObservableObject {
                 }
                 var overrides = TrackTagStore.load(from: device)
                 for track in result.tracks {
-                    overrides[track.location] = TrackTagOverride(
-                        title: track.title,
-                        artist: track.artist,
-                        album: track.album,
-                        genre: track.genre,
-                        trackNumber: track.trackNumber,
-                        year: track.year,
-                        rating: track.rating,
-                        playCount: track.playCount,
-                        lastPlayedMacTime: track.lastPlayedMacTime
-                    )
+                    overrides[track.location] = TrackTagStore.override(from: track)
                 }
                 try? TrackTagStore.save(overrides, to: device)
             }
@@ -1882,6 +1944,7 @@ final class LibraryController: ObservableObject {
 
             setStatus(.working(L10n.t("status.preparing_import")))
             // Solo libreria/master: le playlist utente si aggiornano con «Aggiungi a playlist».
+            let existingIDs = Set(tracks.map(\.id))
             let result = try await sync.importFiles(
                 items,
                 to: device,
@@ -1908,6 +1971,12 @@ final class LibraryController: ObservableObject {
             selectSection(.songs)
             prefetchArtwork()
             refreshLibraryCache(for: device)
+            let newAudioIDs = result.tracks
+                .filter { !existingIDs.contains($0.id) && !$0.isVideo }
+                .map(\.id)
+            if !newAudioIDs.isEmpty {
+                downloadLyrics(for: newAudioIDs, replaceExisting: false)
+            }
         } catch is CancellationError {
             if importCancelled {
                 setStatus(.success(L10n.t("status.import_cancelled")))

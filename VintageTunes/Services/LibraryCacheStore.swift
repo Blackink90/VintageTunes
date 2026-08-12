@@ -214,6 +214,7 @@ private struct CachedTrack: Codable {
     var artworkCount: UInt16
     var mhiiLink: UInt32
     var contentHash: String?
+    var lyrics: String?
     var blobHeader: Data?
     var blobExtra: [Data]
 
@@ -239,6 +240,7 @@ private struct CachedTrack: Codable {
         artworkCount = track.artworkCount
         mhiiLink = track.mhiiLink
         contentHash = track.contentHash
+        lyrics = track.lyrics
         blobHeader = track.dbBlob?.header
         blobExtra = track.dbBlob?.extraMhods ?? []
     }
@@ -274,6 +276,7 @@ private struct CachedTrack: Codable {
             artworkCount: artworkCount,
             mhiiLink: mhiiLink,
             contentHash: contentHash,
+            lyrics: lyrics,
             dbBlob: blob,
             resolvedPath: resolved
         )

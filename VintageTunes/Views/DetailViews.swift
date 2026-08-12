@@ -46,20 +46,16 @@ struct TrackTableView: View {
             header
             Divider().opacity(0.2)
             Table(of: Track.self, selection: $library.selection) {
-                TableColumn("") { track in
-                    CoverArtView(
-                        artist: track.displayArtist,
-                        album: track.displayAlbum,
-                        fileURL: track.resolvedPath,
-                        title: track.displayTitle,
-                        cornerRadius: 4
-                    )
-                    .frame(width: 28, height: 28)
-                }
-                .width(36)
-
                 TableColumn(L10n.t("table.column_title")) { track in
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
+                        CoverArtView(
+                            artist: track.displayArtist,
+                            album: track.displayAlbum,
+                            fileURL: track.resolvedPath,
+                            title: track.displayTitle,
+                            cornerRadius: 4
+                        )
+                        .frame(width: 28, height: 28)
                         if library.playback.nowPlaying?.id == track.id {
                             Image(systemName: library.playback.isPlaying ? "speaker.wave.2.fill" : "speaker.fill")
                                 .font(.system(size: 10, weight: .bold))
@@ -70,7 +66,7 @@ struct TrackTableView: View {
                             .foregroundStyle(VTTheme.textPrimary)
                     }
                 }
-                .width(min: 160, ideal: 220)
+                .width(min: 180, ideal: 240)
 
                 TableColumn(L10n.t("table.column_artist")) { track in
                     Text(track.displayArtist)
@@ -114,6 +110,19 @@ struct TrackTableView: View {
                         .foregroundStyle(VTTheme.textSecondary)
                 }
                 .width(56)
+
+                TableColumn(L10n.t("table.column_format")) { track in
+                    Text(track.displayFormat)
+                        .font(.custom("Avenir Next", size: 12).weight(.medium))
+                        .foregroundStyle(VTTheme.textSecondary)
+                }
+                .width(64)
+
+                TableColumn(L10n.t("table.column_lyrics")) { track in
+                    Text(track.displayLyricsPresent)
+                        .foregroundStyle(track.hasLyrics ? VTTheme.lcdGreen : VTTheme.textSecondary)
+                }
+                .width(64)
 
                 TableColumn(L10n.t("table.column_duration")) { track in
                     Text(track.durationLabel)
@@ -177,6 +186,11 @@ struct TrackTableView: View {
                     }
                     Button(L10n.t("track.reload_artwork")) {
                         library.refreshArtwork(for: Array(ids))
+                    }
+                    if library.selectedSection != .videos {
+                        Button(L10n.t("track.download_lyrics")) {
+                            library.downloadLyrics(for: Array(ids), replaceExisting: true)
+                        }
                     }
                     Button(L10n.t("track.show_in_finder")) {
                         library.selection = Set(ids)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Opaque mhit header + MHOD types not managed by VintageTunes (types outside 1…6).
+/// Opaque mhit header + MHOD types not managed by VintageTunes (outside 1…6 and 27 lyrics).
 struct TrackDBBlob: Equatable, Hashable {
     var header: Data
     var extraMhods: [Data]
