@@ -42,6 +42,38 @@ The app UI is available in **English** and **Italian** (Settings → Language: S
 
 ---
 
+## Help expand compatibility
+
+VintageTunes is **under active development**. Support beyond the models above improves with real device data. If you own an iPod that is missing, partial, or untested here, you can help by sending a **small sample dump** of the device structure.
+
+### What to send
+
+1. State the **exact model** (e.g. Classic 160GB 6G, nano 3G, Video 5G 30GB) and **firmware** if you know it (stock Apple or Rockbox).
+2. Copy a **minimal** sample from the mounted volume — typically the **`iPod_Control`** folder (and **`Photos/`** only if the model supports photos and you include sample images).
+3. Prefer opening a [GitHub issue](https://github.com/Blackink90/VintageTunes/issues) and attaching a zip, or linking a download you control. Do **not** email large personal libraries.
+
+A few tracks (and, where relevant, photos/videos) are enough — we need the **databases and folder layout**, not a full music collection.
+
+### Copyright — please read carefully
+
+**Only include media you are legally allowed to share.**
+
+- Songs must be **copyright-free**, **public domain**, **Creative Commons** (or similar) with a license that allows redistribution, **or your own original works**.
+- The same rule applies to **photos** and **videos**: no commercial albums, films, TV shows, or other copyrighted material.
+- Do **not** send DRM-protected files, ripped commercial CDs/DVDs, or personal libraries of copyrighted music.
+- Prefer short, clearly free samples (e.g. your own recording, CC0/public-domain tracks). If unsure, **omit the media files** and send only the database/structure folders (`iTunesDB`, Artwork, playlists, empty Music stubs if needed) — ask in an issue first.
+
+### If the model supports photos and/or video
+
+Include a **tiny** sample so Photo Database / Movies entries can be studied:
+
+- **Photos:** about **2** images you created or that are free to share.
+- **Videos:** about **2** short clips you created or that are free to share.
+
+Thanks — every clean, legal dump helps widen support without putting anyone at legal risk.
+
+---
+
 ## What’s new in 1.8.0
 
 - **English / Italian UI**: full app localization with **Settings → Language** (System / English / Italiano)

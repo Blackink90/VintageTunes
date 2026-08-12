@@ -42,6 +42,38 @@ L’interfaccia è disponibile in **italiano** e **inglese** (Impostazioni → L
 
 ---
 
+## Aiutaci ad ampliare la compatibilità
+
+VintageTunes è **in continuo sviluppo**. Il supporto oltre i modelli sopra migliora con dati da dispositivi reali. Se hai un iPod assente, parziale o non testato in questa tabella, puoi aiutare inviando un **dump di esempio minimo** della struttura del dispositivo.
+
+### Cosa inviare
+
+1. Indica il **modello esatto** (es. Classic 160GB 6G, nano 3G, Video 5G 30GB) e il **firmware** se lo conosci (stock Apple o Rockbox).
+2. Copia un campione **minimo** dal volume montato — in genere la cartella **`iPod_Control`** (e **`Photos/`** solo se il modello supporta le foto e includi immagini di esempio).
+3. Preferisci aprire una [issue su GitHub](https://github.com/Blackink90/VintageTunes/issues) e allegare uno zip, oppure un link a un download che controlli tu. **Non** inviare librerie personali enormi.
+
+Bastano pochi brani (e, dove rilevante, foto/video): servono i **database e la struttura delle cartelle**, non l’intera collezione musicale.
+
+### Copyright — leggere con attenzione
+
+**Includi solo contenuti che hai il diritto di condividere.**
+
+- Le canzoni devono essere **libere da copyright**, di **pubblico dominio**, sotto **Creative Commons** (o licenza simile che permetta la redistribuzione), **oppure opere tue originali**.
+- La stessa regola vale per **foto** e **video**: niente album commerciali, film, serie TV o altro materiale protetto.
+- **Non** inviare file con DRM, rip di CD/DVD commerciali, né librerie personali di musica protetta da copyright.
+- Preferisci campioni brevi e chiaramente liberi (es. una tua registrazione, brani CC0/pubblico dominio). Se hai dubbi, **ometti i file media** e invia solo database/struttura (`iTunesDB`, Artwork, playlist, eventuali stub Music vuoti) — chiedi prima in una issue.
+
+### Se il modello supporta foto e/o video
+
+Includi un campione **piccolo** per studiare Photo Database / Film:
+
+- **Foto:** circa **2** immagini create da te o liberamente condividibili.
+- **Video:** circa **2** clip brevi create da te o liberamente condividibili.
+
+Grazie — ogni dump pulito e lecito aiuta ad allargare il supporto senza rischi legali.
+
+---
+
 ## Novità in 1.8.0
 
 - **Interfaccia italiano / inglese**: localizzazione completa con **Impostazioni → Lingua** (Sistema / English / Italiano)
