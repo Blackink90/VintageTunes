@@ -4,7 +4,7 @@
 
 Import tracks (including FLAC and other non-native formats), prepare them for stock firmware, update **iTunesDB**, playlists and artwork, manage **photos** and **videos** on Video 5.5G, and play files directly from the mounted device.
 
-Current version: **1.7.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.7.0)).
+Current version: **1.8.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.8.0)).
 
 > Italian README: [README.it.md](README.it.md)
 
@@ -41,6 +41,12 @@ Mac requirements: **macOS 14+** (Intel or Apple Silicon), Xcode to build from so
 The app UI is available in **English** and **Italian** (Settings → Language: System / English / Italiano).
 
 ---
+
+## What’s new in 1.8.0
+
+- **English / Italian UI**: full app localization with **Settings → Language** (System / English / Italiano)
+- **Settings without iPod**: gear button on the welcome screen and localized settings window title
+- **README**: English default; Italian in [README.it.md](README.it.md)
 
 ## What’s new in 1.7.0
 
@@ -145,7 +151,7 @@ Notes:
 - The app needs access to **removable volumes**.
 - With ad-hoc signing, macOS may ask for permission on every launch; signing with an Apple ID / development Team helps keep consent.
 
-Download ready binaries from [release 1.7.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.7.0) (first launch: right-click → **Open**).
+Download ready binaries from [release 1.8.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.8.0) (first launch: right-click → **Open**).
 
 ---
 
