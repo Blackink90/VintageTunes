@@ -36,7 +36,9 @@ Usando VintageTunes dichiari di aver compreso questi rischi.
 
 > **In sintesi:** musica e cover su **Video 5.5G** (test approfondito); **nano 2G** supportato da dump di riferimento, **senza test su dispositivi reali**; **foto** e **video** sul Video. Classic: musica/cover + video sperimentale. Altri modelli non sono garantiti.
 
-Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal sorgente. Per i video e per la conversione **MP3** serve anche **ffmpeg**. Volume iPod tipicamente **HFS+** con cartella `iPod_Control`.
+Requisiti Mac: **macOS 14+** (Intel o Apple Silicon), Xcode per compilare dal sorgente. Per i video e per la conversione **MP3** serve anche **ffmpeg**.
+
+**Formato disco iPod:** per un corretto funzionamento l’iPod deve essere formattato per **Mac** (**HFS+**, con cartella `iPod_Control`). Il funzionamento con un iPod formattato per **Windows** (**FAT32**) **non è stato testato**.
 
 L’interfaccia è disponibile in **italiano** e **inglese** (Impostazioni → Lingua: Sistema / English / Italiano).
 
@@ -197,6 +199,7 @@ Scarica i binari pronti dalla [release 1.9.0](https://github.com/Blackink90/Vint
 ## Limiti noti
 
 - Test approfondito su **iPod Video 5.5G**. **nano 2G**: nessun test su dispositivi reali (solo dump di riferimento per musica/cover).
+- Serve un iPod formattato per **Mac** (**HFS+**). Il formato **Windows** (**FAT32**) non è stato testato.
 - Non sostituisce un backup completo né un ripristino ufficiale Apple.
 - Database, artwork e foto seguono i layout Music.app per famiglia (Video / Classic / nano); altre generazioni possono differire.
 - Foto: solo Video 5G/5.5G; niente Classic/nano, niente originali full-res.

@@ -36,7 +36,9 @@ By using VintageTunes you acknowledge these risks.
 
 > **In short:** music and artwork on **Video 5.5G** (thoroughly tested); **nano 2G** supported from reference dumps, **without real-device testing**; **photos** and **video** on Video. Classic: music/artwork + experimental video. Other models are not guaranteed.
 
-Mac requirements: **macOS 14+** (Intel or Apple Silicon), Xcode to build from source. **ffmpeg** is also required for video and for **MP3** conversion. iPod volume is typically **HFS+** with an `iPod_Control` folder.
+Mac requirements: **macOS 14+** (Intel or Apple Silicon), Xcode to build from source. **ffmpeg** is also required for video and for **MP3** conversion.
+
+**iPod disk format:** for correct operation the iPod must be formatted for **Mac** (**HFS+**, with an `iPod_Control` folder). Operation with a **Windows**-formatted iPod (**FAT32**) has **not been tested**.
 
 The app UI is available in **English** and **Italian** (Settings → Language: System / English / Italiano).
 
@@ -197,6 +199,7 @@ Download ready binaries from [release 1.9.0](https://github.com/Blackink90/Vinta
 ## Known limitations
 
 - Thorough testing on **iPod Video 5.5G**. **nano 2G**: no real-device testing (music/artwork from reference dumps only).
+- Requires a **Mac**-formatted iPod (**HFS+**). **Windows** format (**FAT32**) has not been tested.
 - Does not replace a full backup or an official Apple restore.
 - Database, artwork, and photos follow Music.app layouts per family (Video / Classic / nano); other generations may differ.
 - Photos: Video 5G/5.5G only; no Classic/nano, no full-res originals.
