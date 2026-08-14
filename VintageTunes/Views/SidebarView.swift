@@ -74,16 +74,31 @@ struct SidebarView: View {
                 Section {
                     ForEach(library.sidebarPlaylists) { playlist in
                         let count = playlist.resolvedSongCount(using: library.tracks)
+                        let badge: String? = {
+                            if playlist.isSmart {
+                                let smart = L10n.t("smart_playlist.badge")
+                                return count > 0 ? "\(smart) · \(count)" : smart
+                            }
+                            return count > 0 ? "\(count)" : nil
+                        }()
                         sidebarRow(
                             title: playlist.displayName,
-                            systemImage: "music.note.list",
-                            badge: count > 0 ? "\(count)" : nil,
+                            systemImage: playlist.isSmart ? "sparkles.rectangle.stack" : "music.note.list",
+                            badge: badge,
                             selected: library.selectedSection == .playlists && library.selectedPlaylistID == playlist.id
                         ) {
                             library.selectSection(.playlists)
                             library.selectedPlaylistID = playlist.id
                         }
                         .contextMenu {
+                            if playlist.isSmart {
+                                Button(L10n.t("smart_playlist.edit")) {
+                                    library.beginEditingSmartPlaylist(playlist.id)
+                                }
+                                Button(L10n.t("smart_playlist.duplicate")) {
+                                    library.duplicateSmartPlaylist(playlist.id)
+                                }
+                            }
                             Button(L10n.t("sidebar.delete_playlist"), role: .destructive) {
                                 library.deletePlaylist(playlist.id)
                             }
@@ -95,13 +110,18 @@ struct SidebarView: View {
                             .font(.custom("Avenir Next", size: 11).weight(.bold))
                             .foregroundStyle(VTTheme.textSecondary)
                         Spacer()
-                        Button {
-                            showingNewPlaylist = true
+                        Menu {
+                            Button(L10n.t("playlist.new_regular")) {
+                                showingNewPlaylist = true
+                            }
+                            Button(L10n.t("playlist.new_smart")) {
+                                library.beginNewSmartPlaylist()
+                            }
                         } label: {
                             Image(systemName: "plus")
                                 .foregroundStyle(VTTheme.amber)
                         }
-                        .buttonStyle(.borderless)
+                        .menuStyle(.borderlessButton)
                         .help(L10n.t("sidebar.new_playlist_help"))
                     }
                 }

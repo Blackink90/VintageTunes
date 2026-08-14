@@ -73,6 +73,13 @@ struct RootView: View {
                 .environmentObject(library)
         }
         .sheet(isPresented: Binding(
+            get: { library.smartPlaylistDraft != nil },
+            set: { if !$0 { library.cancelSmartPlaylistEdit() } }
+        )) {
+            SmartPlaylistEditSheet()
+                .environmentObject(library)
+        }
+        .sheet(isPresented: Binding(
             get: { library.autoSyncPrompt != nil },
             set: { if !$0 { library.dismissAutoSync() } }
         )) {

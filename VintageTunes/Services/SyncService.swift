@@ -183,6 +183,7 @@ final class SyncService {
                 bitrate: meta.bitrate == 0 ? 192 : min(meta.bitrate, 320),
                 sampleRate: meta.sampleRate == 0 ? 44100 : meta.sampleRate,
                 mediaType: 1,
+                dateAddedMacTime: Track.macTimestamp(),
                 dbid: dbid,
                 hasArtwork: 2,
                 artworkCount: 0,
@@ -231,6 +232,7 @@ final class SyncService {
 
         progress(SyncProgress(fraction: 0.95, message: L10n.t("sync.updating_database")))
         let playMerge = absorbPlayCounts(into: &tracks, device: device)
+        reevaluateSmartPlaylists(&playlists, tracks: tracks)
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
         if playMerge.changed, playMerge.canRemoveFile {
             PlayCountsFile.remove(from: device)
@@ -343,6 +345,7 @@ final class SyncService {
                 bitrate: meta.bitrate == 0 ? 1500 : meta.bitrate,
                 sampleRate: meta.sampleRate == 0 ? 44100 : meta.sampleRate,
                 mediaType: Track.mediaTypeMovie,
+                dateAddedMacTime: Track.macTimestamp(),
                 dbid: dbid,
                 hasArtwork: 2,
                 artworkCount: 0,
@@ -555,11 +558,15 @@ final class SyncService {
 
     func savePlaylists(
         tracks: inout [Track],
-        playlists: [Playlist],
+        playlists: inout [Playlist],
         dbVersion: UInt32,
-        device: iPodDevice
+        device: iPodDevice,
+        reevaluateSmart: Bool = false
     ) throws {
         let merge = absorbPlayCounts(into: &tracks, device: device)
+        if reevaluateSmart {
+            reevaluateSmartPlaylists(&playlists, tracks: tracks)
+        }
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
         if merge.canRemoveFile {
             PlayCountsFile.remove(from: device)
@@ -567,13 +574,31 @@ final class SyncService {
     }
 
     /// Scrive l’iTunesDB senza ri-leggere Play Counts (già fusi dal caller).
+    /// - Parameter reevaluateSmart: se true, ricalcola le smart playlist prima di scrivere.
+    ///   Lasciare `false` al reconnect (altrimenti si sovrascrive l’elenco aggiornato dal firmware).
     func persistLibrary(
         tracks: [Track],
         playlists: [Playlist],
         dbVersion: UInt32,
-        device: iPodDevice
+        device: iPodDevice,
+        reevaluateSmart: Bool = false
     ) throws {
+        var playlists = playlists
+        if reevaluateSmart {
+            reevaluateSmartPlaylists(&playlists, tracks: tracks)
+        }
         try persist(tracks: tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+    }
+
+    func reevaluateSmartPlaylists(_ playlists: inout [Playlist], tracks: [Track]) {
+        for i in playlists.indices {
+            guard !playlists[i].isMaster,
+                  let def = SmartPlaylistDefinition.decode(from: playlists[i]) else { continue }
+            let rewrite = def.skippedUnsupportedRuleCount == 0
+            // If unsupported iTunes rules remain, refresh membership from supported rules only
+            // but keep original MHOD 51 on disk.
+            SmartPlaylistDefinition.apply(def, to: &playlists[i], tracks: tracks, rewriteRules: rewrite)
+        }
     }
 
     /// Fondi "Play Counts" dell’iPod prima di qualsiasi rewrite dell’iTunesDB.
@@ -914,6 +939,9 @@ final class SyncService {
                     rating: $0.rating,
                     playCount: $0.playCount,
                     lastPlayedMacTime: $0.lastPlayedMacTime,
+                    dateAddedMacTime: $0.dateAddedMacTime,
+                    comment: $0.comment,
+                    albumArtist: $0.albumArtist,
                     dbid: $0.dbid,
                     hasArtwork: $0.hasArtwork,
                     artworkCount: $0.artworkCount,

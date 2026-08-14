@@ -21,6 +21,9 @@ struct iTunesDBWriter {
         var rating: UInt8 = 0
         var playCount: UInt32 = 0
         var lastPlayedMacTime: UInt32 = 0
+        var dateAddedMacTime: UInt32 = 0
+        var comment: String = ""
+        var albumArtist: String = ""
         var dbid: UInt64 = 0
         var hasArtwork: UInt8 = 2
         var artworkCount: UInt16 = 0
@@ -280,6 +283,12 @@ struct iTunesDBWriter {
         if !track.filetype.isEmpty {
             mhods.append(buildStringMhod(type: 6, string: track.filetype))
         }
+        if !track.comment.isEmpty {
+            mhods.append(buildStringMhod(type: 8, string: track.comment))
+        }
+        if !track.albumArtist.isEmpty {
+            mhods.append(buildStringMhod(type: 22, string: track.albumArtist))
+        }
         let lyricsText = track.lyrics?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !lyricsText.isEmpty {
             mhods.append(buildStringMhod(type: 27, string: lyricsText))
@@ -287,10 +296,10 @@ struct iTunesDBWriter {
         var extraCount: UInt32 = 0
         if let blob = track.dbBlob {
             for extra in blob.extraMhods {
-                // Evita MHOD 27 duplicati (ora gestito sopra).
+                // Evita MHOD gestiti duplicati.
                 if extra.count >= 16 {
                     let type = extra.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 12, as: UInt32.self).littleEndian }
-                    if type == 27 { continue }
+                    if type == 8 || type == 22 || type == 27 { continue }
                 }
                 mhods.append(extra)
                 extraCount += 1
@@ -300,6 +309,8 @@ struct iTunesDBWriter {
         let managedCount: UInt32 = 4
             + (track.genre.isEmpty ? 0 : 1)
             + (track.filetype.isEmpty ? 0 : 1)
+            + (track.comment.isEmpty ? 0 : 1)
+            + (track.albumArtist.isEmpty ? 0 : 1)
             + (lyricsText.isEmpty ? 0 : 1)
         let mhodCount = managedCount + extraCount
 
@@ -328,7 +339,8 @@ struct iTunesDBWriter {
         header[29] = flags.1
         header[30] = 0
         header[31] = min(track.rating, 100)
-        writeU32(&header, at: 32, macTimestamp())
+        let dateAdded = track.dateAddedMacTime == 0 ? macTimestamp() : track.dateAddedMacTime
+        writeU32(&header, at: 32, dateAdded)
         writeU32(&header, at: 36, track.sizeBytes)
         writeU32(&header, at: 40, track.durationMs)
         writeU32(&header, at: 44, track.trackNumber)

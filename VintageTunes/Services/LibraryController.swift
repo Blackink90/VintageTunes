@@ -37,6 +37,7 @@ final class LibraryController: ObservableObject {
     @Published var pendingImports: [ImportCandidate] = []
     @Published var trackEditDraft: TrackEditDraft?
     @Published var lyricsEditDraft: LyricsEditDraft?
+    @Published var smartPlaylistDraft: SmartPlaylistEditDraft?
     @Published var showiPodPreview = false
     @Published var autoSyncPrompt: AutoSyncPrompt?
 
@@ -446,7 +447,7 @@ final class LibraryController: ObservableObject {
                 playlists[idx].name = name
                 try sync.savePlaylists(
                     tracks: &tracks,
-                    playlists: playlists,
+                    playlists: &playlists,
                     dbVersion: dbVersion,
                     device: device
                 )
@@ -492,9 +493,10 @@ final class LibraryController: ObservableObject {
             try TrackTagStore.save(overrides, to: device)
             try sync.savePlaylists(
                 tracks: &tracks,
-                playlists: playlists,
+                playlists: &playlists,
                 dbVersion: dbVersion,
-                device: device
+                device: device,
+                reevaluateSmart: true
             )
             refreshLibraryCache(for: device)
         } catch {
@@ -718,7 +720,7 @@ final class LibraryController: ObservableObject {
         try TrackTagStore.save(overrides, to: device)
         try sync.savePlaylists(
             tracks: &tracks,
-            playlists: playlists,
+            playlists: &playlists,
             dbVersion: dbVersion,
             device: device
         )
@@ -764,9 +766,10 @@ final class LibraryController: ObservableObject {
             try TrackTagStore.save(overrides, to: device)
             try sync.savePlaylists(
                 tracks: &tracks,
-                playlists: playlists,
+                playlists: &playlists,
                 dbVersion: dbVersion,
-                device: device
+                device: device,
+                reevaluateSmart: true
             )
             refreshLibraryCache(for: device)
             setStatus(.success(
@@ -873,9 +876,10 @@ final class LibraryController: ObservableObject {
             try TrackTagStore.save(overrides, to: device)
             try sync.savePlaylists(
                 tracks: &tracks,
-                playlists: playlists,
+                playlists: &playlists,
                 dbVersion: dbVersion,
-                device: device
+                device: device,
+                reevaluateSmart: true
             )
             refreshLibraryCache(for: device)
             let coverData = draft.coverDidChange && !draft.removeManualCover ? draft.coverImageData : nil
@@ -1192,11 +1196,14 @@ final class LibraryController: ObservableObject {
                 sync.adoptSession(cached.session)
                 let playMerge = sync.absorbPlayCounts(into: &cached.tracks, device: device)
                 if device.firmwareMode == .stock, playMerge.changed {
+                    // Ricalcola smart solo ora: abbiamo gli ascolti freschi dall’iPod.
+                    sync.reevaluateSmartPlaylists(&cached.playlists, tracks: cached.tracks)
                     try sync.persistLibrary(
                         tracks: cached.tracks,
                         playlists: cached.playlists,
                         dbVersion: cached.dbVersion,
-                        device: device
+                        device: device,
+                        reevaluateSmart: false
                     )
                     if playMerge.canRemoveFile {
                         PlayCountsFile.remove(from: device)
@@ -1251,14 +1258,16 @@ final class LibraryController: ObservableObject {
                 }
                 try? TrackTagStore.save(overrides, to: device)
             }
-            // Dopo merge ascolti, riscrivi iTunesDB.
+            // Dopo merge ascolti, riscrivi iTunesDB e allinea le smart playlist.
             if device.firmwareMode == .stock, playMerge.changed {
                 setStatus(.working(L10n.t("status.saving_playcounts")))
+                sync.reevaluateSmartPlaylists(&result.playlists, tracks: result.tracks)
                 try sync.persistLibrary(
                     tracks: result.tracks,
                     playlists: result.playlists,
                     dbVersion: result.dbVersion,
-                    device: device
+                    device: device,
+                    reevaluateSmart: false
                 )
                 if playMerge.canRemoveFile {
                     PlayCountsFile.remove(from: device)
@@ -1334,7 +1343,7 @@ final class LibraryController: ObservableObject {
         do {
             try sync.savePlaylists(
                 tracks: &tracks,
-                playlists: playlists,
+                playlists: &playlists,
                 dbVersion: dbVersion,
                 device: device
             )
@@ -1373,7 +1382,7 @@ final class LibraryController: ObservableObject {
         do {
             try sync.savePlaylists(
                 tracks: &tracks,
-                playlists: playlists,
+                playlists: &playlists,
                 dbVersion: dbVersion,
                 device: device
             )
@@ -2174,6 +2183,91 @@ final class LibraryController: ObservableObject {
         persistPlaylists(device: device)
     }
 
+    func beginNewSmartPlaylist() {
+        guard connectedDevice != nil else { return }
+        smartPlaylistDraft = .fresh()
+    }
+
+    func beginEditingSmartPlaylist(_ id: UInt64) {
+        guard let playlist = playlists.first(where: { $0.id == id && !$0.isMaster }),
+              playlist.isSmart,
+              let draft = SmartPlaylistEditDraft.editing(playlist) else { return }
+        smartPlaylistDraft = draft
+    }
+
+    func duplicateSmartPlaylist(_ id: UInt64) {
+        guard let device = connectedDevice,
+              let source = playlists.first(where: { $0.id == id && !$0.isMaster }),
+              source.isSmart,
+              var def = SmartPlaylistDefinition.decode(from: source) else { return }
+        def.preservedMhod51 = nil
+        def.skippedUnsupportedRuleCount = 0
+        var copy = sync.createPlaylist(
+            name: L10n.tf("smart_playlist.copy_name", source.name),
+            playlists: &playlists
+        )
+        SmartPlaylistDefinition.apply(def, to: &copy, tracks: tracks, rewriteRules: true)
+        if let idx = playlists.firstIndex(where: { $0.id == copy.id }) {
+            playlists[idx] = copy
+        }
+        selectedPlaylistID = copy.id
+        selectSection(.playlists)
+        persistPlaylists(device: device)
+        setStatus(.success(L10n.t("status.smart_playlist_saved")))
+    }
+
+    func cancelSmartPlaylistEdit() {
+        smartPlaylistDraft = nil
+    }
+
+    func saveSmartPlaylistEdit() {
+        guard var draft = smartPlaylistDraft, let device = connectedDevice else {
+            smartPlaylistDraft = nil
+            return
+        }
+        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            setStatus(.failure(L10n.t("error.smart_playlist.name_empty")))
+            return
+        }
+        // Drop empty string rules
+        draft.definition.rules.removeAll {
+            $0.field.isString && $0.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        // Relative date rules need N ≥ 1
+        for i in draft.definition.rules.indices where draft.definition.rules[i].intOp == .inTheLast {
+            draft.definition.rules[i].intValue = max(1, draft.definition.rules[i].intValue)
+        }
+        draft.definition.preservedMhod51 = nil
+        draft.definition.skippedUnsupportedRuleCount = 0
+        draft.name = name
+
+        if let pid = draft.playlistID,
+           let idx = playlists.firstIndex(where: { $0.id == pid && !$0.isMaster }) {
+            playlists[idx].name = name
+            SmartPlaylistDefinition.apply(draft.definition, to: &playlists[idx], tracks: tracks, rewriteRules: true)
+            selectedPlaylistID = pid
+        } else {
+            var playlist = sync.createPlaylist(name: name, playlists: &playlists)
+            SmartPlaylistDefinition.apply(draft.definition, to: &playlist, tracks: tracks, rewriteRules: true)
+            if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
+                playlists[idx] = playlist
+            }
+            selectedPlaylistID = playlist.id
+        }
+        smartPlaylistDraft = nil
+        selectSection(.playlists)
+        persistPlaylists(device: device)
+        setStatus(.success(L10n.t("status.smart_playlist_saved")))
+    }
+
+    /// Ricalcola membership di tutte le smart playlist decodificabili e salva.
+    func reevaluateSmartPlaylists(persist: Bool = true) {
+        sync.reevaluateSmartPlaylists(&playlists, tracks: tracks)
+        guard persist, let device = connectedDevice else { return }
+        persistPlaylists(device: device)
+    }
+
     func renamePlaylist(_ id: UInt64, to name: String) {
         guard let device = connectedDevice,
               let idx = playlists.firstIndex(where: { $0.id == id && !$0.isMaster }) else { return }
@@ -2192,7 +2286,8 @@ final class LibraryController: ObservableObject {
 
     func addSelectionToPlaylist(_ playlistID: UInt64) {
         guard let device = connectedDevice,
-              let idx = playlists.firstIndex(where: { $0.id == playlistID && !$0.isMaster }) else { return }
+              let idx = playlists.firstIndex(where: { $0.id == playlistID && !$0.isMaster }),
+              !playlists[idx].isSmart else { return }
         let ids = selection
         for id in ids where !playlists[idx].trackIDs.contains(id) {
             playlists[idx].trackIDs.append(id)
@@ -2204,7 +2299,8 @@ final class LibraryController: ObservableObject {
     func removeSelectionFromCurrentPlaylist() {
         guard let device = connectedDevice,
               let pid = selectedPlaylistID,
-              let idx = playlists.firstIndex(where: { $0.id == pid && !$0.isMaster }) else { return }
+              let idx = playlists.firstIndex(where: { $0.id == pid && !$0.isMaster }),
+              !playlists[idx].isSmart else { return }
         let before = playlists[idx].trackIDs.count
         playlists[idx].trackIDs.removeAll { selection.contains($0) }
         let removed = before - playlists[idx].trackIDs.count
@@ -2261,7 +2357,7 @@ final class LibraryController: ObservableObject {
 
     private func persistPlaylists(device: iPodDevice) {
         do {
-            try sync.savePlaylists(tracks: &tracks, playlists: playlists, dbVersion: dbVersion, device: device)
+            try sync.savePlaylists(tracks: &tracks, playlists: &playlists, dbVersion: dbVersion, device: device)
             refreshLibraryCache(for: device)
             setStatus(.success(L10n.t("status.playlists_saved")))
         } catch {

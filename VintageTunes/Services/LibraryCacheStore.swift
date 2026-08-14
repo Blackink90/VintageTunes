@@ -209,6 +209,9 @@ private struct CachedTrack: Codable {
     var rating: UInt8
     var playCount: UInt32
     var lastPlayedMacTime: UInt32
+    var dateAddedMacTime: UInt32
+    var comment: String
+    var albumArtist: String
     var dbid: UInt64
     var hasArtwork: UInt8
     var artworkCount: UInt16
@@ -235,6 +238,9 @@ private struct CachedTrack: Codable {
         rating = track.rating
         playCount = track.playCount
         lastPlayedMacTime = track.lastPlayedMacTime
+        dateAddedMacTime = track.dateAddedMacTime
+        comment = track.comment
+        albumArtist = track.albumArtist
         dbid = track.dbid
         hasArtwork = track.hasArtwork
         artworkCount = track.artworkCount
@@ -271,6 +277,9 @@ private struct CachedTrack: Codable {
             rating: rating,
             playCount: playCount,
             lastPlayedMacTime: lastPlayedMacTime,
+            dateAddedMacTime: dateAddedMacTime,
+            comment: comment,
+            albumArtist: albumArtist,
             dbid: dbid,
             hasArtwork: hasArtwork,
             artworkCount: artworkCount,

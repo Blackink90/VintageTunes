@@ -4,7 +4,7 @@
 
 Import tracks (including FLAC and other non-native formats), prepare them for stock firmware, update **iTunesDB**, playlists and artwork, manage **photos** and **videos** on Video 5.5G, and play files directly from the mounted device.
 
-Current version: **1.9.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.9.0)).
+Current version: **1.10.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.10.0)).
 
 > Italian README: [README.it.md](README.it.md)
 
@@ -76,6 +76,13 @@ Thanks — every clean, legal dump helps widen support without putting anyone at
 
 ---
 
+## What’s new in 1.10.0
+
+- **Smart playlists**: create and edit rules on the Mac (match all/any, limits, live preview); written as iTunesDB MHOD 50/51 so stock iPods can show and update them
+- Fields include title/artist/album/album artist/genre/comment, rating, plays, year, duration, bitrate, last played, date added
+- Limits by songs / minutes / hours / MB with sort options; duplicate smart playlists from the sidebar
+- Membership is preserved on reconnect and refreshed after Play Counts merge (not wiped by routine DB writes)
+
 ## What’s new in 1.9.0
 
 - **Lyrics**: automatic download (LRCLIB) on import and from the context menu; writes **MP3 USLT** / **M4A ©lyr** tags plus the iTunesDB lyrics flag so stock iPods can show them
@@ -136,6 +143,7 @@ Thanks — every clean, legal dump helps widen support without putting anyone at
 - **Video**: converts with ffmpeg to H.264 Baseline + AAC (in-app progress; **ffprobe** also needed) and marks them as Movies in iTunesDB
 - **Writes** tracks under `iPod_Control/Music`, updates **iTunesDB** and (on stock) **ArtworkDB**
 - **User playlists**: create, add, remove tracks (without deleting them from the iPod)
+- **Smart playlists**: rules evaluated on the Mac, written for stock firmware (MHOD 50/51) with live preview in the editor
 - **Artwork**: from tags, online lookup, local file, or paste URL; writes ArtworkDB on the iPod (Video F1028/F1029, Classic F1061/…, **nano 2G F1027/F1031**)
 - **Photos** (**iPod Video 5G/5.5G** stock only): dedicated sidebar section — list, add (drag & drop or files), delete; writes `Photos/Photo Database` and thumbs in `Photos/Thumbs/` like Music.app
 - **Full backup** / **full restore** (`.vbk`) from Settings
@@ -192,7 +200,7 @@ Notes:
 - The app needs access to **removable volumes**.
 - With ad-hoc signing, macOS may ask for permission on every launch; signing with an Apple ID / development Team helps keep consent.
 
-Download ready binaries from [release 1.9.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.9.0) (first launch: right-click → **Open**).
+Download ready binaries from [release 1.10.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.10.0) (first launch: right-click → **Open**).
 
 ---
 

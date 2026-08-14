@@ -27,7 +27,7 @@ struct ParsedLibrary {
 final class iTunesDBParser {
     /// MHOD string types managed by VintageTunes (rebuilt on write).
     /// 27 = lyrics (UTF-16LE), come iTunes / stock Click Wheel.
-    private static let managedMhodTypes: Set<UInt32> = [1, 2, 3, 4, 5, 6, 27]
+    private static let managedMhodTypes: Set<UInt32> = [1, 2, 3, 4, 5, 6, 8, 22, 27]
 
     func parse(at url: URL, volumeRoot: URL) throws -> ParsedLibrary {
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -153,6 +153,7 @@ final class iTunesDBParser {
             let rating: UInt8 = headerLen > 31 ? data[offset + 31] : 0
             let playCount = headerLen > 80 ? readU32(data, offset + 80) : 0
             let lastPlayedMacTime = headerLen > 88 ? readU32(data, offset + 88) : 0
+            let dateAddedMacTime = headerLen > 36 ? readU32(data, offset + 32) : 0
             let dbid = headerLen > 120 ? readU64(data, offset + 112) : 0
             let artworkCount: UInt16 = headerLen > 126 ? readU16(data, offset + 124) : 0
             let hasArtwork: UInt8 = headerLen > 164 ? data[offset + 164] : 2
@@ -163,6 +164,8 @@ final class iTunesDBParser {
             var album = ""
             var genre = ""
             var location = ""
+            var comment = ""
+            var albumArtist = ""
             var lyrics: String? = nil
             var extraMhods: [Data] = []
 
@@ -184,6 +187,8 @@ final class iTunesDBParser {
                         case 3: album = str
                         case 4: artist = str
                         case 5: genre = str
+                        case 8: comment = str
+                        case 22: albumArtist = str
                         case 27:
                             let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
                             lyrics = trimmed.isEmpty ? nil : trimmed
@@ -222,6 +227,9 @@ final class iTunesDBParser {
                     rating: rating,
                     playCount: playCount,
                     lastPlayedMacTime: lastPlayedMacTime,
+                    dateAddedMacTime: dateAddedMacTime,
+                    comment: comment,
+                    albumArtist: albumArtist,
                     dbid: dbid,
                     hasArtwork: hasArtwork == 0 ? 2 : hasArtwork,
                     artworkCount: artworkCount,

@@ -4,7 +4,7 @@ Companion **macOS** per gestire la libreria di un **iPod Classic / Video / nano 
 
 Importa brani (anche FLAC e altri formati non nativi), li prepara per il firmware stock, aggiorna **iTunesDB**, playlist e copertine, gestisce **foto** e **video** sul Video 5.5G e permette di ascoltare i file direttamente dal dispositivo montato.
 
-Versione attuale: **1.9.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.9.0)).
+Versione attuale: **1.10.0** ([release](https://github.com/Blackink90/VintageTunes/releases/tag/v1.10.0)).
 
 > English README: [README.md](README.md)
 
@@ -76,6 +76,13 @@ Grazie — ogni dump pulito e lecito aiuta ad allargare il supporto senza rischi
 
 ---
 
+## Novità in 1.10.0
+
+- **Playlist intelligenti**: crea e modifica regole sul Mac (tutte/qualunque regola, limiti, anteprima live); scritte in iTunesDB come MHOD 50/51 così gli iPod stock le mostrano e le aggiornano
+- Campi: titolo/artista/album/artista album/genere/commento, stelle, ascolti, anno, durata, bitrate, ultima riproduzione, data aggiunta
+- Limiti per brani / minuti / ore / MB con ordinamento; duplica dalla sidebar
+- La membership resta alla riconnessione e si aggiorna dopo il merge dei Play Counts (non viene azzerata dai salvataggi di routine)
+
 ## Novità in 1.9.0
 
 - **Testi**: download automatico (LRCLIB) all’import e dal menu contestuale; scrive i tag **MP3 USLT** / **M4A ©lyr** e il flag lyrics in iTunesDB così gli iPod stock li mostrano
@@ -136,6 +143,7 @@ Grazie — ogni dump pulito e lecito aiuta ad allargare il supporto senza rischi
 - **Video**: converte con ffmpeg in H.264 Baseline + AAC (barra di progresso in app; serve anche **ffprobe**) e li marca come Film in iTunesDB
 - **Scrive** tracce in `iPod_Control/Music`, aggiorna **iTunesDB** e (su stock) **ArtworkDB**
 - **Playlist** utente: crea, aggiungi, rimuovi brani (senza eliminarli dall’iPod)
+- **Playlist intelligenti**: regole valutate sul Mac, scritte per il firmware stock (MHOD 50/51) con anteprima nell’editor
 - **Copertine**: da tag, ricerca online, file locale o incolla URL; sull’iPod scrive ArtworkDB (Video F1028/F1029, Classic F1061/…, **nano 2G F1027/F1031**)
 - **Foto** (solo **iPod Video 5G/5.5G** stock): sezione dedicata in sidebar — elenco, aggiunta (drag & drop o file) ed eliminazione; scrive `Photos/Photo Database` e le thumb in `Photos/Thumbs/` come Music.app
 - **Backup totale** / **ripristino totale** (`.vbk`) dalle Impostazioni
@@ -192,7 +200,7 @@ Note:
 - L’app richiede accesso ai **volumi rimovibili**.
 - Con firma ad-hoc, macOS può chiedere i permessi a ogni avvio; una firma con Apple ID / Team di sviluppo aiuta a mantenerli.
 
-Scarica i binari pronti dalla [release 1.9.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.9.0) (al primo avvio: tasto destro → **Apri**).
+Scarica i binari pronti dalla [release 1.10.0](https://github.com/Blackink90/VintageTunes/releases/tag/v1.10.0) (al primo avvio: tasto destro → **Apri**).
 
 ---
 

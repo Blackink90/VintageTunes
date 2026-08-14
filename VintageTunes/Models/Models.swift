@@ -74,6 +74,12 @@ struct Track: Identifiable, Hashable {
     var playCount: UInt32 = 0
     /// Ultima riproduzione in epoch Mac (secondi dal 1904-01-01); 0 = mai.
     var lastPlayedMacTime: UInt32 = 0
+    /// Data aggiunta in epoch Mac (mhit @32); 0 = sconosciuta.
+    var dateAddedMacTime: UInt32 = 0
+    /// Commento (MHOD type 8).
+    var comment: String = ""
+    /// Album artist (MHOD type 22); vuoto = usa artist.
+    var albumArtist: String = ""
     /// ID stabile per collegare iTunesDB ↔ ArtworkDB (mhit @112).
     var dbid: UInt64 = 0
     /// 1 = mostra artwork, 2 = nessuna (mhit @164).
@@ -223,6 +229,9 @@ struct Track: Identifiable, Hashable {
             && lhs.rating == rhs.rating
             && lhs.playCount == rhs.playCount
             && lhs.lastPlayedMacTime == rhs.lastPlayedMacTime
+            && lhs.dateAddedMacTime == rhs.dateAddedMacTime
+            && lhs.comment == rhs.comment
+            && lhs.albumArtist == rhs.albumArtist
             && lhs.dbid == rhs.dbid
             && lhs.hasArtwork == rhs.hasArtwork
             && lhs.artworkCount == rhs.artworkCount
@@ -248,6 +257,9 @@ struct Track: Identifiable, Hashable {
         hasher.combine(rating)
         hasher.combine(playCount)
         hasher.combine(lastPlayedMacTime)
+        hasher.combine(dateAddedMacTime)
+        hasher.combine(comment)
+        hasher.combine(albumArtist)
         hasher.combine(dbid)
         hasher.combine(hasArtwork)
         hasher.combine(artworkCount)
@@ -312,6 +324,9 @@ struct Playlist: Identifiable, Hashable {
     var dbBlob: PlaylistDBBlob? = nil
 
     var songCount: Int { trackIDs.count }
+
+    /// Smart playlist (MHOD type 50 present).
+    var isSmart: Bool { SmartPlaylistDefinition.isSmartPlaylist(self) }
 
     func resolvedSongCount(using tracks: [Track]) -> Int {
         let known = Set(tracks.map(\.id))

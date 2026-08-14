@@ -204,7 +204,7 @@ struct TrackTableView: View {
                         library.revealSelectedTracksInFinder()
                     }
                     Menu(L10n.t("track.add_to_playlist")) {
-                        ForEach(library.sidebarPlaylists) { playlist in
+                        ForEach(library.sidebarPlaylists.filter { !$0.isSmart }) { playlist in
                             Button(playlist.displayName) {
                                 library.selection = Set(ids)
                                 library.addSelectionToPlaylist(playlist.id)
@@ -214,7 +214,8 @@ struct TrackTableView: View {
                     if library.selectedSection == .playlists,
                        let pid = library.selectedPlaylistID,
                        let current = library.playlists.first(where: { $0.id == pid }),
-                       !current.isMaster {
+                       !current.isMaster,
+                       !current.isSmart {
                         Button(L10n.t("track.remove_from_playlist")) {
                             library.selection = Set(ids)
                             library.removeSelectionFromCurrentPlaylist()
@@ -789,13 +790,21 @@ struct PlaylistDetailView: View {
 
     var body: some View {
         if let playlist {
-            TrackTableView(title: playlist.displayName)
+            TrackTableView(title: playlist.isSmart
+                           ? playlist.displayName + " · " + L10n.t("smart_playlist.badge")
+                           : playlist.displayName)
                 .toolbar {
                     ToolbarItemGroup {
-                        Button(L10n.t("track.remove_from_playlist")) {
-                            library.removeSelectionFromCurrentPlaylist()
+                        if playlist.isSmart {
+                            Button(L10n.t("smart_playlist.edit")) {
+                                library.beginEditingSmartPlaylist(playlist.id)
+                            }
+                        } else {
+                            Button(L10n.t("track.remove_from_playlist")) {
+                                library.removeSelectionFromCurrentPlaylist()
+                            }
+                            .disabled(library.selection.isEmpty || playlist.isMaster)
                         }
-                        .disabled(library.selection.isEmpty || playlist.isMaster)
                     }
                 }
         } else {
@@ -1757,6 +1766,447 @@ struct LyricsEditSheet: View {
             set: { newValue in
                 guard library.lyricsEditDraft != nil else { return }
                 library.lyricsEditDraft!.text = newValue
+            }
+        )
+    }
+}
+
+struct SmartPlaylistEditSheet: View {
+    @EnvironmentObject private var library: LibraryController
+
+    private var draft: SmartPlaylistEditDraft? { library.smartPlaylistDraft }
+    private var isEditing: Bool { draft?.playlistID != nil }
+
+    private var previewTracks: [Track] {
+        guard let def = draft?.definition else { return [] }
+        let ids = Set(def.matchingTrackIDs(in: library.tracks.filter { !$0.isVideo }))
+        return library.tracks.filter { ids.contains($0.id) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(isEditing ? L10n.t("smart_playlist.edit_title") : L10n.t("smart_playlist.new_title"))
+                    .font(VTTheme.displayFont(size: 20))
+                Spacer()
+                Text(L10n.tf("smart_playlist.preview_count", previewTracks.count))
+                    .font(.custom("Avenir Next", size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(20)
+
+            Divider().opacity(0.2)
+
+            if let draft {
+                HStack(alignment: .top, spacing: 0) {
+                    Form {
+                        TextField(L10n.t("playlist.name_field"), text: nameBinding)
+
+                        if draft.definition.skippedUnsupportedRuleCount > 0 {
+                            Text(L10n.tf(
+                                "smart_playlist.unsupported_warning",
+                                draft.definition.skippedUnsupportedRuleCount
+                            ))
+                            .font(.custom("Avenir Next", size: 11))
+                            .foregroundStyle(.orange)
+                        }
+
+                        Picker(L10n.t("smart_playlist.match"), selection: matchAllBinding) {
+                            Text(L10n.t("smart_playlist.match_all")).tag(true)
+                            Text(L10n.t("smart_playlist.match_any")).tag(false)
+                        }
+                        .pickerStyle(.segmented)
+
+                        Section {
+                            ForEach(Array(draft.definition.rules.enumerated()), id: \.element.id) { index, _ in
+                                smartRuleRow(index: index)
+                            }
+                            Button(L10n.t("smart_playlist.add_rule")) {
+                                library.smartPlaylistDraft?.definition.rules.append(
+                                    SmartRule(field: .artist, stringOp: .contains, stringValue: "")
+                                )
+                            }
+                        } header: {
+                            Text(L10n.t("smart_playlist.rules"))
+                        }
+
+                        Section {
+                            Toggle(L10n.t("smart_playlist.limit_enable"), isOn: limitEnabledBinding)
+                            if draft.definition.limitEnabled {
+                                HStack {
+                                    Text(L10n.t("smart_playlist.limit_count"))
+                                    TextField("", text: limitCountTextBinding)
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 64)
+                                        .multilineTextAlignment(.trailing)
+                                    Picker("", selection: limitTypeBinding) {
+                                        Text(L10n.t("smart_playlist.limit_songs")).tag(SmartPlaylistDefinition.LimitType.songs)
+                                        Text(L10n.t("smart_playlist.limit_minutes")).tag(SmartPlaylistDefinition.LimitType.minutes)
+                                        Text(L10n.t("smart_playlist.limit_hours")).tag(SmartPlaylistDefinition.LimitType.hours)
+                                        Text(L10n.t("smart_playlist.limit_mb")).tag(SmartPlaylistDefinition.LimitType.megabytes)
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 110)
+                                }
+                                Picker(L10n.t("smart_playlist.limit_sort"), selection: limitSortBinding) {
+                                    Text(L10n.t("smart_playlist.sort_most_played")).tag(SmartPlaylistDefinition.LimitSort.mostPlayed)
+                                    Text(L10n.t("smart_playlist.sort_least_played")).tag(SmartPlaylistDefinition.LimitSort.leastPlayed)
+                                    Text(L10n.t("smart_playlist.sort_recently_played")).tag(SmartPlaylistDefinition.LimitSort.recentlyPlayed)
+                                    Text(L10n.t("smart_playlist.sort_highest_rating")).tag(SmartPlaylistDefinition.LimitSort.highestRating)
+                                    Text(L10n.t("smart_playlist.sort_recently_added")).tag(SmartPlaylistDefinition.LimitSort.recentlyAdded)
+                                    Text(L10n.t("smart_playlist.sort_oldest_added")).tag(SmartPlaylistDefinition.LimitSort.oldestAdded)
+                                }
+                            }
+                        } header: {
+                            Text(L10n.t("smart_playlist.limit_section"))
+                        }
+                    }
+                    .formStyle(.grouped)
+                    .frame(minWidth: 420)
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.t("smart_playlist.preview_title"))
+                            .font(.custom("Avenir Next", size: 13).weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.top, 12)
+
+                        if previewTracks.isEmpty {
+                            Text(L10n.t("smart_playlist.preview_empty"))
+                                .font(.custom("Avenir Next", size: 12))
+                                .foregroundStyle(.secondary)
+                                .padding(12)
+                            Spacer()
+                        } else {
+                            List(Array(previewTracks.prefix(80))) { track in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(track.displayTitle)
+                                        .font(.custom("Avenir Next", size: 12))
+                                        .lineLimit(1)
+                                    Text("\(track.displayArtist) · \(track.durationLabel)")
+                                        .font(.custom("Avenir Next", size: 10))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .listStyle(.plain)
+                        }
+                    }
+                    .frame(width: 260)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button(L10n.t("common.cancel")) {
+                    library.cancelSmartPlaylistEdit()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button(L10n.t("common.save")) {
+                    library.saveSmartPlaylistEdit()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(VTTheme.amber)
+                .keyboardShortcut(.defaultAction)
+                .disabled(nameBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(20)
+        }
+        .frame(width: 860, height: 620)
+    }
+
+    @ViewBuilder
+    private func smartRuleRow(index: Int) -> some View {
+        let field = draft?.definition.rules[index].field ?? .artist
+        HStack(alignment: .center, spacing: 8) {
+            Picker("", selection: fieldBinding(index)) {
+                ForEach(SmartRule.Field.allCases, id: \.self) { f in
+                    Text(fieldLabel(f)).tag(f)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 180, alignment: .leading)
+            .onChange(of: field) { _, newField in
+                guard library.smartPlaylistDraft != nil,
+                      library.smartPlaylistDraft!.definition.rules.indices.contains(index) else { return }
+                if newField.isRelativeDate {
+                    library.smartPlaylistDraft!.definition.rules[index].intOp = .inTheLast
+                    if library.smartPlaylistDraft!.definition.rules[index].intValue < 1 {
+                        library.smartPlaylistDraft!.definition.rules[index].intValue = 2
+                    }
+                } else if library.smartPlaylistDraft!.definition.rules[index].intOp == .inTheLast {
+                    library.smartPlaylistDraft!.definition.rules[index].intOp = .equals
+                }
+            }
+
+            if field.isString {
+                Picker("", selection: stringOpBinding(index)) {
+                    ForEach(SmartRule.StringOp.allCases, id: \.self) { op in
+                        Text(stringOpLabel(op)).tag(op)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 118, alignment: .leading)
+                TextField(L10n.t("smart_playlist.value"), text: stringValueBinding(index))
+                    .textFieldStyle(.roundedBorder)
+            } else if field.isRelativeDate {
+                Text(L10n.t("smart_playlist.op_in_last"))
+                    .font(.custom("Avenir Next", size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                // Plain string field: FormatStyle.number shows a clipped macOS stepper.
+                // Empty title — in Form, the first arg is a visible label (was showing a stray "0").
+                TextField("", text: intValueTextBinding(index))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 52)
+                    .multilineTextAlignment(.center)
+                    .labelsHidden()
+                Picker("", selection: timeUnitBinding(index)) {
+                    Text(L10n.t("smart_playlist.unit_days")).tag(SmartRule.TimeUnit.days)
+                    Text(L10n.t("smart_playlist.unit_weeks")).tag(SmartRule.TimeUnit.weeks)
+                }
+                .labelsHidden()
+                .frame(width: 112, alignment: .leading)
+            } else {
+                Picker("", selection: intOpBinding(index)) {
+                    ForEach(SmartRule.IntOp.ops(for: field), id: \.self) { op in
+                        Text(intOpLabel(op)).tag(op)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 188, alignment: .leading)
+                if field == .rating {
+                    Picker("", selection: intValueBinding(index)) {
+                        ForEach(0...5, id: \.self) { stars in
+                            Text(stars == 0 ? L10n.t("track.rating_none") : String(repeating: "★", count: stars))
+                                .tag(stars)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 100, alignment: .leading)
+                } else {
+                    TextField(valueHint(field), text: intValueTextBinding(index))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 88)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+
+            Button(role: .destructive) {
+                guard library.smartPlaylistDraft != nil,
+                      library.smartPlaylistDraft!.definition.rules.indices.contains(index) else { return }
+                library.smartPlaylistDraft!.definition.rules.remove(at: index)
+            } label: {
+                Image(systemName: "minus.circle.fill")
+            }
+            .buttonStyle(.borderless)
+            .disabled((draft?.definition.rules.count ?? 0) <= 1)
+        }
+    }
+
+    private func valueHint(_ field: SmartRule.Field) -> String {
+        switch field {
+        case .duration: return L10n.t("smart_playlist.value_seconds")
+        case .bitrate: return "kbps"
+        default: return L10n.t("smart_playlist.value")
+        }
+    }
+
+    private func fieldLabel(_ field: SmartRule.Field) -> String {
+        switch field {
+        case .title: return L10n.t("smart_playlist.field_title")
+        case .artist: return L10n.t("smart_playlist.field_artist")
+        case .album: return L10n.t("smart_playlist.field_album")
+        case .albumArtist: return L10n.t("smart_playlist.field_album_artist")
+        case .genre: return L10n.t("smart_playlist.field_genre")
+        case .comment: return L10n.t("smart_playlist.field_comment")
+        case .rating: return L10n.t("smart_playlist.field_rating")
+        case .playCount: return L10n.t("smart_playlist.field_plays")
+        case .year: return L10n.t("smart_playlist.field_year")
+        case .duration: return L10n.t("smart_playlist.field_duration")
+        case .bitrate: return L10n.t("smart_playlist.field_bitrate")
+        case .lastPlayed: return L10n.t("smart_playlist.field_last_played")
+        case .dateAdded: return L10n.t("smart_playlist.field_date_added")
+        }
+    }
+
+    private func stringOpLabel(_ op: SmartRule.StringOp) -> String {
+        switch op {
+        case .contains: return L10n.t("smart_playlist.op_contains")
+        case .equals: return L10n.t("smart_playlist.op_is")
+        case .startsWith: return L10n.t("smart_playlist.op_starts")
+        }
+    }
+
+    private func intOpLabel(_ op: SmartRule.IntOp) -> String {
+        switch op {
+        case .equals: return L10n.t("smart_playlist.op_is")
+        case .greater: return L10n.t("smart_playlist.op_gt")
+        case .greaterOrEqual: return L10n.t("smart_playlist.op_gte")
+        case .less: return L10n.t("smart_playlist.op_lt")
+        case .lessOrEqual: return L10n.t("smart_playlist.op_lte")
+        case .inTheLast: return L10n.t("smart_playlist.op_in_last")
+        }
+    }
+
+    private var nameBinding: Binding<String> {
+        Binding(
+            get: { library.smartPlaylistDraft?.name ?? "" },
+            set: { library.smartPlaylistDraft?.name = $0 }
+        )
+    }
+
+    private var matchAllBinding: Binding<Bool> {
+        Binding(
+            get: { library.smartPlaylistDraft?.definition.matchAll ?? true },
+            set: { library.smartPlaylistDraft?.definition.matchAll = $0 }
+        )
+    }
+
+    private var limitEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { library.smartPlaylistDraft?.definition.limitEnabled ?? false },
+            set: { library.smartPlaylistDraft?.definition.limitEnabled = $0 }
+        )
+    }
+
+    private var limitCountBinding: Binding<Int> {
+        Binding(
+            get: { Int(library.smartPlaylistDraft?.definition.limitCount ?? 25) },
+            set: { library.smartPlaylistDraft?.definition.limitCount = UInt32(max(1, $0)) }
+        )
+    }
+
+    private var limitCountTextBinding: Binding<String> {
+        Binding(
+            get: { String(library.smartPlaylistDraft?.definition.limitCount ?? 25) },
+            set: { newValue in
+                let digits = newValue.filter(\.isNumber)
+                let value = UInt32(digits) ?? 0
+                library.smartPlaylistDraft?.definition.limitCount = max(1, value)
+            }
+        )
+    }
+
+    private var limitTypeBinding: Binding<SmartPlaylistDefinition.LimitType> {
+        Binding(
+            get: { library.smartPlaylistDraft?.definition.limitType ?? .songs },
+            set: { library.smartPlaylistDraft?.definition.limitType = $0 }
+        )
+    }
+
+    private var limitSortBinding: Binding<SmartPlaylistDefinition.LimitSort> {
+        Binding(
+            get: { library.smartPlaylistDraft?.definition.limitSort ?? .mostPlayed },
+            set: { library.smartPlaylistDraft?.definition.limitSort = $0 }
+        )
+    }
+
+    private func fieldBinding(_ index: Int) -> Binding<SmartRule.Field> {
+        Binding(
+            get: {
+                guard let rules = library.smartPlaylistDraft?.definition.rules,
+                      rules.indices.contains(index) else { return .artist }
+                return rules[index].field
+            },
+            set: { newValue in
+                guard library.smartPlaylistDraft != nil,
+                      library.smartPlaylistDraft!.definition.rules.indices.contains(index) else { return }
+                library.smartPlaylistDraft!.definition.rules[index].field = newValue
+            }
+        )
+    }
+
+    private func stringOpBinding(_ index: Int) -> Binding<SmartRule.StringOp> {
+        Binding(
+            get: {
+                guard let rules = library.smartPlaylistDraft?.definition.rules,
+                      rules.indices.contains(index) else { return .contains }
+                return rules[index].stringOp
+            },
+            set: { newValue in
+                guard library.smartPlaylistDraft != nil,
+                      library.smartPlaylistDraft!.definition.rules.indices.contains(index) else { return }
+                library.smartPlaylistDraft!.definition.rules[index].stringOp = newValue
+            }
+        )
+    }
+
+    private func intOpBinding(_ index: Int) -> Binding<SmartRule.IntOp> {
+        Binding(
+            get: {
+                guard let rules = library.smartPlaylistDraft?.definition.rules,
+                      rules.indices.contains(index) else { return .equals }
+                return rules[index].intOp
+            },
+            set: { newValue in
+                guard library.smartPlaylistDraft != nil,
+                      library.smartPlaylistDraft!.definition.rules.indices.contains(index) else { return }
+                library.smartPlaylistDraft!.definition.rules[index].intOp = newValue
+            }
+        )
+    }
+
+    private func stringValueBinding(_ index: Int) -> Binding<String> {
+        Binding(
+            get: {
+                guard let rules = library.smartPlaylistDraft?.definition.rules,
+                      rules.indices.contains(index) else { return "" }
+                return rules[index].stringValue
+            },
+            set: { newValue in
+                guard library.smartPlaylistDraft != nil,
+                      library.smartPlaylistDraft!.definition.rules.indices.contains(index) else { return }
+                library.smartPlaylistDraft!.definition.rules[index].stringValue = newValue
+            }
+        )
+    }
+
+    private func intValueBinding(_ index: Int) -> Binding<Int> {
+        Binding(
+            get: {
+                guard let rules = library.smartPlaylistDraft?.definition.rules,
+                      rules.indices.contains(index) else { return 0 }
+                return rules[index].intValue
+            },
+            set: { newValue in
+                guard library.smartPlaylistDraft != nil,
+                      library.smartPlaylistDraft!.definition.rules.indices.contains(index) else { return }
+                library.smartPlaylistDraft!.definition.rules[index].intValue = newValue
+            }
+        )
+    }
+
+    private func intValueTextBinding(_ index: Int) -> Binding<String> {
+        Binding(
+            get: {
+                guard let rules = library.smartPlaylistDraft?.definition.rules,
+                      rules.indices.contains(index) else { return "0" }
+                return String(rules[index].intValue)
+            },
+            set: { newValue in
+                guard library.smartPlaylistDraft != nil,
+                      library.smartPlaylistDraft!.definition.rules.indices.contains(index) else { return }
+                let digits = newValue.filter(\.isNumber)
+                library.smartPlaylistDraft!.definition.rules[index].intValue = Int(digits) ?? 0
+            }
+        )
+    }
+
+    private func timeUnitBinding(_ index: Int) -> Binding<SmartRule.TimeUnit> {
+        Binding(
+            get: {
+                guard let rules = library.smartPlaylistDraft?.definition.rules,
+                      rules.indices.contains(index) else { return .weeks }
+                return rules[index].timeUnit
+            },
+            set: { newValue in
+                guard library.smartPlaylistDraft != nil,
+                      library.smartPlaylistDraft!.definition.rules.indices.contains(index) else { return }
+                library.smartPlaylistDraft!.definition.rules[index].timeUnit = newValue
             }
         )
     }
